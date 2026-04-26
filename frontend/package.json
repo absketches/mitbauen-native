@@ -1,0 +1,27 @@
+{
+  "name": "mitbauen-native-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "test:browser": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.2",
+    "@types/react-dom": "19.1.2",
+    "@vitejs/plugin-react": "4.7.0",
+    "@vitest/browser-playwright": "4.1.5",
+    "playwright": "1.59.1",
+    "typescript": "5.8.3",
+    "vite": "7.0.6",
+    "vitest": "4.1.5",
+    "vitest-browser-react": "0.2.0"
+  }
+}

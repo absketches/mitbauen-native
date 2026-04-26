@@ -1,0 +1,185 @@
+:root {
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  color: #15202b;
+  background:
+    radial-gradient(circle at top left, rgba(251, 191, 36, 0.25), transparent 28rem),
+    linear-gradient(180deg, #f6f3eb 0%, #efe8db 100%);
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.page-shell {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 3rem 1.25rem 4rem;
+}
+
+.hero {
+  margin-bottom: 2rem;
+}
+
+.hero__eyebrow {
+  margin: 0 0 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.8rem;
+  color: #9a3412;
+}
+
+.hero h1 {
+  margin: 0;
+  max-width: 14ch;
+  font-size: clamp(2.6rem, 5vw, 4.6rem);
+  line-height: 0.96;
+  font-weight: 700;
+}
+
+.hero__copy {
+  max-width: 48rem;
+  margin-top: 1rem;
+  font-size: 1.05rem;
+  color: #334155;
+}
+
+.feed-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.project-card,
+.state-card {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(6px);
+  border-radius: 1.25rem;
+  padding: 1.2rem;
+  box-shadow: 0 1.2rem 2rem rgba(15, 23, 42, 0.06);
+}
+
+.state-card--error {
+  color: #991b1b;
+  border-color: rgba(153, 27, 27, 0.25);
+}
+
+.project-card__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.project-card h2 {
+  margin: 0;
+  font-size: 1.3rem;
+  line-height: 1.1;
+}
+
+.project-card__summary {
+  margin: 0.85rem 0 1rem;
+  color: #334155;
+}
+
+.project-card__meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+
+.project-card__meta dt {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+}
+
+.project-card__meta dd {
+  margin: 0.2rem 0 0;
+  font-weight: 600;
+}
+
+.project-card__roles h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.project-card__roles ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.project-card__roles li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.8rem;
+  background: #f8fafc;
+}
+
+.project-card__roles strong {
+  display: block;
+}
+
+.project-card__roles span {
+  white-space: nowrap;
+  color: #475569;
+}
+
+.status-pill {
+  align-self: flex-start;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.status-pill--active {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-pill--completed {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.status-pill--dormant {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+@media (max-width: 700px) {
+  .page-shell {
+    padding-top: 2rem;
+  }
+
+  .project-card__meta {
+    grid-template-columns: 1fr;
+  }
+
+  .project-card__roles li {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

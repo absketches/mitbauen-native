@@ -1,0 +1,33 @@
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Java
+backend/target/
+backend/.mvn/
+*.class
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Build and deploy artifacts
+.artifacts/
+
+# Docker overrides
+docker-compose.override.yml
+
+# Misc
+tmp/
+coverage/
