@@ -8,11 +8,7 @@ public class Database {
     }
 
     public static HikariDataSource open(final DatabaseConfig config, final String poolName) {
-        final HikariDataSource dataSource = DataSourceFactory.create(config, poolName);
-        if (config.runMigrations()) {
-            DatabaseMigrator.migrate(config);
-        }
-        return dataSource;
+        return DataSourceFactory.create(config, poolName);
     }
 
     public static void close(final HikariDataSource dataSource) {

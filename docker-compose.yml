@@ -25,17 +25,18 @@ services:
       timeout: 5s
       retries: 20
 
-  flyway:
-    image: flyway/flyway:10-alpine
-    container_name: mitbauen-flyway
-    command:
-      - -url=jdbc:postgresql://postgres:5432/${POSTGRES_DB}
-      - -user=${POSTGRES_USER}
-      - -password=${POSTGRES_PASSWORD}
-      - -connectRetries=60
-      - migrate
+  migrate:
+    image: postgres:16-alpine
+    container_name: mitbauen-migrate
+    working_dir: /workspace
+    command: ["sh", "/workspace/migrate.sh", "/workspace/db/migrations"]
+    environment:
+      jdbc_database_url: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      jdbc_database_user: ${POSTGRES_USER}
+      jdbc_database_password: ${POSTGRES_PASSWORD}
     volumes:
-      - ./db/migrations:/flyway/sql:ro
+      - ./migrate.sh:/workspace/migrate.sh:ro
+      - ./db/migrations:/workspace/db/migrations:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -54,7 +55,7 @@ services:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
-      flyway:
+      migrate:
         condition: service_completed_successfully
     expose:
       - "${BACKEND_PORT:-8080}"

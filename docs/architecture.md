@@ -8,7 +8,7 @@ Mitbauen Native is a reset of the current app with these constraints:
 - static frontend
 - Java backend
 - PostgreSQL under our control
-- OAuth handled in the backend
+- invite-only local auth handled in the backend
 - local Docker onboarding for contributors
 
 ## Backend principles
@@ -17,7 +17,7 @@ Mitbauen Native is a reset of the current app with these constraints:
 - plain JDBC, no ORM
 - SQL-first design
 - DB-backed opaque sessions
-- backend-owned OAuth
+- backend-owned password hashing and session cookies
 - explicit module boundaries
 
 ## Planned backend modules
@@ -64,3 +64,4 @@ Mitbauen Native is a reset of the current app with these constraints:
 - backend behind Nginx
 - Postgres private to the host/network
 - same-domain routing preferred for simpler cookie auth
+- schema migrations run explicitly before app startup; backend runtime does not auto-migrate

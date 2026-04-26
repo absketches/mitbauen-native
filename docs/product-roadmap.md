@@ -15,7 +15,7 @@ We are not trying to port the entire upstream app in one pass. The priority is t
 Each milestone should meet these conditions before we start the next one:
 
 - the feature works through Nginx in local Docker
-- the database shape is created by Flyway migrations
+- the database shape is created by versioned SQL migrations
 - backend behavior is covered by integration tests
 - frontend behavior is covered by browser-based component/page tests where useful
 - only add a full browser journey when the slice truly needs it
@@ -38,7 +38,7 @@ Start with a read-only public project feed.
 
 Why this should be first:
 
-- it exercises the full stack without needing OAuth or session infrastructure
+- it exercises the full stack without needing auth or session infrastructure
 - it captures the core product idea early: visible projects with founder commitment
 - it gives us a stable data model to build later write flows on top of
 - it is small enough to finish cleanly, including backend integration tests and one minimal browser check
@@ -84,12 +84,13 @@ Visitors can open the app and browse projects ordered by lifecycle state and rec
 
 ### Outcome
 
-A user can sign in through backend-owned OAuth, be checked against invite access, and land in the app with a secure session cookie.
+A user can register from an invite link, sign in with email and password, and land in the app with a secure session cookie.
 
 ### Scope
 
-- OAuth start and callback endpoints in the backend
-- `invite_access`, `users`, and `sessions` tables
+- `invite_links`, `invite_redemptions`, `password_credentials`, `users`, and `sessions` tables
+- invite validation endpoint in the backend
+- registration, login, logout, and session endpoints in the backend
 - secure cookie session handling
 - frontend authenticated-shell awareness
 
@@ -97,14 +98,14 @@ A user can sign in through backend-owned OAuth, be checked against invite access
 
 - invite creation UI
 - profile editing
-- multi-provider edge-case polish beyond what is required for one provider to work cleanly
+- password reset and email verification
 
 ### Tests
 
 - backend integration tests for session creation and cookie behavior
-- backend integration tests for invite allowlist acceptance and rejection
-- backend HTTP callback tests through Nano's client
-- one browser smoke flow for the sign-in callback using a local test double or controlled fake provider
+- backend integration tests for invite acceptance, rejection, and reuse
+- backend HTTP tests through Nano's client for register, login, logout, and session
+- one browser smoke flow for invite registration and sign-in through the real app shell
 
 ## Milestone 3: Create And Edit A Project
 

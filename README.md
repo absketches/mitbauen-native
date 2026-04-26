@@ -6,7 +6,7 @@ Fresh reboot of Mitbauen as a single-repo system with:
 - Java backend
 - PostgreSQL
 - local Docker Compose for contributor onboarding
-- Nginx as the front door in local/prod-style setups
+- Nginx as the front door in local and host deployments
 
 ## Planned stack
 
@@ -21,16 +21,14 @@ Fresh reboot of Mitbauen as a single-repo system with:
 
 ## Current scaffold status
 
-This repo is intentionally just the initial skeleton:
+This repo is intentionally still early-stage, but the first end-to-end slices are in place:
 
-- folder layout
+- public project feed
+- invite-only registration and login
+- DB-backed sessions
 - local Docker setup
 - migration layout
-- backend bootstrap
-- frontend bootstrap
 - Nginx reverse proxy
-
-The backend currently uses a very small JDK HTTP bootstrap so contributors can start the stack immediately while the first Nano HTTP slice is wired deliberately. Nano is already included as a dependency and remains the intended backend direction.
 
 ## Repo layout
 
@@ -41,7 +39,7 @@ db/migrations/  SQL migrations
 infra/nginx/    Local reverse-proxy config
 docs/           Architecture notes and roadmap
 build.sh        Root build orchestrator
-deploy.sh       Root deployment bundle script
+deploy.sh       Host deployment bundle + install script
 ```
 
 See [docs/product-roadmap.md](docs/product-roadmap.md) for the incremental delivery plan.
@@ -68,33 +66,67 @@ If you want to run the backend from IntelliJ or another local IDE while keeping 
 
 ```bash
 cp .env.example .env
-docker compose up -d postgres flyway
+docker compose up -d postgres migrate
 ```
 
 Useful checks for that flow:
 
 ```bash
 docker compose ps
-docker compose logs -f postgres flyway
+docker compose logs -f postgres migrate
 ```
 
-## Build and deployment structure
+## Host deployment structure
 
-This repo now mirrors the root-level orchestration style from the other mixed-stack project, but keeps Mitbauen's runtime split:
+The Pi deployment now follows a host-style setup rather than Docker on the target machine:
 
 - `build.sh` builds the frontend and backend, then stages deployable artifacts under `.artifacts/`
-- `deploy.sh` creates a deployment bundle and can optionally upload it to a remote host
-- `docker-compose.yml` remains the local development stack
-- `docker-compose.deploy.yml` is the deployment-oriented compose file
-- `Dockerfile` packages the staged backend JAR for deployment
-- [infra/nginx/deploy.conf](infra/nginx/deploy.conf) serves the built frontend and proxies API traffic to the backend
-- the local Compose-only `browser-tests` service is intentionally not part of deployment
+- `migrate.sh` applies the SQL migrations explicitly through `psql`
+- `deploy.sh` packages the backend artifact, frontend `dist`, DB migrations, the migration script, a `systemd` unit, and a host `Nginx` config
+- the backend runs as a `systemd` service on the Pi
+- host `Nginx` serves the built SPA and proxies `/api` to the backend on `localhost`
+- local `docker-compose.yml` remains development-only
 
-The deployment flow is intentionally not a Quarkus-style single image that embeds the frontend into the backend artifact. For this repo, the cleaner equivalent is:
+The generated host deployment expects:
 
-- backend packaged as a Java runtime image
-- frontend built once into static assets
-- Nginx serving the SPA and forwarding `/api` to the backend
+- Java 21
+- PostgreSQL client tools (`psql`)
+- Nginx
+- PostgreSQL
+- `systemd`
+- a remote user with `ssh` access and `sudo` privileges
+
+The deployed shape is:
+
+- backend jar under `/opt/mitbauen/backend`
+- or, when `DEPLOY_BACKEND_MODE=native`, a native backend binary under `/opt/mitbauen/backend`
+- frontend files under `/var/www/mitbauen`
+- migrations under `/opt/mitbauen/db/migrations`
+- migration script at `/opt/mitbauen/migrate.sh`
+- backend env file at `/etc/mitbauen/mitbauen.env`
+- `systemd` unit at `/etc/systemd/system/mitbauen-backend.service`
+- host `Nginx` site config at `/etc/nginx/sites-available/mitbauen.conf`
+
+If the remote env file does not exist yet, `deploy.sh` will create it from the example template and stop, so you can fill in the real database credentials before rerunning the deployment. On a normal deploy, the script runs `migrate.sh` on the Pi before restarting the backend service.
+
+For a jar-based host deploy:
+
+```bash
+DEPLOY_REMOTE_USER=your-user \
+DEPLOY_REMOTE_HOST=your-pi-host \
+./deploy.sh
+```
+
+For a native-image host deploy:
+
+```bash
+DEPLOY_REMOTE_USER=your-user \
+DEPLOY_REMOTE_HOST=your-pi-host \
+DEPLOY_BACKEND_MODE=native \
+./deploy.sh
+```
+
+If you already have a prepared native artifact or deploy bundle from CI, set `DEPLOY_USE_EXISTING_ARTIFACTS=1` to skip rebuilding locally before packaging or uploading it.
 
 ## Local URLs
 
@@ -106,6 +138,5 @@ The deployment flow is intentionally not a Quarkus-style single image that embed
 ## First implementation goals
 
 1. Replace the bootstrap HTTP layer with the first Nano-backed route slice
-2. Add OAuth start/callback flows in the backend
-3. Add DB-backed sessions with secure cookies
-4. Port the Mitbauen domain model incrementally
+2. Harden the invite-only auth flow for production deployment
+3. Port the remaining Mitbauen domain model incrementally

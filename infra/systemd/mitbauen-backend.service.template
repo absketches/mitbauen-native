@@ -1,0 +1,17 @@
+[Unit]
+Description=Mitbauen Native Backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{RUN_USER}}
+WorkingDirectory={{APP_DIR}}/backend
+EnvironmentFile={{ENV_FILE}}
+ExecStart={{EXEC_START}}
+Restart=always
+RestartSec=5
+SuccessExitStatus=143
+
+[Install]
+WantedBy=multi-user.target

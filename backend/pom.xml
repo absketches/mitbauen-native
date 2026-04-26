@@ -14,8 +14,8 @@
         <java.version>21</java.version>
         <nano.version>2026.01.0120644</nano.version>
         <hikaricp.version>6.3.0</hikaricp.version>
-        <flyway.version>11.8.2</flyway.version>
         <postgresql.version>42.7.5</postgresql.version>
+        <jbcrypt.version>0.4</jbcrypt.version>
         <slf4j.simple.version>1.7.36</slf4j.simple.version>
         <h2.version>2.3.232</h2.version>
         <junit.version>6.0.3</junit.version>
@@ -24,6 +24,7 @@
         <maven.surefire.plugin.version>3.5.4</maven.surefire.plugin.version>
         <maven.failsafe.plugin.version>3.5.4</maven.failsafe.plugin.version>
         <maven.shade.plugin.version>3.6.0</maven.shade.plugin.version>
+        <graalvm.native.maven.plugin.version>0.10.2</graalvm.native.maven.plugin.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -39,14 +40,14 @@
             <version>${hikaricp.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-core</artifactId>
-            <version>${flyway.version}</version>
-        </dependency>
-        <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <version>${postgresql.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.mindrot</groupId>
+            <artifactId>jbcrypt</artifactId>
+            <version>${jbcrypt.version}</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -154,4 +155,36 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>native</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.graalvm.buildtools</groupId>
+                        <artifactId>native-maven-plugin</artifactId>
+                        <version>${graalvm.native.maven.plugin.version}</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <imageName>mitbauen-native-backend</imageName>
+                            <mainClass>io.github.absketches.mitbauen.nativeapp.MitbauenApplication</mainClass>
+                            <buildArgs>
+                                <buildArg>--no-fallback</buildArg>
+                            </buildArgs>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>build-native</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>compile-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

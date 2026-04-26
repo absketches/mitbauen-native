@@ -21,3 +21,7 @@ insert into project_roles (project_id, title, commitment, is_founder, is_open, s
     (3, 'Event Designer', '2 hrs/week', false, true, 1),
     (4, 'Founder + Mechanical Design', '5 hrs/week', true, false, 0),
     (4, 'Electrical Engineer', '4 hrs/week', false, true, 1);
+
+alter table users alter column id restart with 5;
+alter table projects alter column id restart with 5;
+alter table project_roles alter column id restart with 10;

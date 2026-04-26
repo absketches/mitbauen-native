@@ -1,9 +1,18 @@
-import type { Project, ProjectFeedResponse } from './types'
+import type {
+  InviteValidationResponse,
+  LoginPayload,
+  Project,
+  ProjectFeedResponse,
+  RegisterPayload,
+  SessionResponse,
+} from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 export async function loadProjects(): Promise<Project[]> {
-  const response = await fetch(`${API_BASE_URL}/projects`)
+  const response = await fetch(`${API_BASE_URL}/projects`, {
+    credentials: 'same-origin',
+  })
 
   if (!response.ok) {
     throw new Error(`Failed to load projects (${response.status})`)
@@ -11,4 +20,59 @@ export async function loadProjects(): Promise<Project[]> {
 
   const payload = (await response.json()) as ProjectFeedResponse
   return payload.projects
+}
+
+export async function loadSession(): Promise<SessionResponse> {
+  return requestJson<SessionResponse>(`${API_BASE_URL}/auth/session`)
+}
+
+export async function validateInvite(token: string): Promise<InviteValidationResponse> {
+  return requestJson<InviteValidationResponse>(`${API_BASE_URL}/invites/validate?token=${encodeURIComponent(token)}`)
+}
+
+export async function registerUser(payload: RegisterPayload): Promise<SessionResponse> {
+  return requestJson<SessionResponse>(`${API_BASE_URL}/auth/register`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function loginUser(payload: LoginPayload): Promise<SessionResponse> {
+  return requestJson<SessionResponse>(`${API_BASE_URL}/auth/login`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function logoutUser(): Promise<void> {
+  await requestJson<SessionResponse>(`${API_BASE_URL}/auth/logout`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  })
+}
+
+async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(input, {
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init?.headers ?? {}),
+    },
+    ...init,
+  })
+
+  let payload: unknown = null
+  if (response.status !== 204) {
+    payload = await response.json()
+  }
+
+  if (!response.ok) {
+    const message =
+      typeof payload === 'object' && payload !== null && 'error' in payload && typeof payload.error === 'string'
+        ? payload.error
+        : `Request failed (${response.status})`
+    throw new Error(message)
+  }
+
+  return payload as T
 }

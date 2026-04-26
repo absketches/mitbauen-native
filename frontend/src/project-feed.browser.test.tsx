@@ -4,7 +4,7 @@
 import { expect, test } from 'vitest'
 import { render } from 'vitest-browser-react'
 import App from './App'
-import type { Project } from './types'
+import type { InviteValidationResponse, Project, SessionResponse } from './types'
 
 const projects: Project[] = [
   {
@@ -44,11 +44,41 @@ const projects: Project[] = [
 ]
 
 test('renders the public project feed in browser mode', async () => {
-  const screen = await render(<App fetchProjects={async () => projects} />)
+  window.history.pushState({}, '', '/')
+
+  const screen = await render(
+    <App
+      api={{
+        loadProjects: async () => projects,
+        loadSession: async (): Promise<SessionResponse> => ({ authenticated: false }),
+      }}
+    />,
+  )
 
   await expect.element(screen.getByText('Projects that already have founder energy behind them.')).toBeVisible()
   await expect.element(screen.getByText('Solar For Neighbors')).toBeVisible()
   await expect.element(screen.getByText('Neighborhood Tool Library')).toBeVisible()
   await expect.element(screen.getByText('Founder + Product')).toBeVisible()
   await expect.element(screen.getByText('Android Engineer')).toBeVisible()
+})
+
+test('renders the invite-only registration view with a locked email', async () => {
+  window.history.pushState({}, '', '/register?invite=basu-bootstrap-invite-2026')
+
+  const screen = await render(
+    <App
+      api={{
+        loadProjects: async () => projects,
+        loadSession: async (): Promise<SessionResponse> => ({ authenticated: false }),
+        validateInvite: async (): Promise<InviteValidationResponse> => ({
+          valid: true,
+          allowedEmail: 'basuabhi92@gmail.com',
+        }),
+      }}
+    />,
+  )
+
+  await expect.element(screen.getByText('Claim your invite-only account.')).toBeVisible()
+  await expect.element(screen.getByLabelText('Email')).toHaveValue('basuabhi92@gmail.com')
+  await expect.element(screen.getByText('Create account')).toBeVisible()
 })

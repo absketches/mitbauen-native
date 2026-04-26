@@ -37,13 +37,10 @@ public class ProjectFeedRepository {
             p.id desc
         """;
 
-    private final DataSource dataSource;
-
-    public ProjectFeedRepository(final DataSource dataSource) {
-        this.dataSource = dataSource;
+    private ProjectFeedRepository() {
     }
 
-    public List<ProjectCard> listProjects() {
+    public static List<ProjectCard> listProjects(final DataSource dataSource) {
         final List<ProjectCard> projects = new ArrayList<>();
         final List<Long> projectIds = new ArrayList<>();
 
@@ -76,7 +73,7 @@ public class ProjectFeedRepository {
             return List.of();
         }
 
-        final Map<Long, List<OpenRole>> openRolesByProjectId = loadOpenRoles(projectIds);
+        final Map<Long, List<OpenRole>> openRolesByProjectId = loadOpenRoles(dataSource, projectIds);
         return projects.stream()
             .map(project -> new ProjectCard(
                 project.id(),
@@ -91,7 +88,7 @@ public class ProjectFeedRepository {
             .toList();
     }
 
-    private Map<Long, List<OpenRole>> loadOpenRoles(final List<Long> projectIds) {
+    private static Map<Long, List<OpenRole>> loadOpenRoles(final DataSource dataSource, final List<Long> projectIds) {
         final StringJoiner placeholders = new StringJoiner(", ");
         projectIds.forEach(projectId -> placeholders.add("?"));
 

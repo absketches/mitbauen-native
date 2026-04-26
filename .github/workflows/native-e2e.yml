@@ -1,0 +1,83 @@
+name: Native E2E
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  native-e2e:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mitbauen
+          POSTGRES_USER: mitbauen
+          POSTGRES_PASSWORD: mitbauen_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mitbauen -d mitbauen"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      JDBC_DATABASE_URL: jdbc:postgresql://127.0.0.1:5432/mitbauen
+      JDBC_DATABASE_USER: mitbauen
+      JDBC_DATABASE_PASSWORD: mitbauen_ci_password
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:8088
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          distribution: graalvm-community
+          java-version: '21'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: maven
+          native-image-job-reports: 'true'
+
+      - name: Install host dependencies
+        run: sudo apt-get update && sudo apt-get install -y nginx postgresql-client
+
+      - name: Build frontend and native backend
+        run: BUILD_NATIVE=1 SKIP_BACKEND_TESTS=1 ./build.sh
+
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run native full-stack E2E
+        run: ./run-native-e2e.sh
+
+      - name: Package native host deploy bundle
+        run: DEPLOY_BACKEND_MODE=native DEPLOY_USE_EXISTING_ARTIFACTS=1 ./deploy.sh
+
+      - name: Upload native deploy bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: mitbauen-native-host-deploy
+          path: |
+            .artifacts/mitbauen-native-host-deploy.tgz
+            .artifacts/backend/mitbauen-native-backend
+
+      - name: Upload E2E logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-e2e-logs
+          path: |
+            .tmp/native-e2e
+            frontend/playwright-report

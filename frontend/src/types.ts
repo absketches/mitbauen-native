@@ -23,3 +23,32 @@ export type Project = {
 export type ProjectFeedResponse = {
   projects: Project[]
 }
+
+export type SessionUser = {
+  id: number
+  displayName: string
+  email: string
+  inviteToken: string | null
+}
+
+export type SessionResponse = {
+  authenticated: boolean
+  user?: SessionUser
+}
+
+export type InviteValidationResponse = {
+  valid: boolean
+  allowedEmail?: string | null
+}
+
+export type RegisterPayload = {
+  inviteToken: string
+  email: string
+  displayName: string
+  password: string
+}
+
+export type LoginPayload = {
+  email: string
+  password: string
+}

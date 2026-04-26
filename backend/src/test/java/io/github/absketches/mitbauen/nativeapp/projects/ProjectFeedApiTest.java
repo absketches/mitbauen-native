@@ -2,6 +2,9 @@ package io.github.absketches.mitbauen.nativeapp.projects;
 
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeList;
+import io.github.absketches.mitbauen.nativeapp.db.DatabaseBootstrapService;
+import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
+import io.github.absketches.mitbauen.nativeapp.db.TestDatabaseMigrations;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.nanonative.nano.core.Nano;
@@ -28,18 +31,20 @@ class ProjectFeedApiTest {
 
     @Test
     void listsSeededProjectsInFeedOrder() {
+        final String jdbcUrl = "jdbc:h2:mem:mitbauen_" + UUID.randomUUID() + ";MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1";
+        TestDatabaseMigrations.migrate(jdbcUrl, "sa", "");
+        final DatabaseRuntime databaseRuntime = new DatabaseRuntime("mitbauen-test-feed");
         nano = new Nano(
             Map.of(
                 HttpServer.CONFIG_SERVICE_HTTP_PORT, 0,
-                ProjectFeedService.CONFIG_JDBC_DATABASE_URL, "jdbc:h2:mem:mitbauen_" + UUID.randomUUID() + ";MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
-                ProjectFeedService.CONFIG_JDBC_DATABASE_USER, "sa",
-                ProjectFeedService.CONFIG_JDBC_DATABASE_PASSWORD, "",
-                ProjectFeedService.CONFIG_APP_RUN_MIGRATIONS, true,
-                ProjectFeedService.CONFIG_APP_MIGRATION_LOCATIONS, "filesystem:../db/migrations"
+                DatabaseBootstrapService.CONFIG_JDBC_DATABASE_URL, jdbcUrl,
+                DatabaseBootstrapService.CONFIG_JDBC_DATABASE_USER, "sa",
+                DatabaseBootstrapService.CONFIG_JDBC_DATABASE_PASSWORD, ""
             ),
             new HttpServer(),
             new HttpClient(),
-            new ProjectFeedService()
+            new DatabaseBootstrapService(databaseRuntime),
+            new ProjectFeedService(databaseRuntime)
         );
 
         final HttpObject response = new HttpObject()

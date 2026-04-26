@@ -62,21 +62,46 @@ else
     exit 1
 fi
 
-if [ "${SKIP_BACKEND_TESTS:-0}" = "1" ]; then
-    $MVN_CMD clean package -DskipTests
+if [ "${BUILD_NATIVE:-0}" = "1" ]; then
+    BACKEND_MODE="native"
+    MVN_GOALS="clean package -Pnative"
 else
-    $MVN_CMD clean verify
+    BACKEND_MODE="jar"
+    MVN_GOALS="clean package"
 fi
 
-BACKEND_JAR=$(find "$BACKEND_DIR/target" -maxdepth 1 -type f -name "*.jar" ! -name "*-sources.jar" ! -name "*-javadoc.jar" ! -name "original-*.jar" | sort | head -n 1)
-
-if [ -z "${BACKEND_JAR:-}" ]; then
-    echo "Backend build did not produce a runnable JAR in $BACKEND_DIR/target"
-    exit 1
+if [ "${SKIP_BACKEND_TESTS:-0}" = "1" ]; then
+    $MVN_CMD $MVN_GOALS -DskipTests
+else
+    if [ "$BACKEND_MODE" = "native" ]; then
+        $MVN_CMD clean verify -Pnative
+    else
+        $MVN_CMD clean verify
+    fi
 fi
 
-cp "$BACKEND_JAR" "$ARTIFACTS_DIR/backend/app.jar"
+if [ "$BACKEND_MODE" = "native" ]; then
+    BACKEND_BINARY="$BACKEND_DIR/target/mitbauen-native-backend"
+    if [ ! -f "$BACKEND_BINARY" ]; then
+        echo "Backend native build did not produce $BACKEND_BINARY"
+        exit 1
+    fi
+    cp "$BACKEND_BINARY" "$ARTIFACTS_DIR/backend/mitbauen-native-backend"
+else
+    BACKEND_JAR=$(find "$BACKEND_DIR/target" -maxdepth 1 -type f -name "*.jar" ! -name "*-sources.jar" ! -name "*-javadoc.jar" ! -name "original-*.jar" | sort | head -n 1)
+
+    if [ -z "${BACKEND_JAR:-}" ]; then
+        echo "Backend build did not produce a runnable JAR in $BACKEND_DIR/target"
+        exit 1
+    fi
+
+    cp "$BACKEND_JAR" "$ARTIFACTS_DIR/backend/app.jar"
+fi
 
 echo "Artifacts ready:"
 echo "  Frontend: $ARTIFACTS_DIR/frontend"
-echo "  Backend:  $ARTIFACTS_DIR/backend/app.jar"
+if [ "$BACKEND_MODE" = "native" ]; then
+    echo "  Backend:  $ARTIFACTS_DIR/backend/mitbauen-native-backend"
+else
+    echo "  Backend:  $ARTIFACTS_DIR/backend/app.jar"
+fi
