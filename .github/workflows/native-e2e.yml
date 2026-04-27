@@ -58,6 +58,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run native full-stack E2E
+        timeout-minutes: 10
         env:
           jdbc_database_url: jdbc:postgresql://127.0.0.1:5432/mitbauen
           jdbc_database_user: mitbauen
