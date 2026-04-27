@@ -50,16 +50,14 @@ if [ "$BACKEND_MODE" = "native" ]; then
         exit 1
     fi
     cp "$ARTIFACTS_DIR/backend/mitbauen-native-backend" "$BUNDLE_DIR/backend/mitbauen-native-backend"
-    BACKEND_EXEC_START_PRE="$REMOTE_APP_DIR/backend/mitbauen-native-backend migrate"
-    BACKEND_EXEC_START="$REMOTE_APP_DIR/backend/mitbauen-native-backend serve"
+    BACKEND_EXEC_START="$REMOTE_APP_DIR/backend/mitbauen-native-backend"
 else
     if [ ! -f "$ARTIFACTS_DIR/backend/app.jar" ]; then
         echo "Missing jar backend artifact. Run build.sh without BUILD_NATIVE=1 or set DEPLOY_BACKEND_MODE=native."
         exit 1
     fi
     cp "$ARTIFACTS_DIR/backend/app.jar" "$BUNDLE_DIR/backend/mitbauen-native-backend.jar"
-    BACKEND_EXEC_START_PRE="/usr/bin/java -jar $REMOTE_APP_DIR/backend/mitbauen-native-backend.jar migrate"
-    BACKEND_EXEC_START="/usr/bin/java -jar $REMOTE_APP_DIR/backend/mitbauen-native-backend.jar serve"
+    BACKEND_EXEC_START="/usr/bin/java -jar $REMOTE_APP_DIR/backend/mitbauen-native-backend.jar"
 fi
 
 cp "$ROOT_DIR/systemd/mitbauen.env.example" "$BUNDLE_DIR/systemd/mitbauen.env.example"
@@ -70,7 +68,6 @@ render_template \
     APP_DIR "$REMOTE_APP_DIR" \
     ENV_FILE "$REMOTE_ENV_FILE" \
     RUN_USER "$REMOTE_RUN_USER" \
-    EXEC_START_PRE "$BACKEND_EXEC_START_PRE" \
     EXEC_START "$BACKEND_EXEC_START"
 
 tar -czf "$ARTIFACTS_DIR/$ARCHIVE_NAME" -C "$BUNDLE_DIR" .

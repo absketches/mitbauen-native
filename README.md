@@ -66,7 +66,6 @@ If you want to run the backend from IntelliJ or another local IDE while keeping 
 ```bash
 cp .env.example .env
 docker compose up -d postgres
-docker compose run --rm migrate
 cd frontend && npm run build
 ```
 
@@ -76,7 +75,7 @@ Useful checks:
 
 ```bash
 docker compose ps
-docker compose logs -f postgres migrate backend
+docker compose logs -f postgres backend
 ```
 
 ## Host deployment structure
@@ -84,10 +83,8 @@ docker compose logs -f postgres migrate backend
 The Pi deployment follows a single-binary host setup rather than Docker on the target machine:
 
 - `build.sh` builds the frontend first, then packages the backend artifact with baked frontend assets and embedded SQL migrations
-- the app artifact exposes two modes: `migrate` and `serve`
 - `deploy.sh` packages the backend artifact, a `systemd` unit, and an env template
 - the backend runs as a `systemd` service on the Pi
-- the `systemd` unit runs `migrate` before `serve`
 - PostgreSQL is managed separately on the host
 
 The generated host deployment expects:
@@ -107,7 +104,7 @@ The deployed shape is:
 - `systemd` unit at `/etc/systemd/system/mitbauen-backend.service`
 - PostgreSQL data in its normal host-managed data directory or volume
 
-If the remote env file does not exist yet, `deploy.sh` will create it from the example template and stop, so you can fill in the real database credentials before rerunning the deployment. On a normal deploy, the installed `systemd` unit runs the app’s embedded `migrate` mode before `serve`.
+If the remote env file does not exist yet, `deploy.sh` will create it from the example template and stop, so you can fill in the real database credentials before rerunning the deployment. On a normal deploy, the installed `systemd` unit starts the app directly, and the app runs any pending embedded SQL migrations before opening the HTTP server.
 
 The production database volume is not meant to be cleaned up between releases. Forward-only migrations are tracked in `schema_migrations`, so new app versions only apply the SQL files that have not already been recorded.
 
@@ -137,6 +134,6 @@ If you already have a prepared native artifact or deploy bundle from CI, set `DE
 
 ## First implementation goals
 
-1. Harden the single-binary serve and migrate flow for production deployment
+1. Harden the single-binary startup flow for production deployment
 2. Complete the invite-only auth slice with more production safeguards
 3. Port the remaining Mitbauen domain model incrementally

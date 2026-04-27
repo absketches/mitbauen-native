@@ -63,8 +63,8 @@ Mitbauen Native is a reset of the current app with these constraints:
 
 ## Deployment principles
 
-- the app artifact owns two explicit modes: `migrate` and `serve`
 - the same artifact should be what CI tests and what the Pi runs under `systemd`
 - Postgres is managed separately from the app process and keeps its persistent volume across releases
 - schema migrations are forward-only and tracked in `schema_migrations`
+- the app should run pending embedded SQL migrations during normal startup before serving requests
 - the app artifact serves both frontend routes and backend APIs directly

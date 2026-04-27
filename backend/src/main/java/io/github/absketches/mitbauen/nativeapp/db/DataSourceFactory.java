@@ -17,7 +17,7 @@ public class DataSourceFactory {
         if (jdbcUrl == null || jdbcUrl.isBlank()) {
             throw new IllegalStateException(
                 "Missing JDBC database URL. Configure "
-                    + DatabaseBootstrapService.CONFIG_JDBC_DATABASE_URL + " through Nano config."
+                    + DatabaseService.CONFIG_JDBC_DATABASE_URL + " through Nano config."
             );
         }
         final HikariConfig hikariConfig = new HikariConfig();

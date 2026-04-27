@@ -30,7 +30,6 @@ print_file_if_present() {
 }
 
 dump_diagnostics() {
-    print_file_if_present "$TMP_DIR/migrate.log" "migrate.log"
     print_file_if_present "$TMP_DIR/backend.log" "backend.log"
 }
 
@@ -94,9 +93,7 @@ fi
 mkdir -p "$TMP_DIR"
 rm -rf "$TMP_DIR"/*
 
-"$BACKEND_BINARY" migrate >"$TMP_DIR/migrate.log" 2>&1
-
-app_service_http_port="$APP_PORT" "$BACKEND_BINARY" serve >"$TMP_DIR/backend.log" 2>&1 &
+app_service_http_port="$APP_PORT" "$BACKEND_BINARY" >"$TMP_DIR/backend.log" 2>&1 &
 BACKEND_PID=$!
 
 wait_for_http "http://127.0.0.1:${APP_PORT}/api/projects" "project feed API"

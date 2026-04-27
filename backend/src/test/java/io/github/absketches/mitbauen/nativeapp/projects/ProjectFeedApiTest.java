@@ -2,7 +2,7 @@ package io.github.absketches.mitbauen.nativeapp.projects;
 
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeList;
-import io.github.absketches.mitbauen.nativeapp.db.DatabaseBootstrapService;
+import io.github.absketches.mitbauen.nativeapp.db.DatabaseService;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
 import io.github.absketches.mitbauen.nativeapp.db.TestDatabaseMigrations;
 import org.junit.jupiter.api.AfterEach;
@@ -37,13 +37,13 @@ class ProjectFeedApiTest {
         nano = new Nano(
             Map.of(
                 HttpServer.CONFIG_SERVICE_HTTP_PORT, 0,
-                DatabaseBootstrapService.CONFIG_JDBC_DATABASE_URL, jdbcUrl,
-                DatabaseBootstrapService.CONFIG_JDBC_DATABASE_USER, "sa",
-                DatabaseBootstrapService.CONFIG_JDBC_DATABASE_PASSWORD, ""
+                DatabaseService.CONFIG_JDBC_DATABASE_URL, jdbcUrl,
+                DatabaseService.CONFIG_JDBC_DATABASE_USER, "sa",
+                DatabaseService.CONFIG_JDBC_DATABASE_PASSWORD, ""
             ),
             new HttpServer(),
             new HttpClient(),
-            new DatabaseBootstrapService(databaseRuntime),
+            new DatabaseService(databaseRuntime),
             new ProjectFeedService(databaseRuntime)
         );
 

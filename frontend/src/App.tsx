@@ -94,7 +94,7 @@ export default function App({ api }: AppProps) {
       })
       .catch((nextError: Error) => {
         if (!cancelled) {
-          setProjectsError(nextError.message)
+          setProjectsError('We could not load the projects right now. Please try again in a moment.')
           setProjectsLoading(false)
         }
       })
@@ -125,17 +125,20 @@ export default function App({ api }: AppProps) {
     <main className="page-shell">
       <header className="page-header">
         <button className="brand-lockup" type="button" onClick={() => navigateTo('/', setRoute)}>
-          <span className="hero__eyebrow">Mitbauen Project Feed</span>
-          <strong>Mitbauen Native</strong>
+          <img className="brand-lockup__mark" src="/mitbauen-mark.svg" alt="" />
+          <span className="brand-lockup__text">
+            <span className="hero__eyebrow">Mitbauen Projects</span>
+            <strong>Mitbauen Native</strong>
+          </span>
         </button>
 
         <div className="page-header__actions">
-          {sessionLoading ? <span className="page-header__status">Checking session...</span> : null}
+          {sessionLoading ? <span className="page-header__status">Loading...</span> : null}
           {!sessionLoading && session.authenticated && session.user ? (
             <>
-              <span className="page-header__status">Signed in as {session.user.displayName}</span>
+              <span className="page-header__status">Welcome, {session.user.displayName}</span>
               <button className="ghost-button" type="button" onClick={() => void handleLogout()}>
-                Logout
+                Log out
               </button>
             </>
           ) : null}
@@ -191,13 +194,34 @@ function FeedView({ projects, loading, error, session, onNavigate }: FeedViewPro
 
   return (
     <>
-      <section className="hero">
-        <p className="hero__eyebrow">Mitbauen Project Feed</p>
-        <h1>Projects that already have founder energy behind them.</h1>
-        <p className="hero__copy">
-          The first slice is intentionally public and read-only: people can browse real projects, see founder
-          commitment, and understand where help is needed.
-        </p>
+      <section className="hero-grid">
+        <div className="hero">
+          <p className="hero__eyebrow">Mitbauen Projects</p>
+          <h1>Discover real projects looking for the right people.</h1>
+          <p className="hero__copy">
+            Explore early-stage ideas, founder-led projects, and opportunities where your skills can make a real
+            difference.
+          </p>
+        </div>
+
+        <div className="hero-stack">
+          <article className="hero-panel hero-panel--dark">
+            <p className="hero-panel__eyebrow">For Builders</p>
+            <h2>Find projects with momentum.</h2>
+            <p>
+              Browse projects where founders have already shared what they are building, what they need, and how others
+              can get involved.
+            </p>
+          </article>
+
+          <article className="hero-panel">
+            <p className="hero-panel__eyebrow">Invite Access</p>
+            <p className="hero-panel__copy">
+              Mitbauen is currently invite-only so the community can grow through trusted connections and meaningful
+              introductions.
+            </p>
+          </article>
+        </div>
       </section>
 
       <section className="auth-banner">
@@ -206,24 +230,24 @@ function FeedView({ projects, loading, error, session, onNavigate }: FeedViewPro
             <>
               <div>
                 <strong>Your invite link is ready.</strong>
-                <p>Reuse it with as many new registrations as you want.</p>
+                <p>Share it with people you trust and would like to invite to Mitbauen.</p>
               </div>
               <code>{invitePath}</code>
             </>
           ) : (
             <div>
               <strong>You are signed in.</strong>
-              <p>The current slice only shows the invite link immediately after registration.</p>
+              <p>You can now browse projects and follow new opportunities as they appear.</p>
             </div>
           )
         ) : (
           <>
             <div>
-              <strong>Invite-only sign-in is the next slice.</strong>
-              <p>Use your invite link to register, or sign in if you already have an account.</p>
+              <strong>Join Mitbauen through an invite.</strong>
+              <p>Already have an account? Sign in to continue. New members can register with an invite link.</p>
             </div>
             <button className="primary-button" type="button" onClick={() => navigateTo('/login', onNavigate)}>
-              Open sign in
+              Sign in
             </button>
           </>
         )}
@@ -263,7 +287,7 @@ function LoginView({ onAuthenticate, onLogin, onNavigate }: LoginViewProps) {
       const nextSession = await onLogin({ email, password })
       onAuthenticate(nextSession)
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Unable to sign in.')
+      setError('We could not sign you in. Please check your email and password.')
       setSubmitting(false)
     }
   }
@@ -272,9 +296,9 @@ function LoginView({ onAuthenticate, onLogin, onNavigate }: LoginViewProps) {
     <section className="auth-shell">
       <article className="auth-card">
         <p className="hero__eyebrow">Sign in</p>
-        <h1>Pick up where you left off.</h1>
+        <h1>Welcome back.</h1>
         <p className="auth-card__copy">
-          The backend owns the session cookie. This page only asks for the credentials we need to create it.
+          Sign in to continue exploring projects and managing your invite access.
         </p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
@@ -296,7 +320,7 @@ function LoginView({ onAuthenticate, onLogin, onNavigate }: LoginViewProps) {
         </form>
 
         <button className="ghost-button auth-card__secondary" type="button" onClick={() => navigateTo('/', onNavigate)}>
-          Back to project feed
+          Back to projects
         </button>
       </article>
     </section>
@@ -339,9 +363,9 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
           setValidating(false)
         }
       })
-      .catch((nextError: Error) => {
+      .catch(() => {
         if (!cancelled) {
-          setError(nextError.message)
+          setError('We could not check this invite link. Please try again.')
           setValidating(false)
         }
       })
@@ -359,7 +383,7 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
       const nextSession = await onRegister({ inviteToken, email, displayName, password })
       onAuthenticate(nextSession)
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Unable to register.')
+      setError('We could not create your account. Please check your details and try again.')
       setSubmitting(false)
     }
   }
@@ -367,13 +391,13 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
   return (
     <section className="auth-shell">
       <article className="auth-card">
-        <p className="hero__eyebrow">Register</p>
-        <h1>Claim your invite-only account.</h1>
+        <p className="hero__eyebrow">Create account</p>
+        <h1>Join Mitbauen.</h1>
         <p className="auth-card__copy">
-          The bootstrap invite is validated first, then we create your password hash and secure session in the backend.
+          Create your account with your invite link and start discovering projects you can help build.
         </p>
 
-        {validating ? <p className="state-card">Checking invite link...</p> : null}
+        {validating ? <p className="state-card">Checking your invite...</p> : null}
 
         {!validating && validation?.valid ? (
           <form className="auth-form" onSubmit={handleSubmit}>
@@ -406,16 +430,14 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
                 onChange={(event) => setPassword(event.target.value)}
                 type="password"
                 minLength={8}
-                pattern="(?=.*\\d)(?=.*[a-z])(?=.*[A-Z]).{8,}"
-                title="Use at least 8 characters with an uppercase letter, a lowercase letter, and a digit."
                 required
               />
             </label>
 
-            <p className="auth-note">Use at least 8 characters with an uppercase letter, a lowercase letter, and a digit.</p>
+            <p className="auth-note">Use at least 8 characters, including a number and both uppercase and lowercase letters.</p>
 
             {validation.allowedEmail ? (
-              <p className="auth-note">This invite is restricted to {validation.allowedEmail}.</p>
+              <p className="auth-note">This invite can only be used with {validation.allowedEmail}.</p>
             ) : null}
             {error ? <p className="auth-error">{error}</p> : null}
 
@@ -427,7 +449,7 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
 
         {!validating && validation && !validation.valid ? (
           <div className="state-card state-card--error">
-            This invite link is missing or invalid. Ask the person who invited you for a fresh link.
+            This invite link does not work anymore. Please ask for a new invite link.
           </div>
         ) : null}
 

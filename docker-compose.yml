@@ -25,26 +25,11 @@ services:
       timeout: 5s
       retries: 20
 
-  migrate:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    container_name: mitbauen-migrate
-    command: ["migrate"]
-    environment:
-      jdbc_database_url: ${JDBC_DATABASE_URL}
-      jdbc_database_user: ${JDBC_DATABASE_USER}
-      jdbc_database_password: ${JDBC_DATABASE_PASSWORD}
-    depends_on:
-      postgres:
-        condition: service_healthy
-
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
     container_name: mitbauen-backend
-    command: ["serve"]
     environment:
       app_service_http_port: 8080
       jdbc_database_url: ${JDBC_DATABASE_URL}
@@ -55,8 +40,6 @@ services:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
     ports:
       - "${BACKEND_PORT:-8080}:8080"
 

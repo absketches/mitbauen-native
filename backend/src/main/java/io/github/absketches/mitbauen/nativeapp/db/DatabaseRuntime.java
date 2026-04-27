@@ -8,7 +8,7 @@ import java.util.concurrent.CompletableFuture;
 public class DatabaseRuntime {
 
     private final String poolName;
-    private final CompletableFuture<HikariDataSource> startedDataSource = new CompletableFuture<>();
+    private final CompletableFuture<HikariDataSource> readyDataSource = new CompletableFuture<>();
     private HikariDataSource dataSource;
 
     public DatabaseRuntime() {
@@ -20,15 +20,28 @@ public class DatabaseRuntime {
     }
 
     public synchronized void start(final String jdbcUrl, final String jdbcUser, final String jdbcPassword) {
-        if (startedDataSource.isDone()) {
+        if (dataSource != null) {
             return;
         }
-        try {
-            dataSource = Database.open(jdbcUrl, jdbcUser, jdbcPassword, poolName);
-            startedDataSource.complete(dataSource);
-        } catch (RuntimeException exception) {
-            startedDataSource.completeExceptionally(exception);
-            throw exception;
+        dataSource = Database.open(jdbcUrl, jdbcUser, jdbcPassword, poolName);
+    }
+
+    public synchronized DataSource openedDataSource() {
+        if (dataSource == null) {
+            throw new IllegalStateException("Database runtime has not been started yet.");
+        }
+        return dataSource;
+    }
+
+    public synchronized void markReady() {
+        if (dataSource != null && !readyDataSource.isDone()) {
+            readyDataSource.complete(dataSource);
+        }
+    }
+
+    public synchronized void fail(final Throwable throwable) {
+        if (!readyDataSource.isDone()) {
+            readyDataSource.completeExceptionally(throwable);
         }
     }
 
@@ -38,6 +51,6 @@ public class DatabaseRuntime {
     }
 
     public DataSource dataSource() {
-        return startedDataSource.join();
+        return readyDataSource.join();
     }
 }

@@ -24,12 +24,12 @@ test('renders the project feed and completes invite registration plus login', as
   await expect(page.getByText('Your invite link is ready.')).toBeVisible()
 
   await page.getByRole('button', { name: 'Logout' }).click()
-  await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()
 
   await page.goto('/login')
   await page.getByLabel('Email').fill(bootstrapEmail)
   await page.getByLabel('Password').fill(bootstrapPassword)
-  await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.locator('.auth-form').getByRole('button', { name: 'Sign in', exact: true }).click()
 
   await expect(page.getByText(`Signed in as ${bootstrapDisplayName}`)).toBeVisible()
 })
