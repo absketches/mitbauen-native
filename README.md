@@ -34,12 +34,12 @@ This repo is intentionally still early-stage, but the first end-to-end slices ar
 ## Repo layout
 
 ```text
-backend/        Java backend, resources, and embedded SQL migrations
-frontend/       Static SPA source
-infra/systemd/  Host service templates
-docs/           Architecture notes and roadmap
-build.sh        Root build orchestrator
-deploy.sh       Host deployment bundle + install script
+backend/    Java backend, resources, and embedded SQL migrations
+frontend/   Static SPA source
+systemd/    Host service templates
+docs/       Architecture notes and roadmap
+build.sh    Root build orchestrator
+deploy.sh   Host deployment bundle + install script
 ```
 
 See [docs/product-roadmap.md](docs/product-roadmap.md) for the incremental delivery plan.

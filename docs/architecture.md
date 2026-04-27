@@ -59,7 +59,7 @@ Mitbauen Native is a reset of the current app with these constraints:
 - Maven test dependencies stay in `test` scope, and we do not produce a `test-jar`
 - frontend browser-test tooling stays in `devDependencies`
 - deployment should center on a single app artifact that contains backend code, built frontend assets, and embedded SQL migrations
-- production artifacts must not require `psql`, Nginx, or separate static-file deployment just to serve the app shell
+- production artifacts must not require `psql`, a separate reverse proxy, or separate static-file deployment just to serve the app shell
 
 ## Deployment principles
 

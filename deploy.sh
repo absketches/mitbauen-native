@@ -42,7 +42,7 @@ fi
 
 echo "Preparing single-binary deployment bundle..."
 rm -rf "$BUNDLE_DIR"
-mkdir -p "$BUNDLE_DIR/backend" "$BUNDLE_DIR/infra/systemd"
+mkdir -p "$BUNDLE_DIR/backend" "$BUNDLE_DIR/systemd"
 
 if [ "$BACKEND_MODE" = "native" ]; then
     if [ ! -f "$ARTIFACTS_DIR/backend/mitbauen-native-backend" ]; then
@@ -62,11 +62,11 @@ else
     BACKEND_EXEC_START="/usr/bin/java -jar $REMOTE_APP_DIR/backend/mitbauen-native-backend.jar serve"
 fi
 
-cp "$ROOT_DIR/infra/systemd/mitbauen.env.example" "$BUNDLE_DIR/infra/systemd/mitbauen.env.example"
+cp "$ROOT_DIR/systemd/mitbauen.env.example" "$BUNDLE_DIR/systemd/mitbauen.env.example"
 
 render_template \
-    "$ROOT_DIR/infra/systemd/mitbauen-backend.service.template" \
-    "$BUNDLE_DIR/infra/systemd/mitbauen-backend.service" \
+    "$ROOT_DIR/systemd/mitbauen-backend.service.template" \
+    "$BUNDLE_DIR/systemd/mitbauen-backend.service" \
     APP_DIR "$REMOTE_APP_DIR" \
     ENV_FILE "$REMOTE_ENV_FILE" \
     RUN_USER "$REMOTE_RUN_USER" \
@@ -115,10 +115,10 @@ $SUDO mkdir -p \
 $SUDO rm -f "$REMOTE_APP_DIR/backend/mitbauen-native-backend" "$REMOTE_APP_DIR/backend/mitbauen-native-backend.jar"
 $SUDO cp -R "$TMP_DIR/backend/." "$REMOTE_APP_DIR/backend/"
 $SUDO chmod +x "$REMOTE_APP_DIR/backend/mitbauen-native-backend" 2>/dev/null || true
-$SUDO cp "$TMP_DIR/infra/systemd/mitbauen-backend.service" "$REMOTE_SYSTEMD_UNIT"
+$SUDO cp "$TMP_DIR/systemd/mitbauen-backend.service" "$REMOTE_SYSTEMD_UNIT"
 
 if [ ! -f "$REMOTE_ENV_FILE" ]; then
-    $SUDO cp "$TMP_DIR/infra/systemd/mitbauen.env.example" "$REMOTE_ENV_FILE"
+    $SUDO cp "$TMP_DIR/systemd/mitbauen.env.example" "$REMOTE_ENV_FILE"
     echo "Created $REMOTE_ENV_FILE from the example template."
     echo "Edit the database credentials and rerun deploy.sh before starting the service."
     exit 0

@@ -32,3 +32,4 @@ docker-compose.override.yml
 tmp/
 .tmp/
 coverage/
+frontend/playwright-report/
