@@ -113,7 +113,7 @@ public class AuthUtil {
             final byte[] hash = digest.digest(token.getBytes(StandardCharsets.UTF_8));
             final StringBuilder builder = new StringBuilder(hash.length * 2);
             for (byte next : hash) {
-                builder.append(String.format("%02x", next));
+                builder.append(String.format("%02x", next & 0xff));
             }
             return builder.toString();
         } catch (NoSuchAlgorithmException exception) {

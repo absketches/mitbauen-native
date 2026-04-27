@@ -12,9 +12,9 @@ import java.util.Optional;
 public class AuthRepository {
 
     private static final String INVITE_LOOKUP_SQL = """
-        select id, token, allowed_email, is_active
+        select id, allowed_email, is_active
         from invite_links
-        where token = ?
+        where token_hash = ?
         """;
 
     private static final String EMAIL_EXISTS_SQL = """
@@ -28,11 +28,9 @@ public class AuthRepository {
             u.id,
             u.display_name,
             u.email,
-            pc.password_hash,
-            il.token as invite_token
+            pc.password_hash
         from users u
         join password_credentials pc on pc.user_id = u.id
-        left join invite_links il on il.created_by_user_id = u.id
         where u.email = ?
         """;
 
@@ -41,11 +39,9 @@ public class AuthRepository {
             s.id,
             u.id as user_id,
             u.display_name,
-            u.email,
-            il.token as invite_token
+            u.email
         from sessions s
         join users u on u.id = s.user_id
-        left join invite_links il on il.created_by_user_id = u.id
         where s.token_hash = ? and s.expires_at > ?
         """;
 
@@ -55,12 +51,11 @@ public class AuthRepository {
     public static Optional<InviteLink> findInviteByToken(final DataSource dataSource, final String token) {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(INVITE_LOOKUP_SQL)) {
-            statement.setString(1, token);
+            statement.setString(1, AuthUtil.hashToken(token));
             try (ResultSet resultSet = statement.executeQuery()) {
                 if (resultSet.next()) {
                     return Optional.of(new InviteLink(
                         resultSet.getLong("id"),
-                        resultSet.getString("token"),
                         resultSet.getString("allowed_email"),
                         resultSet.getBoolean("is_active")
                     ));
@@ -123,8 +118,7 @@ public class AuthRepository {
                         resultSet.getLong("id"),
                         resultSet.getString("display_name"),
                         resultSet.getString("email"),
-                        resultSet.getString("password_hash"),
-                        resultSet.getString("invite_token")
+                        resultSet.getString("password_hash")
                     ));
                 }
                 return Optional.empty();
@@ -162,7 +156,7 @@ public class AuthRepository {
                         resultSet.getLong("user_id"),
                         resultSet.getString("display_name"),
                         resultSet.getString("email"),
-                        resultSet.getString("invite_token")
+                        null
                     );
                     touchSession(connection, sessionId);
                     return Optional.of(sessionUser);
@@ -247,12 +241,12 @@ public class AuthRepository {
 
     private static void insertOwnedInviteLink(final Connection connection, final long userId, final String ownedInviteToken) throws SQLException {
         final String sql = """
-            insert into invite_links (created_by_user_id, token, is_active, use_count)
+            insert into invite_links (created_by_user_id, token_hash, is_active, use_count)
             values (?, ?, true, 0)
             """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setLong(1, userId);
-            statement.setString(2, ownedInviteToken);
+            statement.setString(2, AuthUtil.hashToken(ownedInviteToken));
             statement.executeUpdate();
         }
     }

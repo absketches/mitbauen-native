@@ -19,8 +19,8 @@ echo "Building Mitbauen Native artifacts..."
 require_file "$FRONTEND_DIR/package.json"
 require_file "$BACKEND_DIR/pom.xml"
 
-rm -rf "$ARTIFACTS_DIR/frontend" "$ARTIFACTS_DIR/backend"
-mkdir -p "$ARTIFACTS_DIR/frontend" "$ARTIFACTS_DIR/backend"
+rm -rf "$ARTIFACTS_DIR/backend"
+mkdir -p "$ARTIFACTS_DIR/backend"
 
 echo "Building frontend..."
 cd "$FRONTEND_DIR"
@@ -47,8 +47,6 @@ if [ ! -d "$FRONTEND_DIR/dist" ]; then
     echo "Frontend build did not produce $FRONTEND_DIR/dist"
     exit 1
 fi
-
-cp -R "$FRONTEND_DIR/dist/." "$ARTIFACTS_DIR/frontend/"
 
 echo "Building backend..."
 cd "$BACKEND_DIR"
@@ -99,7 +97,6 @@ else
 fi
 
 echo "Artifacts ready:"
-echo "  Frontend: $ARTIFACTS_DIR/frontend"
 if [ "$BACKEND_MODE" = "native" ]; then
     echo "  Backend:  $ARTIFACTS_DIR/backend/mitbauen-native-backend"
 else

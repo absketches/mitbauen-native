@@ -83,6 +83,15 @@
 
     <build>
         <finalName>mitbauen-native-backend</finalName>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <resource>
+                <directory>${project.basedir}/../frontend/dist</directory>
+                <targetPath>frontend</targetPath>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -171,6 +180,7 @@
                             <mainClass>io.github.absketches.mitbauen.nativeapp.MitbauenApplication</mainClass>
                             <buildArgs>
                                 <buildArg>--no-fallback</buildArg>
+                                <buildArg>-H:IncludeResources=(frontend/.*|db/migrations/.*|application.properties|simplelogger.properties)</buildArg>
                             </buildArgs>
                         </configuration>
                         <executions>

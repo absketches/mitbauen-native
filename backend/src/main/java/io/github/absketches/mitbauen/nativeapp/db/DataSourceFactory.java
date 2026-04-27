@@ -8,17 +8,22 @@ public class DataSourceFactory {
     private DataSourceFactory() {
     }
 
-    public static HikariDataSource create(final DatabaseConfig config, final String poolName) {
-        if (config.jdbcUrl() == null || config.jdbcUrl().isBlank()) {
+    public static HikariDataSource create(
+        final String jdbcUrl,
+        final String jdbcUser,
+        final String jdbcPassword,
+        final String poolName
+    ) {
+        if (jdbcUrl == null || jdbcUrl.isBlank()) {
             throw new IllegalStateException(
-                "Missing JDBC database URL. Set " + DatabaseConfig.ENV_JDBC_DATABASE_URL + " or configure "
-                    + DatabaseConfig.CONFIG_JDBC_DATABASE_URL + " through Nano config."
+                "Missing JDBC database URL. Configure "
+                    + DatabaseBootstrapService.CONFIG_JDBC_DATABASE_URL + " through Nano config."
             );
         }
         final HikariConfig hikariConfig = new HikariConfig();
-        hikariConfig.setJdbcUrl(config.jdbcUrl());
-        hikariConfig.setUsername(config.jdbcUser());
-        hikariConfig.setPassword(config.jdbcPassword());
+        hikariConfig.setJdbcUrl(jdbcUrl);
+        hikariConfig.setUsername(jdbcUser);
+        hikariConfig.setPassword(jdbcPassword);
         hikariConfig.setMaximumPoolSize(4);
         hikariConfig.setMinimumIdle(1);
         hikariConfig.setAutoCommit(true);

@@ -4,10 +4,9 @@ public record LoginIdentity(
     long userId,
     String displayName,
     String email,
-    String passwordHash,
-    String inviteToken
+    String passwordHash
 ) {
     public SessionUser toSessionUser() {
-        return new SessionUser(userId, displayName, email, inviteToken);
+        return new SessionUser(userId, displayName, email, null);
     }
 }

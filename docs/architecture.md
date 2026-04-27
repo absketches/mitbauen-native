@@ -5,7 +5,7 @@
 Mitbauen Native is a reset of the current app with these constraints:
 
 - one repo
-- static frontend
+- one packaged app artifact that serves the SPA shell and `/api`
 - Java backend
 - PostgreSQL under our control
 - invite-only local auth handled in the backend
@@ -34,6 +34,7 @@ Mitbauen Native is a reset of the current app with these constraints:
 - email
 - db
 - security
+- shell
 
 ## Frontend principles
 
@@ -41,6 +42,7 @@ Mitbauen Native is a reset of the current app with these constraints:
 - no server-side rendering requirement
 - all data via backend APIs
 - browser only knows whether the user is authenticated; backend owns sessions
+- frontend build output is baked into the backend artifact for jar and native deployments
 
 ## Testing principles
 
@@ -56,12 +58,13 @@ Mitbauen Native is a reset of the current app with these constraints:
 - test code must not be packaged into deployment artifacts for the Pi
 - Maven test dependencies stay in `test` scope, and we do not produce a `test-jar`
 - frontend browser-test tooling stays in `devDependencies`
-- production images should copy only the backend runtime artifact and built frontend assets, never test dependencies or browser binaries
+- deployment should center on a single app artifact that contains backend code, built frontend assets, and embedded SQL migrations
+- production artifacts must not require `psql`, Nginx, or separate static-file deployment just to serve the app shell
 
 ## Deployment principles
 
-- Nginx at the edge
-- backend behind Nginx
-- Postgres private to the host/network
-- same-domain routing preferred for simpler cookie auth
-- schema migrations run explicitly before app startup; backend runtime does not auto-migrate
+- the app artifact owns two explicit modes: `migrate` and `serve`
+- the same artifact should be what CI tests and what the Pi runs under `systemd`
+- Postgres is managed separately from the app process and keeps its persistent volume across releases
+- schema migrations are forward-only and tracked in `schema_migrations`
+- the app artifact serves both frontend routes and backend APIs directly

@@ -6,8 +6,9 @@ Wants=network-online.target
 [Service]
 Type=simple
 User={{RUN_USER}}
-WorkingDirectory={{APP_DIR}}/backend
+WorkingDirectory={{APP_DIR}}
 EnvironmentFile={{ENV_FILE}}
+ExecStartPre={{EXEC_START_PRE}}
 ExecStart={{EXEC_START}}
 Restart=always
 RestartSec=5

@@ -202,13 +202,20 @@ function FeedView({ projects, loading, error, session, onNavigate }: FeedViewPro
 
       <section className="auth-banner">
         {session.authenticated && session.user ? (
-          <>
+          invitePath ? (
+            <>
+              <div>
+                <strong>Your invite link is ready.</strong>
+                <p>Reuse it with as many new registrations as you want.</p>
+              </div>
+              <code>{invitePath}</code>
+            </>
+          ) : (
             <div>
-              <strong>Your invite link is ready.</strong>
-              <p>Reuse it with as many new registrations as you want.</p>
+              <strong>You are signed in.</strong>
+              <p>The current slice only shows the invite link immediately after registration.</p>
             </div>
-            {invitePath ? <code>{invitePath}</code> : null}
-          </>
+          )
         ) : (
           <>
             <div>

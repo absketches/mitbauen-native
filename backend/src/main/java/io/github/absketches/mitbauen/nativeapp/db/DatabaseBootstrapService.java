@@ -8,12 +8,14 @@ import static org.nanonative.nano.helper.config.ConfigRegister.registerConfig;
 
 public class DatabaseBootstrapService extends Service {
 
-    public static final String CONFIG_JDBC_DATABASE_URL = registerConfig(DatabaseConfig.CONFIG_JDBC_DATABASE_URL, "JDBC database URL");
-    public static final String CONFIG_JDBC_DATABASE_USER = registerConfig(DatabaseConfig.CONFIG_JDBC_DATABASE_USER, "JDBC database user");
-    public static final String CONFIG_JDBC_DATABASE_PASSWORD = registerConfig(DatabaseConfig.CONFIG_JDBC_DATABASE_PASSWORD, "JDBC database password");
+    public static final String CONFIG_JDBC_DATABASE_URL = registerConfig("jdbc_database_url", "JDBC database URL");
+    public static final String CONFIG_JDBC_DATABASE_USER = registerConfig("jdbc_database_user", "JDBC database user");
+    public static final String CONFIG_JDBC_DATABASE_PASSWORD = registerConfig("jdbc_database_password", "JDBC database password");
 
     private final DatabaseRuntime databaseRuntime;
-    private DatabaseConfig databaseConfig;
+    private String jdbcUrl;
+    private String jdbcUser;
+    private String jdbcPassword;
 
     public DatabaseBootstrapService(final DatabaseRuntime databaseRuntime) {
         this.databaseRuntime = databaseRuntime;
@@ -21,7 +23,7 @@ public class DatabaseBootstrapService extends Service {
 
     @Override
     public void start() {
-        databaseRuntime.start(databaseConfig);
+        databaseRuntime.start(jdbcUrl, jdbcUser, jdbcPassword);
         context.info(() -> "[{}] started", name());
     }
 
@@ -41,10 +43,8 @@ public class DatabaseBootstrapService extends Service {
 
     @Override
     public void configure(final TypeMapI<?> changes, final TypeMapI<?> merged) {
-        databaseConfig = new DatabaseConfig(
-            merged.asStringOpt(CONFIG_JDBC_DATABASE_URL).orElse(""),
-            merged.asStringOpt(CONFIG_JDBC_DATABASE_USER).orElse(""),
-            merged.asStringOpt(CONFIG_JDBC_DATABASE_PASSWORD).orElse("")
-        );
+        jdbcUrl = merged.asStringOpt(CONFIG_JDBC_DATABASE_URL).orElse("");
+        jdbcUser = merged.asStringOpt(CONFIG_JDBC_DATABASE_USER).orElse("");
+        jdbcPassword = merged.asStringOpt(CONFIG_JDBC_DATABASE_PASSWORD).orElse("");
     }
 }

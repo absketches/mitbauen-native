@@ -3,10 +3,12 @@ package io.github.absketches.mitbauen.nativeapp.db;
 import com.zaxxer.hikari.HikariDataSource;
 
 import javax.sql.DataSource;
+import java.util.concurrent.CompletableFuture;
 
 public class DatabaseRuntime {
 
     private final String poolName;
+    private final CompletableFuture<HikariDataSource> startedDataSource = new CompletableFuture<>();
     private HikariDataSource dataSource;
 
     public DatabaseRuntime() {
@@ -17,19 +19,25 @@ public class DatabaseRuntime {
         this.poolName = poolName;
     }
 
-    public void start(final DatabaseConfig databaseConfig) {
-        dataSource = Database.open(databaseConfig, poolName);
+    public synchronized void start(final String jdbcUrl, final String jdbcUser, final String jdbcPassword) {
+        if (startedDataSource.isDone()) {
+            return;
+        }
+        try {
+            dataSource = Database.open(jdbcUrl, jdbcUser, jdbcPassword, poolName);
+            startedDataSource.complete(dataSource);
+        } catch (RuntimeException exception) {
+            startedDataSource.completeExceptionally(exception);
+            throw exception;
+        }
     }
 
-    public void stop() {
+    public synchronized void stop() {
         Database.close(dataSource);
         dataSource = null;
     }
 
     public DataSource dataSource() {
-        if (dataSource == null) {
-            throw new IllegalStateException("Database datasource is not initialized yet.");
-        }
-        return dataSource;
+        return startedDataSource.join();
     }
 }

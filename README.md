@@ -2,11 +2,12 @@
 
 Fresh reboot of Mitbauen as a single-repo system with:
 
-- static frontend
-- Java backend
-- PostgreSQL
+- one packaged app artifact that serves both SPA routes and `/api`
+- Java 21 + Nano on the backend
+- PostgreSQL as a separately managed datastore
+- Vite + React + TypeScript on the frontend
 - local Docker Compose for contributor onboarding
-- Nginx as the front door in local and host deployments
+- host deployment through `systemd`
 
 ## Planned stack
 
@@ -14,10 +15,10 @@ Fresh reboot of Mitbauen as a single-repo system with:
 - Database: PostgreSQL
 - DB driver: `org.postgresql:postgresql`
 - Pooling: `HikariCP`
-- Migrations: `Flyway`
+- Migrations: versioned SQL embedded in the app artifact
 - Frontend: Vite + React + TypeScript
 - Local infra: Docker Compose
-- Edge/front door: Nginx
+- Packaging: single jar or native binary with baked frontend assets
 
 ## Current scaffold status
 
@@ -26,17 +27,16 @@ This repo is intentionally still early-stage, but the first end-to-end slices ar
 - public project feed
 - invite-only registration and login
 - DB-backed sessions
+- embedded SQL migrations
+- single-binary app shell
 - local Docker setup
-- migration layout
-- Nginx reverse proxy
 
 ## Repo layout
 
 ```text
-backend/        Java backend
-frontend/       Static SPA
-db/migrations/  SQL migrations
-infra/nginx/    Local reverse-proxy config
+backend/        Java backend, resources, and embedded SQL migrations
+frontend/       Static SPA source
+infra/systemd/  Host service templates
 docs/           Architecture notes and roadmap
 build.sh        Root build orchestrator
 deploy.sh       Host deployment bundle + install script
@@ -53,8 +53,7 @@ See [docs/product-roadmap.md](docs/product-roadmap.md) for the incremental deliv
 docker compose up --build
 ```
 
-The local stack uses [infra/nginx/default.conf](infra/nginx/default.conf) to proxy `/api` to the backend and everything else to the frontend dev server.
-Before the application containers start, Docker Compose now runs a dedicated `browser-tests` container that executes the frontend browser suite. The backend and frontend services wait for that container to complete successfully.
+Before the application container starts, Docker Compose runs a dedicated `browser-tests` container that executes the frontend browser suite. The app then runs migrations through the same packaged backend artifact before starting the HTTP server.
 
 If you only want to run the browser suite, use:
 
@@ -62,67 +61,70 @@ If you only want to run the browser suite, use:
 docker compose up --build browser-tests
 ```
 
-If you want to run the backend from IntelliJ or another local IDE while keeping PostgreSQL in Docker, start the database and migrations first:
+If you want to run the backend from IntelliJ or another local IDE while keeping PostgreSQL in Docker:
 
 ```bash
 cp .env.example .env
-docker compose up -d postgres migrate
+docker compose up -d postgres
+docker compose run --rm migrate
+cd frontend && npm run build
 ```
 
-Useful checks for that flow:
+Then start the backend app from the IDE. The app shell is served from the built frontend assets, so that one frontend build step matters for IDE-based runs.
+
+Useful checks:
 
 ```bash
 docker compose ps
-docker compose logs -f postgres migrate
+docker compose logs -f postgres migrate backend
 ```
 
 ## Host deployment structure
 
-The Pi deployment now follows a host-style setup rather than Docker on the target machine:
+The Pi deployment follows a single-binary host setup rather than Docker on the target machine:
 
-- `build.sh` builds the frontend and backend, then stages deployable artifacts under `.artifacts/`
-- `migrate.sh` applies the SQL migrations explicitly through `psql`
-- `deploy.sh` packages the backend artifact, frontend `dist`, DB migrations, the migration script, a `systemd` unit, and a host `Nginx` config
+- `build.sh` builds the frontend first, then packages the backend artifact with baked frontend assets and embedded SQL migrations
+- the app artifact exposes two modes: `migrate` and `serve`
+- `deploy.sh` packages the backend artifact, a `systemd` unit, and an env template
 - the backend runs as a `systemd` service on the Pi
-- host `Nginx` serves the built SPA and proxies `/api` to the backend on `localhost`
-- local `docker-compose.yml` remains development-only
+- the `systemd` unit runs `migrate` before `serve`
+- PostgreSQL is managed separately on the host
 
 The generated host deployment expects:
 
-- Java 21
-- PostgreSQL client tools (`psql`)
-- Nginx
 - PostgreSQL
 - `systemd`
 - a remote user with `ssh` access and `sudo` privileges
+- Java 21 only when deploying the jar mode
+
+For the preferred native-image deploy, no host Java runtime is required.
 
 The deployed shape is:
 
 - backend jar under `/opt/mitbauen/backend`
 - or, when `DEPLOY_BACKEND_MODE=native`, a native backend binary under `/opt/mitbauen/backend`
-- frontend files under `/var/www/mitbauen`
-- migrations under `/opt/mitbauen/db/migrations`
-- migration script at `/opt/mitbauen/migrate.sh`
 - backend env file at `/etc/mitbauen/mitbauen.env`
 - `systemd` unit at `/etc/systemd/system/mitbauen-backend.service`
-- host `Nginx` site config at `/etc/nginx/sites-available/mitbauen.conf`
+- PostgreSQL data in its normal host-managed data directory or volume
 
-If the remote env file does not exist yet, `deploy.sh` will create it from the example template and stop, so you can fill in the real database credentials before rerunning the deployment. On a normal deploy, the script runs `migrate.sh` on the Pi before restarting the backend service.
+If the remote env file does not exist yet, `deploy.sh` will create it from the example template and stop, so you can fill in the real database credentials before rerunning the deployment. On a normal deploy, the installed `systemd` unit runs the app’s embedded `migrate` mode before `serve`.
+
+The production database volume is not meant to be cleaned up between releases. Forward-only migrations are tracked in `schema_migrations`, so new app versions only apply the SQL files that have not already been recorded.
 
 For a jar-based host deploy:
 
 ```bash
 DEPLOY_REMOTE_USER=your-user \
 DEPLOY_REMOTE_HOST=your-pi-host \
+DEPLOY_BACKEND_MODE=jar \
 ./deploy.sh
 ```
 
-For a native-image host deploy:
+For the default native-image host deploy:
 
 ```bash
 DEPLOY_REMOTE_USER=your-user \
 DEPLOY_REMOTE_HOST=your-pi-host \
-DEPLOY_BACKEND_MODE=native \
 ./deploy.sh
 ```
 
@@ -130,13 +132,11 @@ If you already have a prepared native artifact or deploy bundle from CI, set `DE
 
 ## Local URLs
 
-- App: `http://localhost:8088`
-- Frontend dev server: `http://localhost:5173`
-- Backend: `http://localhost:8080`
+- App and API: `http://localhost:8080`
 - Postgres: `localhost:5432`
 
 ## First implementation goals
 
-1. Replace the bootstrap HTTP layer with the first Nano-backed route slice
-2. Harden the invite-only auth flow for production deployment
+1. Harden the single-binary serve and migrate flow for production deployment
+2. Complete the invite-only auth slice with more production safeguards
 3. Port the remaining Mitbauen domain model incrementally

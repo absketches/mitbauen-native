@@ -27,10 +27,10 @@ jobs:
           --health-timeout 5s
           --health-retries 20
     env:
-      JDBC_DATABASE_URL: jdbc:postgresql://127.0.0.1:5432/mitbauen
-      JDBC_DATABASE_USER: mitbauen
-      JDBC_DATABASE_PASSWORD: mitbauen_ci_password
-      PLAYWRIGHT_BASE_URL: http://127.0.0.1:8088
+      jdbc_database_url: jdbc:postgresql://127.0.0.1:5432/mitbauen
+      jdbc_database_user: mitbauen
+      jdbc_database_password: mitbauen_ci_password
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:8080
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -39,6 +39,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Set up GraalVM
         uses: graalvm/setup-graalvm@v1
@@ -49,8 +51,9 @@ jobs:
           cache: maven
           native-image-job-reports: 'true'
 
-      - name: Install host dependencies
-        run: sudo apt-get update && sudo apt-get install -y nginx postgresql-client
+      - name: Run backend integration tests
+        working-directory: backend
+        run: mvn -q verify
 
       - name: Build frontend and native backend
         run: BUILD_NATIVE=1 SKIP_BACKEND_TESTS=1 ./build.sh

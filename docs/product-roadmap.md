@@ -7,19 +7,20 @@ Build Mitbauen Native as a sequence of small vertical slices, where each slice i
 We are not trying to port the entire upstream app in one pass. The priority is to establish a reliable delivery rhythm:
 
 - one user-visible capability at a time
-- database, backend, frontend, and proxy wired together
+- database, backend, and frontend baked into one working app path
 - tests at the right levels before moving on
 
 ## Delivery Rules
 
 Each milestone should meet these conditions before we start the next one:
 
-- the feature works through Nginx in local Docker
+- the feature works through the packaged app artifact in local Docker
 - the database shape is created by versioned SQL migrations
 - backend behavior is covered by integration tests
 - frontend behavior is covered by browser-based component/page tests where useful
 - only add a full browser journey when the slice truly needs it
 - scope stays intentionally narrow; adjacent features wait for the next milestone
+- deployment keeps a persistent Postgres volume and only applies unapplied migrations
 
 ## Test Strategy
 
@@ -55,7 +56,7 @@ Visitors can open the app and browse projects ordered by lifecycle state and rec
 - seed a few representative projects for local development
 - add a backend read endpoint for listing projects
 - add a frontend page that renders the project feed
-- route traffic through Nginx to the frontend and API cleanly
+- serve the SPA shell and API through the same packaged app artifact
 
 ### Keep Out for Now
 
@@ -263,7 +264,7 @@ If we follow this roadmap, the next implementation target should be Milestone 1.
 
 That gives us the first truly end-to-end feature with a tight test story:
 
-- Flyway migration for the first project tables
+- indexed SQL migration for the first project tables
 - Nano-backed event-driven HTTP route for listing projects
 - frontend feed page
 - seeded local data
