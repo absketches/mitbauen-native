@@ -26,7 +26,7 @@ public class MitbauenApplication {
 
     private static void serve() {
         final DatabaseRuntime databaseRuntime = new DatabaseRuntime();
-        new Nano(
+        final Nano nano = new Nano(
             new HttpServer(),
             new HttpClient(),
             new DatabaseBootstrapService(databaseRuntime),
@@ -34,6 +34,8 @@ public class MitbauenApplication {
             new ProjectFeedService(databaseRuntime),
             new AuthService(databaseRuntime)
         );
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> nano.stop(nano.context()), "mitbauen-shutdown"));
+        nano.waitForStop();
     }
 
     private static void migrate() {

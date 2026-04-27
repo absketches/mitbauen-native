@@ -17,10 +17,7 @@ require_command() {
 }
 
 cleanup() {
-    if [ -n "${BACKEND_PID:-}" ] && kill -0 "$BACKEND_PID" 2>/dev/null; then
-        kill "$BACKEND_PID" 2>/dev/null || true
-        wait "$BACKEND_PID" 2>/dev/null || true
-    fi
+    stop_backend
 }
 
 print_file_if_present() {
@@ -35,6 +32,25 @@ print_file_if_present() {
 dump_diagnostics() {
     print_file_if_present "$TMP_DIR/migrate.log" "migrate.log"
     print_file_if_present "$TMP_DIR/backend.log" "backend.log"
+}
+
+stop_backend() {
+    if [ -z "${BACKEND_PID:-}" ] || ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+        return 0
+    fi
+
+    kill "$BACKEND_PID" 2>/dev/null || true
+
+    shutdown_deadline=$(( $(date +%s) + 10 ))
+    while kill -0 "$BACKEND_PID" 2>/dev/null; do
+        if [ "$(date +%s)" -ge "$shutdown_deadline" ]; then
+            kill -9 "$BACKEND_PID" 2>/dev/null || true
+            break
+        fi
+        sleep 1
+    done
+
+    wait "$BACKEND_PID" 2>/dev/null || true
 }
 
 wait_for_http() {

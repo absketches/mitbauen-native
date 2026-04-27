@@ -33,3 +33,4 @@ tmp/
 .tmp/
 coverage/
 frontend/playwright-report/
+frontend/test-results/
