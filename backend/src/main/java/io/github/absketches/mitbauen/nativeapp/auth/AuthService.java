@@ -119,24 +119,20 @@ public class AuthService extends Service {
             AuthUtil.respondBadRequest(event, "Invite link is invalid.");
             return;
         }
-        if (invite.get().allowedEmail() != null && !invite.get().allowedEmail().equalsIgnoreCase(email)) {
-            AuthUtil.respondForbidden(event, "This invite link is restricted to a different email address.");
-            return;
-        }
-        if (AuthRepository.emailExists(databaseRuntime.dataSource(), email)) {
+        final String passwordHash = AuthUtil.hashPassword(password);
+        final SessionUser sessionUser;
+        try {
+            sessionUser = AuthRepository.createUserFromInvite(
+                databaseRuntime.dataSource(),
+                invite.get(),
+                email,
+                displayName,
+                passwordHash
+            );
+        } catch (AuthRepository.DuplicateEmailException exception) {
             AuthUtil.respondConflict(event, "An account already exists for that email.");
             return;
         }
-
-        final String passwordHash = AuthUtil.hashPassword(password);
-        final SessionUser sessionUser = AuthRepository.createUserFromInvite(
-            databaseRuntime.dataSource(),
-            invite.get(),
-            inviteToken,
-            email,
-            displayName,
-            passwordHash
-        );
         final String sessionToken = AuthUtil.newSessionToken();
         AuthRepository.createSession(
             databaseRuntime.dataSource(),

@@ -5,6 +5,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Optional;
@@ -12,15 +13,9 @@ import java.util.Optional;
 public class AuthRepository {
 
     private static final String INVITE_LOOKUP_SQL = """
-        select id, allowed_email, is_active
+        select id, is_active
         from invite_links
         where token_hash = ?
-        """;
-
-    private static final String EMAIL_EXISTS_SQL = """
-        select 1
-        from users
-        where email = ?
         """;
 
     private static final String LOGIN_LOOKUP_SQL = """
@@ -56,7 +51,6 @@ public class AuthRepository {
                 if (resultSet.next()) {
                     return Optional.of(new InviteLink(
                         resultSet.getLong("id"),
-                        resultSet.getString("allowed_email"),
                         resultSet.getBoolean("is_active")
                     ));
                 }
@@ -67,22 +61,9 @@ public class AuthRepository {
         }
     }
 
-    public static boolean emailExists(final DataSource dataSource, final String normalizedEmail) {
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(EMAIL_EXISTS_SQL)) {
-            statement.setString(1, normalizedEmail);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                return resultSet.next();
-            }
-        } catch (SQLException exception) {
-            throw new IllegalStateException("Unable to check email", exception);
-        }
-    }
-
     public static SessionUser createUserFromInvite(
         final DataSource dataSource,
         final InviteLink invite,
-        final String inviteToken,
         final String normalizedEmail,
         final String displayName,
         final String passwordHash
@@ -94,9 +75,8 @@ public class AuthRepository {
                 insertPasswordCredential(connection, userId, passwordHash);
                 insertInviteRedemption(connection, invite.id(), userId, normalizedEmail);
                 incrementInviteUseCount(connection, invite.id());
-                final String ownedInviteToken = maybeGrantInviteCapability(connection, invite, inviteToken, userId);
                 connection.commit();
-                return new SessionUser(userId, displayName, normalizedEmail, ownedInviteToken);
+                return new SessionUser(userId, displayName, normalizedEmail);
             } catch (Exception exception) {
                 connection.rollback();
                 throw exception;
@@ -119,8 +99,7 @@ public class AuthRepository {
                         userId,
                         resultSet.getString("display_name"),
                         resultSet.getString("email"),
-                        resultSet.getString("password_hash"),
-                        findOwnedInviteToken(connection, userId).orElse(null)
+                        resultSet.getString("password_hash")
                     ));
                 }
                 return Optional.empty();
@@ -158,8 +137,7 @@ public class AuthRepository {
                     final SessionUser sessionUser = new SessionUser(
                         userId,
                         resultSet.getString("display_name"),
-                        resultSet.getString("email"),
-                        findOwnedInviteToken(connection, userId).orElse(null)
+                        resultSet.getString("email")
                     );
                     touchSession(connection, sessionId);
                     return Optional.of(sessionUser);
@@ -190,13 +168,22 @@ public class AuthRepository {
             insert into users (handle, display_name, email)
             values (?, ?, ?)
             """;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             statement.setString(1, nextHandle(connection, displayName, normalizedEmail));
             statement.setString(2, displayName);
             statement.setString(3, normalizedEmail);
             statement.executeUpdate();
-            return userIdByEmail(connection, normalizedEmail)
-                .orElseThrow(() -> new IllegalStateException("User insert did not create a readable id"));
+            try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
+                if (generatedKeys.next()) {
+                    return generatedKeys.getLong(1);
+                }
+            }
+            throw new IllegalStateException("User insert did not return a generated id");
+        } catch (SQLException exception) {
+            if (isDuplicateEmail(connection, normalizedEmail, exception)) {
+                throw new DuplicateEmailException(normalizedEmail, exception);
+            }
+            throw exception;
         }
     }
 
@@ -239,45 +226,6 @@ public class AuthRepository {
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setLong(1, inviteLinkId);
             statement.executeUpdate();
-        }
-    }
-
-    private static String maybeGrantInviteCapability(
-        final Connection connection,
-        final InviteLink invite,
-        final String inviteToken,
-        final long userId
-    ) throws SQLException {
-        if (invite.allowedEmail() == null) {
-            return null;
-        }
-        final String sql = """
-            update invite_links
-            set created_by_user_id = ?, allowed_email = null
-            where id = ?
-            """;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, userId);
-            statement.setLong(2, invite.id());
-            statement.executeUpdate();
-        }
-        return inviteToken;
-    }
-
-    private static Optional<String> findOwnedInviteToken(final Connection connection, final long userId) throws SQLException {
-        final String sql = """
-            select token
-            from invite_links
-            where created_by_user_id = ? and is_active = true
-            """;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, userId);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                if (resultSet.next()) {
-                    return Optional.ofNullable(resultSet.getString("token"));
-                }
-                return Optional.empty();
-            }
         }
     }
 
@@ -333,6 +281,32 @@ public class AuthRepository {
                 }
                 return Optional.empty();
             }
+        }
+    }
+
+    private static boolean isDuplicateEmail(
+        final Connection connection,
+        final String normalizedEmail,
+        final SQLException exception
+    ) throws SQLException {
+        return isUniqueViolation(exception) && userIdByEmail(connection, normalizedEmail).isPresent();
+    }
+
+    private static boolean isUniqueViolation(final SQLException exception) {
+        Throwable current = exception;
+        while (current != null) {
+            if (current instanceof SQLException sqlException && "23505".equals(sqlException.getSQLState())) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    public static final class DuplicateEmailException extends RuntimeException {
+
+        public DuplicateEmailException(final String normalizedEmail, final SQLException cause) {
+            super("An account already exists for " + normalizedEmail, cause);
         }
     }
 }

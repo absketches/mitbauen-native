@@ -63,6 +63,7 @@ jobs:
           jdbc_database_url: jdbc:postgresql://127.0.0.1:5432/mitbauen
           jdbc_database_user: mitbauen
           jdbc_database_password: mitbauen_ci_password
+          E2E_INVITE_HASH: 448a9e6bdd9366c7be474d74fce688484aaf2b2a350864e2c02ca86aaa86ce39
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:8080
         run: ./run-native-e2e.sh
 

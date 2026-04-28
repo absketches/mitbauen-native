@@ -18,8 +18,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class AuthApiTest {
 
-    private static final String BOOTSTRAP_INVITE = "basu-bootstrap-invite-2026";
-    private static final String BOOTSTRAP_EMAIL = "basuabhi92@gmail.com";
+    private static final String OPEN_INVITE = "test-open-invite";
+    private static final String PRIMARY_EMAIL = "builder.one@example.test";
+    private static final String PRIMARY_DISPLAY_NAME = "Alex Builder";
+    private static final String PRIMARY_PASSWORD = "SuperSafe1";
 
     private Nano nano;
 
@@ -31,14 +33,14 @@ class AuthApiTest {
     }
 
     @Test
-    void registersBootstrapUserAndCreatesInviteBacklink() {
+    void registersWithTheOpenInviteWithoutReturningInviteToken() {
         nano = newTestNano();
 
         final HttpObject registerResponse = post("/api/auth/register", Map.of(
-            "inviteToken", BOOTSTRAP_INVITE,
-            "email", BOOTSTRAP_EMAIL,
-            "displayName", "Ab Basu",
-            "password", "SuperSafe1"
+            "inviteToken", OPEN_INVITE,
+            "email", PRIMARY_EMAIL,
+            "displayName", PRIMARY_DISPLAY_NAME,
+            "password", PRIMARY_PASSWORD
         ));
 
         assertThat(registerResponse.statusCode()).isEqualTo(201);
@@ -46,24 +48,30 @@ class AuthApiTest {
 
         final LinkedTypeMap registerBody = registerResponse.bodyAsMap();
         assertThat(registerBody.asBoolean("authenticated")).isTrue();
-        assertThat(registerBody.asMap("user").asString("email")).isEqualTo(BOOTSTRAP_EMAIL);
-        assertThat(registerBody.asMap("user").asString("inviteToken")).isEqualTo(BOOTSTRAP_INVITE);
+        assertThat(registerBody.asMap("user").asString("email")).isEqualTo(PRIMARY_EMAIL);
+        assertThat(registerBody.asMap("user").asString("inviteToken")).isNull();
     }
 
     @Test
-    void rejectsRegistrationWithWrongInviteEmail() {
+    void acceptsDifferentEmailsForTheSharedInvite() {
         nano = newTestNano();
 
-        final HttpObject registerResponse = post("/api/auth/register", Map.of(
-            "inviteToken", BOOTSTRAP_INVITE,
+        final HttpObject firstRegister = post("/api/auth/register", Map.of(
+            "inviteToken", OPEN_INVITE,
             "email", "someone@example.com",
-            "displayName", "Wrong Person",
-            "password", "SuperSafe1"
+            "displayName", "First Person",
+            "password", PRIMARY_PASSWORD
         ));
 
-        assertThat(registerResponse.statusCode()).isEqualTo(403);
-        assertThat(registerResponse.bodyAsMap().asString("error"))
-            .isEqualTo("This invite link is restricted to a different email address.");
+        final HttpObject secondRegister = post("/api/auth/register", Map.of(
+            "inviteToken", OPEN_INVITE,
+            "email", "another@example.com",
+            "displayName", "Second Person",
+            "password", PRIMARY_PASSWORD
+        ));
+
+        assertThat(firstRegister.statusCode()).isEqualTo(201);
+        assertThat(secondRegister.statusCode()).isEqualTo(201);
     }
 
     @Test
@@ -71,24 +79,22 @@ class AuthApiTest {
         nano = newTestNano();
 
         final HttpObject firstRegister = post("/api/auth/register", Map.of(
-            "inviteToken", BOOTSTRAP_INVITE,
-            "email", BOOTSTRAP_EMAIL,
-            "displayName", "Ab Basu",
-            "password", "SuperSafe1"
+            "inviteToken", OPEN_INVITE,
+            "email", PRIMARY_EMAIL,
+            "displayName", PRIMARY_DISPLAY_NAME,
+            "password", PRIMARY_PASSWORD
         ));
         assertThat(firstRegister.statusCode()).isEqualTo(201);
-        final String reusableInvite = firstRegister.bodyAsMap().asMap("user").asString("inviteToken");
-        assertThat(reusableInvite).isNotBlank();
 
         final HttpObject secondRegister = post("/api/auth/register", Map.of(
-            "inviteToken", reusableInvite,
+            "inviteToken", OPEN_INVITE,
             "email", "friend-one@example.com",
             "displayName", "Friend One",
             "password", "FriendOne1"
         ));
 
         final HttpObject thirdRegister = post("/api/auth/register", Map.of(
-            "inviteToken", reusableInvite,
+            "inviteToken", OPEN_INVITE,
             "email", "friend-two@example.com",
             "displayName", "Friend Two",
             "password", "FriendTwo1"
@@ -96,8 +102,6 @@ class AuthApiTest {
 
         assertThat(secondRegister.statusCode()).isEqualTo(201);
         assertThat(thirdRegister.statusCode()).isEqualTo(201);
-        assertThat(secondRegister.bodyAsMap().asMap("user").asString("inviteToken")).isNull();
-        assertThat(thirdRegister.bodyAsMap().asMap("user").asString("inviteToken")).isNull();
     }
 
     @Test
@@ -105,26 +109,24 @@ class AuthApiTest {
         nano = newTestNano();
 
         post("/api/auth/register", Map.of(
-            "inviteToken", BOOTSTRAP_INVITE,
-            "email", BOOTSTRAP_EMAIL,
-            "displayName", "Ab Basu",
-            "password", "SuperSafe1"
+            "inviteToken", OPEN_INVITE,
+            "email", PRIMARY_EMAIL,
+            "displayName", PRIMARY_DISPLAY_NAME,
+            "password", PRIMARY_PASSWORD
         ));
 
         final HttpObject loginResponse = post("/api/auth/login", Map.of(
-            "email", BOOTSTRAP_EMAIL,
-            "password", "SuperSafe1"
+            "email", PRIMARY_EMAIL,
+            "password", PRIMARY_PASSWORD
         ));
 
         assertThat(loginResponse.statusCode()).isEqualTo(200);
-        assertThat(loginResponse.bodyAsMap().asMap("user").asString("inviteToken")).isEqualTo(BOOTSTRAP_INVITE);
         final String sessionCookie = cookieValue(loginResponse, AuthUtil.AUTH_SESSION_COOKIE);
         assertThat(sessionCookie).isNotBlank();
 
         final HttpObject sessionResponse = get("/api/auth/session", sessionCookie);
         assertThat(sessionResponse.statusCode()).isEqualTo(200);
         assertThat(sessionResponse.bodyAsMap().asBoolean("authenticated")).isTrue();
-        assertThat(sessionResponse.bodyAsMap().asMap("user").asString("inviteToken")).isEqualTo(BOOTSTRAP_INVITE);
 
         final HttpObject logoutResponse = post("/api/auth/logout", Map.of(), sessionCookie);
         assertThat(logoutResponse.statusCode()).isEqualTo(200);
@@ -138,7 +140,7 @@ class AuthApiTest {
         nano = newTestNano();
 
         final HttpObject validResponse = new HttpObject()
-            .path(baseUrl("/api/invites/validate?token=" + BOOTSTRAP_INVITE))
+            .path(baseUrl("/api/invites/validate?token=" + OPEN_INVITE))
             .send(nano.context(AuthApiTest.class));
 
         final HttpObject invalidResponse = new HttpObject()
@@ -146,7 +148,6 @@ class AuthApiTest {
             .send(nano.context(AuthApiTest.class));
 
         assertThat(validResponse.bodyAsMap().asBoolean("valid")).isTrue();
-        assertThat(validResponse.bodyAsMap().asString("allowedEmail")).isEqualTo(BOOTSTRAP_EMAIL);
         assertThat(invalidResponse.bodyAsMap().asBoolean("valid")).isFalse();
     }
 
@@ -155,9 +156,9 @@ class AuthApiTest {
         nano = newTestNano();
 
         final HttpObject registerResponse = post("/api/auth/register", Map.of(
-            "inviteToken", BOOTSTRAP_INVITE,
-            "email", BOOTSTRAP_EMAIL,
-            "displayName", "Ab Basu",
+            "inviteToken", OPEN_INVITE,
+            "email", PRIMARY_EMAIL,
+            "displayName", PRIMARY_DISPLAY_NAME,
             "password", "password"
         ));
 
@@ -166,9 +167,34 @@ class AuthApiTest {
             .isEqualTo(AuthUtil.PASSWORD_REQUIREMENTS_MESSAGE);
     }
 
+    @Test
+    void rejectsDuplicateEmailDuringRegistration() {
+        nano = newTestNano();
+
+        final HttpObject firstRegister = post("/api/auth/register", Map.of(
+            "inviteToken", OPEN_INVITE,
+            "email", PRIMARY_EMAIL,
+            "displayName", PRIMARY_DISPLAY_NAME,
+            "password", PRIMARY_PASSWORD
+        ));
+        assertThat(firstRegister.statusCode()).isEqualTo(201);
+
+        final HttpObject duplicateRegister = post("/api/auth/register", Map.of(
+            "inviteToken", OPEN_INVITE,
+            "email", PRIMARY_EMAIL,
+            "displayName", PRIMARY_DISPLAY_NAME + " Again",
+            "password", PRIMARY_PASSWORD
+        ));
+
+        assertThat(duplicateRegister.statusCode()).isEqualTo(409);
+        assertThat(duplicateRegister.bodyAsMap().asString("error"))
+            .isEqualTo("An account already exists for that email.");
+    }
+
     private Nano newTestNano() {
         final String jdbcUrl = "jdbc:h2:mem:mitbauen_auth_" + UUID.randomUUID() + ";MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1";
         TestDatabaseMigrations.migrate(jdbcUrl, "sa", "");
+        TestDatabaseMigrations.seedInvite(jdbcUrl, "sa", "", OPEN_INVITE);
         final DatabaseRuntime databaseRuntime = new DatabaseRuntime("mitbauen-test-auth");
         return new Nano(
             Map.of(

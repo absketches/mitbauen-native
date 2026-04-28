@@ -8,7 +8,7 @@ Mitbauen Native is a reset of the current app with these constraints:
 - one packaged app artifact that serves the SPA shell and `/api`
 - Java backend
 - PostgreSQL under our control
-- invite-only local auth handled in the backend
+- invite-only local auth with backend-validated invite hashes
 - local Docker onboarding for contributors
 
 ## Backend principles

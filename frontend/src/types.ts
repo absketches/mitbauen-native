@@ -28,7 +28,6 @@ export type SessionUser = {
   id: number
   displayName: string
   email: string
-  inviteToken: string | null
 }
 
 export type SessionResponse = {
@@ -38,7 +37,6 @@ export type SessionResponse = {
 
 export type InviteValidationResponse = {
   valid: boolean
-  allowedEmail?: string | null
 }
 
 export type RegisterPayload = {

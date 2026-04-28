@@ -97,14 +97,13 @@ A user can register from an invite link, sign in with email and password, and la
 
 ### Keep Out for Now
 
-- invite creation UI
 - profile editing
 - password reset and email verification
 
 ### Tests
 
 - backend integration tests for session creation and cookie behavior
-- backend integration tests for invite acceptance, rejection, and reuse
+- backend integration tests for invite validation, acceptance, and reuse
 - backend HTTP tests through Nano's client for register, login, logout, and session
 - one browser smoke flow for invite registration and sign-in through the real app shell
 
@@ -112,7 +111,7 @@ A user can register from an invite link, sign in with email and password, and la
 
 ### Outcome
 
-An authenticated, invite-authorized user can create a project and later edit its core fields.
+An authenticated user can create a project and later edit its core fields.
 
 ### Scope
 
@@ -209,24 +208,23 @@ Users can comment on projects, and relevant users receive in-app notifications.
 - frontend browser tests for unread badge behavior
 - one browser smoke flow: new comment creates a visible in-app notification for the owner
 
-## Milestone 7: Invite Management And Basic Profiles
+## Milestone 7: Basic Profiles And Account Operations
 
 ### Outcome
 
-Eligible users can create invite links, and users have a simple profile page.
+Users have a simple profile page and a small set of account-level actions.
 
 ### Scope
 
-- invite creation flow
-- invite redemption tracking
 - own profile page
 - public profile page
+- account settings or account details surface
 
 ### Tests
 
-- backend integration tests for invite permissions and redemption
-- backend HTTP tests for invite creation and redemption endpoints
-- one browser smoke flow for creating an invite and redeeming it with a second user
+- backend integration tests for profile ownership and visibility rules
+- backend HTTP tests for profile read and update endpoints
+- one browser smoke flow for viewing and updating a basic profile
 
 ## Milestone 8: Hardening And Parity Review
 

@@ -103,10 +103,6 @@ public class AuthUtil {
         return "sess_" + randomToken(24);
     }
 
-    public static String newInviteToken() {
-        return "invite_" + randomToken(18);
-    }
-
     public static String hashToken(final String token) {
         try {
             final MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -151,7 +147,6 @@ public class AuthUtil {
     public static void respondInviteValidation(final Event<HttpObject, HttpObject> event, final InviteLink inviteLink) {
         final Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("valid", true);
-        payload.put("allowedEmail", inviteLink.allowedEmail());
         event.payload().createCorsResponse()
             .statusCode(200)
             .body(payload)
@@ -214,13 +209,6 @@ public class AuthUtil {
             .respond(event);
     }
 
-    public static void respondForbidden(final Event<HttpObject, HttpObject> event, final String message) {
-        event.payload().createCorsResponse()
-            .statusCode(403)
-            .body(Map.of("error", message))
-            .respond(event);
-    }
-
     public static void respondConflict(final Event<HttpObject, HttpObject> event, final String message) {
         event.payload().createCorsResponse()
             .statusCode(409)
@@ -251,7 +239,6 @@ public class AuthUtil {
             user.put("id", sessionUser.id());
             user.put("displayName", sessionUser.displayName());
             user.put("email", sessionUser.email());
-            user.put("inviteToken", sessionUser.inviteToken());
             payload.put("user", user);
         }
         return payload;

@@ -8,7 +8,6 @@ import type {
   Project,
   RegisterPayload,
   SessionResponse,
-  SessionUser,
 } from './types'
 
 type AppApi = {
@@ -155,8 +154,6 @@ export default function App({ api }: AppProps) {
           projects={projects}
           loading={projectsLoading}
           error={projectsError}
-          session={session}
-          onNavigate={setRoute}
         />
       ) : null}
 
@@ -185,13 +182,9 @@ type FeedViewProps = {
   projects: Project[]
   loading: boolean
   error: string | null
-  session: SessionResponse
-  onNavigate: (route: RouteState) => void
 }
 
-function FeedView({ projects, loading, error, session, onNavigate }: FeedViewProps) {
-  const invitePath = session.user?.inviteToken ? `/register?invite=${session.user.inviteToken}` : null
-
+function FeedView({ projects, loading, error }: FeedViewProps) {
   return (
     <>
       <section className="hero-grid">
@@ -215,42 +208,13 @@ function FeedView({ projects, loading, error, session, onNavigate }: FeedViewPro
           </article>
 
           <article className="hero-panel">
-            <p className="hero-panel__eyebrow">Invite Access</p>
+            <p className="hero-panel__eyebrow">Public Snapshot</p>
             <p className="hero-panel__copy">
-              Mitbauen is currently invite-only so the community can grow through trusted connections and meaningful
-              introductions.
+              Start with the public feed: scan the founder role, energy level, and open roles before deciding where you
+              want to lean in.
             </p>
           </article>
         </div>
-      </section>
-
-      <section className="auth-banner">
-        {session.authenticated && session.user ? (
-          invitePath ? (
-            <>
-              <div>
-                <strong>Your invite link is ready.</strong>
-                <p>Share it with people you trust and would like to invite to Mitbauen.</p>
-              </div>
-              <code>{invitePath}</code>
-            </>
-          ) : (
-            <div>
-              <strong>You are signed in.</strong>
-              <p>You can now browse projects and follow new opportunities as they appear.</p>
-            </div>
-          )
-        ) : (
-          <>
-            <div>
-              <strong>Join Mitbauen through an invite.</strong>
-              <p>Already have an account? Sign in to continue. New members can register with an invite link.</p>
-            </div>
-            <button className="primary-button" type="button" onClick={() => navigateTo('/login', onNavigate)}>
-              Sign in
-            </button>
-          </>
-        )}
       </section>
 
       {loading ? <p className="state-card">Loading projects...</p> : null}
@@ -357,9 +321,6 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
       .then((nextValidation) => {
         if (!cancelled) {
           setValidation(nextValidation)
-          if (nextValidation.allowedEmail) {
-            setEmail(nextValidation.allowedEmail)
-          }
           setValidating(false)
         }
       })
@@ -408,7 +369,6 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
                 onChange={(event) => setEmail(event.target.value)}
                 type="email"
                 required
-                readOnly={Boolean(validation.allowedEmail)}
               />
             </label>
 
@@ -436,9 +396,6 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
 
             <p className="auth-note">Use at least 8 characters, including a number and both uppercase and lowercase letters.</p>
 
-            {validation.allowedEmail ? (
-              <p className="auth-note">This invite can only be used with {validation.allowedEmail}.</p>
-            ) : null}
             {error ? <p className="auth-error">{error}</p> : null}
 
             <button className="primary-button" type="submit" disabled={submitting}>

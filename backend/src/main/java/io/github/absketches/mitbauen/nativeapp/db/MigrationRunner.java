@@ -6,10 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
-import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -41,7 +38,6 @@ public class MigrationRunner {
                 }
                 applyMigration(connection, migration);
             }
-            normalizeInviteTokenStorage(connection);
         } catch (SQLException exception) {
             throw new IllegalStateException("Unable to apply database migrations", exception);
         }
@@ -81,40 +77,6 @@ public class MigrationRunner {
         }
     }
 
-    private boolean tableExists(final Connection connection, final String tableName) throws SQLException {
-        final DatabaseMetaData metadata = connection.getMetaData();
-        try (ResultSet tables = metadata.getTables(null, null, tableName, new String[]{"TABLE"})) {
-            if (tables.next()) {
-                return true;
-            }
-        }
-        try (ResultSet tables = metadata.getTables(null, null, tableName.toUpperCase(), new String[]{"TABLE"})) {
-            if (tables.next()) {
-                return true;
-            }
-        }
-        try (ResultSet tables = metadata.getTables(null, null, tableName.toLowerCase(), new String[]{"TABLE"})) {
-            return tables.next();
-        }
-    }
-
-    private boolean columnExists(final Connection connection, final String tableName, final String columnName) throws SQLException {
-        final DatabaseMetaData metadata = connection.getMetaData();
-        try (ResultSet columns = metadata.getColumns(null, null, tableName, columnName)) {
-            if (columns.next()) {
-                return true;
-            }
-        }
-        try (ResultSet columns = metadata.getColumns(null, null, tableName.toUpperCase(), columnName.toUpperCase())) {
-            if (columns.next()) {
-                return true;
-            }
-        }
-        try (ResultSet columns = metadata.getColumns(null, null, tableName.toLowerCase(), columnName.toLowerCase())) {
-            return columns.next();
-        }
-    }
-
     private boolean isApplied(final Connection connection, final String version) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
             "select 1 from schema_migrations where version = ?"
@@ -146,32 +108,6 @@ public class MigrationRunner {
         }
     }
 
-    private void normalizeInviteTokenStorage(final Connection connection) throws SQLException {
-        if (!tableExists(connection, "invite_links")
-            || !columnExists(connection, "invite_links", "token_hash")
-            || !columnExists(connection, "invite_links", "token")) {
-            return;
-        }
-        try (PreparedStatement select = connection.prepareStatement("""
-                 select id, token
-                 from invite_links
-                 where (token_hash is null or token_hash = '') and token is not null and token <> ''
-                 """);
-             ResultSet resultSet = select.executeQuery();
-             PreparedStatement update = connection.prepareStatement("""
-                 update invite_links
-                 set token_hash = ?, token = null
-                 where id = ?
-                 """)) {
-            while (resultSet.next()) {
-                update.setString(1, sha256Hex(resultSet.getString("token")));
-                update.setLong(2, resultSet.getLong("id"));
-                update.addBatch();
-            }
-            update.executeBatch();
-        }
-    }
-
     private String readResource(final String resourcePath) {
         try (InputStream stream = openResource(resourcePath)) {
             return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
@@ -186,20 +122,6 @@ public class MigrationRunner {
             throw new IllegalStateException("Missing resource on classpath: " + resourcePath);
         }
         return stream;
-    }
-
-    private String sha256Hex(final String value) {
-        try {
-            final MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            final byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
-            final StringBuilder builder = new StringBuilder(hash.length * 2);
-            for (byte next : hash) {
-                builder.append(String.format("%02x", next & 0xff));
-            }
-            return builder.toString();
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("Missing SHA-256 algorithm", exception);
-        }
     }
 
     private static String versionFromFilename(final String filename) {

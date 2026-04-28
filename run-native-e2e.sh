@@ -52,6 +52,35 @@ stop_backend() {
     wait "$BACKEND_PID" 2>/dev/null || true
 }
 
+seed_e2e_invite() {
+    token_hash="${E2E_INVITE_HASH:-}"
+
+    if [ -z "$token_hash" ]; then
+        return 0
+    fi
+
+    if [ -z "${jdbc_database_url:-}" ] || [ -z "${jdbc_database_user:-}" ]; then
+        echo "Skipping E2E invite seed because JDBC connection details are missing"
+        return 0
+    fi
+
+    require_command psql
+
+    case "$jdbc_database_url" in
+        jdbc:postgresql://*)
+            psql_url="${jdbc_database_url#jdbc:}"
+            ;;
+        *)
+            echo "Unsupported jdbc_database_url for E2E invite seed: $jdbc_database_url"
+            exit 1
+            ;;
+    esac
+
+    PGPASSWORD="${jdbc_database_password:-}" \
+        psql "$psql_url" -U "$jdbc_database_user" -v ON_ERROR_STOP=1 \
+        -c "insert into invite_links (token_hash, is_active, use_count) values ('$token_hash', true, 0) on conflict (token_hash) do nothing"
+}
+
 wait_for_http() {
     url="$1"
     label="$2"
@@ -98,6 +127,7 @@ BACKEND_PID=$!
 
 wait_for_http "http://127.0.0.1:${APP_PORT}/api/projects" "project feed API"
 wait_for_http "$PLAYWRIGHT_BASE_URL/" "frontend shell"
+seed_e2e_invite
 
 cd "$ROOT_DIR/frontend"
 PLAYWRIGHT_BASE_URL="$PLAYWRIGHT_BASE_URL" npm run test:e2e
