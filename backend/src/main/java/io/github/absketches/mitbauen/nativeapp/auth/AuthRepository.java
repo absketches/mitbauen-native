@@ -82,10 +82,10 @@ public class AuthRepository {
     public static SessionUser createUserFromInvite(
         final DataSource dataSource,
         final InviteLink invite,
+        final String inviteToken,
         final String normalizedEmail,
         final String displayName,
-        final String passwordHash,
-        final String ownedInviteToken
+        final String passwordHash
     ) {
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
@@ -94,7 +94,7 @@ public class AuthRepository {
                 insertPasswordCredential(connection, userId, passwordHash);
                 insertInviteRedemption(connection, invite.id(), userId, normalizedEmail);
                 incrementInviteUseCount(connection, invite.id());
-                insertOwnedInviteLink(connection, userId, ownedInviteToken);
+                final String ownedInviteToken = maybeGrantInviteCapability(connection, invite, inviteToken, userId);
                 connection.commit();
                 return new SessionUser(userId, displayName, normalizedEmail, ownedInviteToken);
             } catch (Exception exception) {
@@ -114,11 +114,13 @@ public class AuthRepository {
             statement.setString(1, normalizedEmail);
             try (ResultSet resultSet = statement.executeQuery()) {
                 if (resultSet.next()) {
+                    final long userId = resultSet.getLong("id");
                     return Optional.of(new LoginIdentity(
-                        resultSet.getLong("id"),
+                        userId,
                         resultSet.getString("display_name"),
                         resultSet.getString("email"),
-                        resultSet.getString("password_hash")
+                        resultSet.getString("password_hash"),
+                        findOwnedInviteToken(connection, userId).orElse(null)
                     ));
                 }
                 return Optional.empty();
@@ -152,11 +154,12 @@ public class AuthRepository {
             try (ResultSet resultSet = statement.executeQuery()) {
                 if (resultSet.next()) {
                     final long sessionId = resultSet.getLong("id");
+                    final long userId = resultSet.getLong("user_id");
                     final SessionUser sessionUser = new SessionUser(
-                        resultSet.getLong("user_id"),
+                        userId,
                         resultSet.getString("display_name"),
                         resultSet.getString("email"),
-                        null
+                        findOwnedInviteToken(connection, userId).orElse(null)
                     );
                     touchSession(connection, sessionId);
                     return Optional.of(sessionUser);
@@ -239,15 +242,42 @@ public class AuthRepository {
         }
     }
 
-    private static void insertOwnedInviteLink(final Connection connection, final long userId, final String ownedInviteToken) throws SQLException {
+    private static String maybeGrantInviteCapability(
+        final Connection connection,
+        final InviteLink invite,
+        final String inviteToken,
+        final long userId
+    ) throws SQLException {
+        if (invite.allowedEmail() == null) {
+            return null;
+        }
         final String sql = """
-            insert into invite_links (created_by_user_id, token_hash, is_active, use_count)
-            values (?, ?, true, 0)
+            update invite_links
+            set created_by_user_id = ?, allowed_email = null
+            where id = ?
             """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setLong(1, userId);
-            statement.setString(2, AuthUtil.hashToken(ownedInviteToken));
+            statement.setLong(2, invite.id());
             statement.executeUpdate();
+        }
+        return inviteToken;
+    }
+
+    private static Optional<String> findOwnedInviteToken(final Connection connection, final long userId) throws SQLException {
+        final String sql = """
+            select token
+            from invite_links
+            where created_by_user_id = ? and is_active = true
+            """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, userId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    return Optional.ofNullable(resultSet.getString("token"));
+                }
+                return Optional.empty();
+            }
         }
     }
 

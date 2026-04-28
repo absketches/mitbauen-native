@@ -129,14 +129,13 @@ public class AuthService extends Service {
         }
 
         final String passwordHash = AuthUtil.hashPassword(password);
-        final String ownedInviteToken = AuthUtil.newInviteToken();
         final SessionUser sessionUser = AuthRepository.createUserFromInvite(
             databaseRuntime.dataSource(),
             invite.get(),
+            inviteToken,
             email,
             displayName,
-            passwordHash,
-            ownedInviteToken
+            passwordHash
         );
         final String sessionToken = AuthUtil.newSessionToken();
         AuthRepository.createSession(

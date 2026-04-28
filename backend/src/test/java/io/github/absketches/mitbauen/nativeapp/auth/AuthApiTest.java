@@ -47,7 +47,7 @@ class AuthApiTest {
         final LinkedTypeMap registerBody = registerResponse.bodyAsMap();
         assertThat(registerBody.asBoolean("authenticated")).isTrue();
         assertThat(registerBody.asMap("user").asString("email")).isEqualTo(BOOTSTRAP_EMAIL);
-        assertThat(registerBody.asMap("user").asString("inviteToken")).startsWith("invite_");
+        assertThat(registerBody.asMap("user").asString("inviteToken")).isEqualTo(BOOTSTRAP_INVITE);
     }
 
     @Test
@@ -96,6 +96,8 @@ class AuthApiTest {
 
         assertThat(secondRegister.statusCode()).isEqualTo(201);
         assertThat(thirdRegister.statusCode()).isEqualTo(201);
+        assertThat(secondRegister.bodyAsMap().asMap("user").asString("inviteToken")).isNull();
+        assertThat(thirdRegister.bodyAsMap().asMap("user").asString("inviteToken")).isNull();
     }
 
     @Test
@@ -115,12 +117,14 @@ class AuthApiTest {
         ));
 
         assertThat(loginResponse.statusCode()).isEqualTo(200);
+        assertThat(loginResponse.bodyAsMap().asMap("user").asString("inviteToken")).isEqualTo(BOOTSTRAP_INVITE);
         final String sessionCookie = cookieValue(loginResponse, AuthUtil.AUTH_SESSION_COOKIE);
         assertThat(sessionCookie).isNotBlank();
 
         final HttpObject sessionResponse = get("/api/auth/session", sessionCookie);
         assertThat(sessionResponse.statusCode()).isEqualTo(200);
         assertThat(sessionResponse.bodyAsMap().asBoolean("authenticated")).isTrue();
+        assertThat(sessionResponse.bodyAsMap().asMap("user").asString("inviteToken")).isEqualTo(BOOTSTRAP_INVITE);
 
         final HttpObject logoutResponse = post("/api/auth/logout", Map.of(), sessionCookie);
         assertThat(logoutResponse.statusCode()).isEqualTo(200);
