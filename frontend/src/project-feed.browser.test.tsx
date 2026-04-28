@@ -55,7 +55,7 @@ test('renders the public project feed in browser mode', async () => {
     />,
   )
 
-  await expect.element(screen.getByText('Projects that already have founder energy behind them.')).toBeVisible()
+  await expect.element(screen.getByText('Discover real projects looking for the right people.')).toBeVisible()
   await expect.element(screen.getByText('Solar For Neighbors')).toBeVisible()
   await expect.element(screen.getByText('Neighborhood Tool Library')).toBeVisible()
   await expect.element(screen.getByText('Founder + Product')).toBeVisible()
@@ -78,7 +78,7 @@ test('renders the invite-only registration view with a locked email', async () =
     />,
   )
 
-  await expect.element(screen.getByText('Claim your invite-only account.')).toBeVisible()
+  await expect.element(screen.getByText('Join Mitbauen.')).toBeVisible()
   await expect.element(screen.getByLabelText('Email')).toHaveValue('basuabhi92@gmail.com')
-  await expect.element(screen.getByText('Create account')).toBeVisible()
+  await expect.element(screen.getByRole('button', { name: 'Create account' })).toBeVisible()
 })

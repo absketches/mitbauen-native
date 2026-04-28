@@ -27,6 +27,7 @@ public class DatabaseService extends Service {
         try {
             databaseRuntime.start(jdbcUrl, jdbcUser, jdbcPassword);
             new MigrationRunner().migrate(databaseRuntime.openedDataSource());
+            databaseRuntime.markReady();
             context.info(() -> "[{}] started", name());
         } catch (Throwable throwable) {
             databaseRuntime.fail(throwable);
