@@ -43,8 +43,6 @@ build.sh    Root build orchestrator
 deploy.sh   Host deployment bundle + install script
 ```
 
-See [docs/product-roadmap.md](docs/product-roadmap.md) for the incremental delivery plan.
-
 ## Local development
 
 1. Copy `.env.example` to `.env`
