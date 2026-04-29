@@ -64,11 +64,17 @@ seed_e2e_invite() {
         return 0
     fi
 
-    require_command psql
-
     case "$jdbc_database_url" in
         jdbc:postgresql://*)
             psql_url="${jdbc_database_url#jdbc:}"
+            postgres_address="${jdbc_database_url#jdbc:postgresql://}"
+            postgres_host_port="${postgres_address%%/*}"
+            postgres_database="${postgres_address#*/}"
+            postgres_database="${postgres_database%%\?*}"
+            postgres_port="${postgres_host_port##*:}"
+            if [ "$postgres_port" = "$postgres_host_port" ]; then
+                postgres_port=5432
+            fi
             ;;
         *)
             echo "Unsupported jdbc_database_url for E2E invite seed: $jdbc_database_url"
@@ -76,8 +82,28 @@ seed_e2e_invite() {
             ;;
     esac
 
-    PGPASSWORD="${jdbc_database_password:-}" \
-        psql "$psql_url" -U "$jdbc_database_user" -v ON_ERROR_STOP=1 \
+    if command -v psql >/dev/null 2>&1; then
+        PGPASSWORD="${jdbc_database_password:-}" \
+            psql "$psql_url" -U "$jdbc_database_user" -v ON_ERROR_STOP=1 \
+            -c "insert into invite_links (token_hash, is_active, use_count) values ('$token_hash', true, 0) on conflict (token_hash) do nothing"
+        return 0
+    fi
+
+    if ! command -v docker >/dev/null 2>&1; then
+        echo "Missing required command: psql"
+        exit 1
+    fi
+
+    postgres_container_id="$(docker ps --filter "publish=${postgres_port}" --format '{{.ID}}' | head -n 1)"
+    if [ -z "$postgres_container_id" ]; then
+        echo "Unable to find a running Postgres container for port ${postgres_port}"
+        exit 1
+    fi
+
+    docker exec \
+        -e "PGPASSWORD=${jdbc_database_password:-}" \
+        "$postgres_container_id" \
+        psql -U "$jdbc_database_user" -d "$postgres_database" -v ON_ERROR_STOP=1 \
         -c "insert into invite_links (token_hash, is_active, use_count) values ('$token_hash', true, 0) on conflict (token_hash) do nothing"
 }
 
