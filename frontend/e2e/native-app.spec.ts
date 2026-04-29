@@ -31,7 +31,7 @@ test('renders the project feed and completes invite registration plus login', as
 
   await expect(page.getByText(`Welcome, ${memberDisplayName}`)).toBeVisible()
 
-  await page.locator('.project-form').getByRole('button', { name: 'Create project' }).click()
+  await page.locator('header').getByRole('button', { name: 'Create project', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Post a project that shows real momentum.' })).toBeVisible()
 
   await page.getByLabel('Project title').fill('Circular Kitchen Atlas')
