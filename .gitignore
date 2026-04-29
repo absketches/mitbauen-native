@@ -34,3 +34,5 @@ tmp/
 coverage/
 frontend/playwright-report/
 frontend/test-results/
+frontend/.vitest-attachments/
+frontend/src/__screenshots__/

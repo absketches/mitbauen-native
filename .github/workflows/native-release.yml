@@ -1,0 +1,130 @@
+name: Native Release
+
+on:
+  workflow_run:
+    workflows:
+      - Native E2E
+    types:
+      - completed
+    branches:
+      - main
+
+concurrency:
+  group: native-release-${{ github.event.workflow_run.head_sha || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: write
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 1
+
+      - name: Download tested native artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          rm -rf .artifacts/downloaded .artifacts/release
+          mkdir -p .artifacts/downloaded .artifacts/release
+          gh run download "${{ github.event.workflow_run.id }}" \
+            --name mitbauen-native-host-deploy \
+            --dir .artifacts/downloaded
+
+      - name: Generate release version
+        id: version
+        run: |
+          release_version="$(date -u '+%Y.%m.%j%H%M')"
+          echo "value=${release_version}" >> "$GITHUB_OUTPUT"
+          echo "RELEASE_VERSION=${release_version}" >> "$GITHUB_ENV"
+
+      - name: Stage release assets
+        run: |
+          native_binary_path="$(find .artifacts/downloaded -type f -name 'mitbauen-native-backend' | head -n 1)"
+          bundle_path="$(find .artifacts/downloaded -type f -name 'mitbauen-native-host-deploy.tgz' | head -n 1)"
+          native_binary_name="mitbauen-native-backend-${RELEASE_VERSION}-linux-arm64"
+          bundle_name="mitbauen-native-host-deploy-${RELEASE_VERSION}-linux-arm64.tgz"
+
+          if [ -z "$native_binary_path" ] || [ ! -f "$native_binary_path" ]; then
+            echo "Missing mitbauen-native-backend from upstream Native E2E artifact."
+            exit 1
+          fi
+          if [ -z "$bundle_path" ] || [ ! -f "$bundle_path" ]; then
+            echo "Missing mitbauen-native-host-deploy.tgz from upstream Native E2E artifact."
+            exit 1
+          fi
+
+          cp "$native_binary_path" ".artifacts/release/${native_binary_name}"
+          tar -czf ".artifacts/release/${native_binary_name}.tgz" -C .artifacts/release "${native_binary_name}"
+          cp "$bundle_path" ".artifacts/release/${bundle_name}"
+
+      - name: Set up Java for GitHub Packages
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Publish native image to GitHub Packages
+        run: >
+          mvn -B org.apache.maven.plugins:maven-deploy-plugin:3.1.3:deploy-file
+          -DrepositoryId=github
+          -Durl=https://maven.pkg.github.com/${{ github.repository }}
+          -DgroupId=io.github.absketches.mitbauen.nativeapp
+          -DartifactId=mitbauen-native-backend
+          -Dversion=${RELEASE_VERSION}
+          -Dpackaging=tgz
+          -Dclassifier=linux-arm64
+          -Dfile=.artifacts/release/mitbauen-native-backend-${RELEASE_VERSION}-linux-arm64.tgz
+          -DgeneratePom=true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+
+      - name: Publish host deploy bundle to GitHub Packages
+        run: >
+          mvn -B org.apache.maven.plugins:maven-deploy-plugin:3.1.3:deploy-file
+          -DrepositoryId=github
+          -Durl=https://maven.pkg.github.com/${{ github.repository }}
+          -DgroupId=io.github.absketches.mitbauen.nativeapp
+          -DartifactId=mitbauen-native-host-deploy
+          -Dversion=${RELEASE_VERSION}
+          -Dpackaging=tgz
+          -Dclassifier=linux-arm64
+          -Dfile=.artifacts/release/mitbauen-native-host-deploy-${RELEASE_VERSION}-linux-arm64.tgz
+          -DgeneratePom=true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh release create "${RELEASE_VERSION}"
+          ".artifacts/release/mitbauen-native-backend-${RELEASE_VERSION}-linux-arm64#Native backend (linux-arm64)"
+          ".artifacts/release/mitbauen-native-host-deploy-${RELEASE_VERSION}-linux-arm64.tgz#Host deploy bundle (linux-arm64)"
+          --generate-notes
+          --title "${RELEASE_VERSION}"
+
+      - name: Upload release build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-release-logs
+          path: |
+            .artifacts/downloaded
+            .artifacts/release

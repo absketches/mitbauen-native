@@ -38,7 +38,7 @@ This repo is intentionally still early-stage, but the first end-to-end slices ar
 backend/    Java backend, resources, and embedded SQL migrations
 frontend/   Static SPA source
 systemd/    Host service templates
-docs/       Architecture notes and roadmap
+docs/       Architecture notes
 build.sh    Root build orchestrator
 deploy.sh   Host deployment bundle + install script
 ```
@@ -59,6 +59,11 @@ If you only want to run the browser suite, use:
 ```bash
 docker compose up --build browser-tests
 ```
+
+CI behavior:
+
+- `Native E2E` runs on pushes to every branch and on pull requests
+- `Native Release` runs only after a successful `Native E2E` run for a `main` push, then publishes the tested Raspberry Pi `arm64` artifacts
 
 If you want to run the backend from IntelliJ or another local IDE while keeping PostgreSQL in Docker:
 
@@ -82,7 +87,7 @@ docker compose logs -f postgres backend
 The Pi deployment follows a single-binary host setup rather than Docker on the target machine:
 
 - `build.sh` builds the frontend first, then packages the backend artifact with baked frontend assets and embedded SQL migrations
-- `deploy.sh` packages the backend artifact, a `systemd` unit, and an env template
+- `deploy.sh` packages the backend artifact, a `systemd` unit, and an env template, or downloads the latest published deploy bundle from GitHub Packages
 - the backend runs as a `systemd` service on the Pi
 - PostgreSQL is managed separately on the host
 
@@ -92,6 +97,7 @@ The generated host deployment expects:
 - `systemd`
 - a remote user with `ssh` access and `sudo` privileges
 - Java 21 only when deploying the jar mode
+- `curl` when pulling the deploy bundle from GitHub Packages
 
 For the preferred native-image deploy, no host Java runtime is required.
 
@@ -126,12 +132,29 @@ DEPLOY_REMOTE_HOST=your-pi-host \
 
 If you already have a prepared native artifact or deploy bundle from CI, set `DEPLOY_USE_EXISTING_ARTIFACTS=1` to skip rebuilding locally before packaging or uploading it.
 
+To install the latest published native deploy bundle directly on a Pi, use the GitHub Packages mode:
+
+```bash
+GITHUB_PACKAGES_USERNAME=your-github-login \
+GITHUB_PACKAGES_TOKEN=your-classic-pat \
+DEPLOY_SOURCE=github-packages \
+DEPLOY_INSTALL_LOCAL=1 \
+./deploy.sh
+```
+
+Optional knobs for that path:
+
+- `DEPLOY_RELEASE_VERSION=2026.04.120930` to pin a specific published version instead of the latest one
+- `GITHUB_PACKAGES_OWNER` / `GITHUB_PACKAGES_REPO` if the package source changes
+
+GitHub’s Maven package registry currently requires authentication with a personal access token (classic), including for package installation: https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-apache-maven-registry
+
 ## Local URLs
 
 - App and API: `http://localhost:8080`
 - Postgres: `localhost:5432`
 
-## First implementation goals
+## Near-term goals
 
 1. Harden the single-binary startup flow for production deployment
 2. Complete the invite-only auth slice with more production safeguards

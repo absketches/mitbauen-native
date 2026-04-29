@@ -143,7 +143,7 @@
                         </goals>
                         <configuration>
                             <formats>
-                                <format>CSV</format>
+                                <format>XML</format>
                             </formats>
                         </configuration>
                     </execution>

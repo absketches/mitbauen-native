@@ -27,9 +27,7 @@ class AuthApiTest {
 
     @AfterEach
     void tearDown() {
-        if (nano != null) {
-            nano.stop(AuthApiTest.class).waitForStop();
-        }
+        nano.stop(AuthApiTest.class).waitForStop();
         if (databaseRuntime != null) {
             databaseRuntime.stop();
             databaseRuntime = null;
