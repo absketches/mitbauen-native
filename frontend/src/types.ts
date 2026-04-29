@@ -13,7 +13,7 @@ export type Project = {
   id: number
   slug: string
   title: string
-  summary: string
+  description: string
   status: 'active' | 'completed' | 'dormant'
   founder: FounderInfo
   openRoles: OpenRole[]
@@ -22,6 +22,15 @@ export type Project = {
 
 export type ProjectFeedResponse = {
   projects: Project[]
+}
+
+export type ProjectDetails = Project & {
+  ownerUserId: number
+  updatedAt: string
+}
+
+export type ProjectDetailsResponse = {
+  project: ProjectDetails
 }
 
 export type SessionUser = {
@@ -49,4 +58,16 @@ export type RegisterPayload = {
 export type LoginPayload = {
   email: string
   password: string
+}
+
+export type ProjectPayload = {
+  title: string
+  description: string
+  founderRole: string
+  founderCommitment: string
+  openRoles: OpenRole[]
+}
+
+export type ProjectMutationResponse = {
+  slug: string
 }

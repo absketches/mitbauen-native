@@ -79,7 +79,7 @@ Visitors can open the app and browse projects ordered by lifecycle state and rec
 - backend integration test for feed ordering and mapping through Nano-backed route handling
 - backend HTTP test through Nano's client for the list endpoint response shape
 - frontend browser test for project card rendering and feed page loading
-- optional single smoke browser flow: visitor loads the feed and sees seeded projects in the expected order
+- optional single smoke browser flow: visitor loads the empty feed, then signs in and creates the first project
 
 ## Milestone 2: Invite-Only Sign-In And Sessions
 
@@ -265,6 +265,6 @@ That gives us the first truly end-to-end feature with a tight test story:
 - indexed SQL migration for the first project tables
 - Nano-backed event-driven HTTP route for listing projects
 - frontend feed page
-- seeded local data
+- clean empty-feed baseline
 - fast backend HTTP tests using Nano's client
 - one small browser smoke test, if the slice needs it

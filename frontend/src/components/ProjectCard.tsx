@@ -2,6 +2,8 @@ import type { Project } from '../types'
 
 type ProjectCardProps = {
   project: Project
+  highlighted?: boolean
+  onOpen?: (slug: string) => void
 }
 
 const statusLabels: Record<Project['status'], string> = {
@@ -10,15 +12,22 @@ const statusLabels: Record<Project['status'], string> = {
   dormant: 'Dormant',
 }
 
-export function ProjectCard({ project }: ProjectCardProps) {
+export function ProjectCard({ project, highlighted = false, onOpen }: ProjectCardProps) {
+  const descriptionPreview =
+    project.description.length > 190 ? `${project.description.slice(0, 187).trimEnd()}...` : project.description
+
   return (
-    <article className="project-card" data-testid={`project-${project.slug}`}>
+    <article
+      className={`project-card${highlighted ? ' project-card--highlighted' : ''}`}
+      data-project-slug={project.slug}
+      data-testid={`project-${project.slug}`}
+    >
       <div className="project-card__header">
         <span className={`status-pill status-pill--${project.status}`}>{statusLabels[project.status]}</span>
         <h2>{project.title}</h2>
       </div>
 
-      <p className="project-card__summary">{project.summary}</p>
+      <p className="project-card__summary">{descriptionPreview}</p>
 
       <dl className="project-card__meta">
         <div>
@@ -46,6 +55,12 @@ export function ProjectCard({ project }: ProjectCardProps) {
           ))}
         </ul>
       </section>
+
+      {onOpen ? (
+        <button className="ghost-button project-card__cta" type="button" onClick={() => onOpen(project.slug)}>
+          View project
+        </button>
+      ) : null}
     </article>
   )
 }

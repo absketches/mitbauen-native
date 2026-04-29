@@ -26,6 +26,7 @@ This repo is intentionally still early-stage, but the first end-to-end slices ar
 
 - public project feed
 - invite-only registration and login
+- project create, detail, and edit flow
 - DB-backed sessions
 - embedded SQL migrations
 - single-binary app shell

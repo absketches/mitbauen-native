@@ -2,7 +2,11 @@ import type {
   InviteValidationResponse,
   LoginPayload,
   Project,
+  ProjectDetails,
+  ProjectDetailsResponse,
   ProjectFeedResponse,
+  ProjectMutationResponse,
+  ProjectPayload,
   RegisterPayload,
   SessionResponse,
 } from './types'
@@ -20,6 +24,11 @@ export async function loadProjects(): Promise<Project[]> {
 
   const payload = (await response.json()) as ProjectFeedResponse
   return payload.projects
+}
+
+export async function loadProject(slug: string): Promise<ProjectDetails> {
+  const payload = await requestJson<ProjectDetailsResponse>(`${API_BASE_URL}/projects/${encodeURIComponent(slug)}`)
+  return payload.project
 }
 
 export async function loadSession(): Promise<SessionResponse> {
@@ -48,6 +57,20 @@ export async function logoutUser(): Promise<void> {
   await requestJson<SessionResponse>(`${API_BASE_URL}/auth/logout`, {
     method: 'POST',
     body: JSON.stringify({}),
+  })
+}
+
+export async function createProject(payload: ProjectPayload): Promise<ProjectMutationResponse> {
+  return requestJson<ProjectMutationResponse>(`${API_BASE_URL}/projects`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateProject(slug: string, payload: ProjectPayload): Promise<ProjectMutationResponse> {
+  return requestJson<ProjectMutationResponse>(`${API_BASE_URL}/projects/${encodeURIComponent(slug)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
   })
 }
 

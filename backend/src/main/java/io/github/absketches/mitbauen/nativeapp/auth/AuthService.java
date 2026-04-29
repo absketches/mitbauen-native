@@ -27,14 +27,11 @@ public class AuthService extends Service {
 
     @Override
     public void stop() {
+        context.info(() -> "[{}] stopped", name());
     }
 
     @Override
     public Object onFailure(final Event<?, ?> error) {
-        error.channel(EVENT_HTTP_REQUEST).ifPresent(httpEvent -> {
-            context.error(error.error(), () -> "[{}] request failed for {}", name(), httpEvent.payload().path());
-            handleHttpFailure(httpEvent);
-        });
         return error.payload();
     }
 

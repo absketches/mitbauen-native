@@ -12,7 +12,6 @@ import org.nanonative.nano.services.http.HttpClient;
 import org.nanonative.nano.services.http.HttpServer;
 import org.nanonative.nano.services.http.model.HttpObject;
 
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -30,7 +29,7 @@ class ProjectFeedApiTest {
     }
 
     @Test
-    void listsSeededProjectsInFeedOrder() {
+    void returnsAnEmptyFeedWhenNoProjectsExist() {
         final String jdbcUrl = "jdbc:h2:mem:mitbauen_" + UUID.randomUUID() + ";MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1";
         TestDatabaseMigrations.migrate(jdbcUrl, "sa", "");
         final DatabaseRuntime databaseRuntime = new DatabaseRuntime("mitbauen-test-feed");
@@ -54,25 +53,6 @@ class ProjectFeedApiTest {
         assertThat(response.statusCode()).isEqualTo(200);
         final LinkedTypeMap body = response.bodyAsMap();
         final TypeList projects = body.asList("projects");
-        assertThat(projects).hasSize(4);
-
-        final List<String> projectTitles = projects.stream()
-            .map(project -> new LinkedTypeMap((Map<?, ?>) project).asString("title"))
-            .toList();
-        assertThat(projectTitles).containsExactly(
-            "Solar For Neighbors",
-            "Neighborhood Tool Library",
-            "Campus Climate Hub",
-            "Community Repair Bus"
-        );
-
-        final LinkedTypeMap firstProject = new LinkedTypeMap((Map<?, ?>) projects.get(0));
-        assertThat(firstProject.asString("slug")).isEqualTo("solar-for-neighbors");
-        assertThat(firstProject.asMap("founder").asString("role")).isEqualTo("Founder + Product");
-
-        final TypeList firstProjectRoles = firstProject.asList("openRoles");
-        assertThat(firstProjectRoles.stream()
-            .map(role -> new LinkedTypeMap((Map<?, ?>) role).asString("title"))
-            .toList()).containsExactly("Android Engineer", "Community Researcher");
+        assertThat(projects).isEmpty();
     }
 }

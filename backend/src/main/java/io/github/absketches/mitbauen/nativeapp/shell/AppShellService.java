@@ -16,11 +16,11 @@ public class AppShellService extends Service {
 
     @Override
     public void stop() {
+        context.info(() -> "[{}] stopped", name());
     }
 
     @Override
     public Object onFailure(final Event<?, ?> error) {
-        error.channel(EVENT_HTTP_REQUEST).ifPresent(httpEvent -> handleHttpFailure(httpEvent, error.error()));
         return error.payload();
     }
 

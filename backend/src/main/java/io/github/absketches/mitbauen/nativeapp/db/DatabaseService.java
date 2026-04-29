@@ -38,6 +38,7 @@ public class DatabaseService extends Service {
     @Override
     public void stop() {
         databaseRuntime.stop();
+        context.info(() -> "[{}] stopped", name());
     }
 
     @Override

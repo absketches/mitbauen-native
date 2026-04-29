@@ -1,4 +1,3 @@
 V1__create_public_project_feed.sql
-V2__seed_public_project_feed.sql
-V3__create_auth_and_invites.sql
-V4__seed_bootstrap_invite.sql
+V2__create_auth_and_invites.sql
+V3__seed_bootstrap_invite.sql
