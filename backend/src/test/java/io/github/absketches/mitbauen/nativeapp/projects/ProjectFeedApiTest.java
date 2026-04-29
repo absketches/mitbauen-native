@@ -2,7 +2,6 @@ package io.github.absketches.mitbauen.nativeapp.projects;
 
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeList;
-import io.github.absketches.mitbauen.nativeapp.db.DatabaseService;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
 import io.github.absketches.mitbauen.nativeapp.db.TestDatabaseMigrations;
 import org.junit.jupiter.api.AfterEach;
@@ -20,11 +19,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ProjectFeedApiTest {
 
     private Nano nano;
+    private DatabaseRuntime databaseRuntime;
 
     @AfterEach
     void tearDown() {
         if (nano != null) {
             nano.stop(ProjectFeedApiTest.class).waitForStop();
+        }
+        if (databaseRuntime != null) {
+            databaseRuntime.stop();
+            databaseRuntime = null;
         }
     }
 
@@ -32,17 +36,13 @@ class ProjectFeedApiTest {
     void returnsAnEmptyFeedWhenNoProjectsExist() {
         final String jdbcUrl = "jdbc:h2:mem:mitbauen_" + UUID.randomUUID() + ";MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1";
         TestDatabaseMigrations.migrate(jdbcUrl, "sa", "");
-        final DatabaseRuntime databaseRuntime = new DatabaseRuntime("mitbauen-test-feed");
+        databaseRuntime = new DatabaseRuntime(jdbcUrl, "sa", "", "mitbauen-test-feed");
         nano = new Nano(
             Map.of(
-                HttpServer.CONFIG_SERVICE_HTTP_PORT, 0,
-                DatabaseService.CONFIG_JDBC_DATABASE_URL, jdbcUrl,
-                DatabaseService.CONFIG_JDBC_DATABASE_USER, "sa",
-                DatabaseService.CONFIG_JDBC_DATABASE_PASSWORD, ""
+                HttpServer.CONFIG_SERVICE_HTTP_PORT, 0
             ),
             new HttpServer(),
             new HttpClient(),
-            new DatabaseService(databaseRuntime),
             new ProjectFeedService(databaseRuntime)
         );
 

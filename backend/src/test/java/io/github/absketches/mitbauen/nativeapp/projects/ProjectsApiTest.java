@@ -4,7 +4,6 @@ import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeList;
 import io.github.absketches.mitbauen.nativeapp.auth.AuthService;
 import io.github.absketches.mitbauen.nativeapp.auth.AuthUtil;
-import io.github.absketches.mitbauen.nativeapp.db.DatabaseService;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
 import io.github.absketches.mitbauen.nativeapp.db.TestDatabaseMigrations;
 import org.junit.jupiter.api.AfterEach;
@@ -26,11 +25,16 @@ class ProjectsApiTest {
     private static final String PRIMARY_PASSWORD = "SuperSafe1";
 
     private Nano nano;
+    private DatabaseRuntime databaseRuntime;
 
     @AfterEach
     void tearDown() {
         if (nano != null) {
             nano.stop(ProjectsApiTest.class).waitForStop();
+        }
+        if (databaseRuntime != null) {
+            databaseRuntime.stop();
+            databaseRuntime = null;
         }
     }
 
@@ -161,17 +165,13 @@ class ProjectsApiTest {
         final String jdbcUrl = "jdbc:h2:mem:mitbauen_projects_" + UUID.randomUUID() + ";MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1";
         TestDatabaseMigrations.migrate(jdbcUrl, "sa", "");
         TestDatabaseMigrations.seedInvite(jdbcUrl, "sa", "", OPEN_INVITE);
-        final DatabaseRuntime databaseRuntime = new DatabaseRuntime("mitbauen-test-projects");
+        databaseRuntime = new DatabaseRuntime(jdbcUrl, "sa", "", "mitbauen-test-projects");
         return new Nano(
             Map.of(
-                HttpServer.CONFIG_SERVICE_HTTP_PORT, 0,
-                DatabaseService.CONFIG_JDBC_DATABASE_URL, jdbcUrl,
-                DatabaseService.CONFIG_JDBC_DATABASE_USER, "sa",
-                DatabaseService.CONFIG_JDBC_DATABASE_PASSWORD, ""
+                HttpServer.CONFIG_SERVICE_HTTP_PORT, 0
             ),
             new HttpServer(),
             new HttpClient(),
-            new DatabaseService(databaseRuntime),
             new AuthService(databaseRuntime),
             new ProjectFeedService(databaseRuntime)
         );

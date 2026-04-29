@@ -50,6 +50,17 @@ jobs:
         working-directory: backend
         run: mvn -q verify
 
+      - name: Show backend coverage
+        working-directory: backend
+        run: |
+          coverage="$(awk -F, 'NR > 1 { missed += $8; covered += $9 } END { total = missed + covered; if (total == 0) { printf "0.00" } else { printf "%.2f", (covered * 100) / total } }' target/site/jacoco-it/jacoco.csv)"
+          echo "Backend line coverage: ${coverage}%"
+          {
+            echo "### Backend Coverage"
+            echo
+            echo "- Line coverage: ${coverage}%"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Build frontend and native backend
         run: BUILD_NATIVE=1 SKIP_BACKEND_TESTS=1 ./build.sh
 

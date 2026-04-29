@@ -70,7 +70,7 @@ docker compose up -d postgres
 cd frontend && npm run build
 ```
 
-Then start the backend app from the IDE. The app shell is served from the built frontend assets, so that one frontend build step matters for IDE-based runs.
+Then start the backend app from the IDE with `jdbc_database_url`, `jdbc_database_user`, and `jdbc_database_password` set in the run configuration. The app shell is served from the built frontend assets, so that one frontend build step matters for IDE-based runs.
 
 Useful checks:
 

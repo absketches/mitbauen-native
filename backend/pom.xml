@@ -24,6 +24,7 @@
         <maven.surefire.plugin.version>3.5.4</maven.surefire.plugin.version>
         <maven.failsafe.plugin.version>3.5.4</maven.failsafe.plugin.version>
         <maven.shade.plugin.version>3.6.0</maven.shade.plugin.version>
+        <jacoco.version>0.8.13</jacoco.version>
         <graalvm.native.maven.plugin.version>0.10.2</graalvm.native.maven.plugin.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
@@ -121,10 +122,40 @@
             </plugin>
 
             <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent-integration</id>
+                        <goals>
+                            <goal>prepare-agent-integration</goal>
+                        </goals>
+                        <configuration>
+                            <propertyName>failsafeArgLine</propertyName>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>report-integration</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report-integration</goal>
+                        </goals>
+                        <configuration>
+                            <formats>
+                                <format>CSV</format>
+                            </formats>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <version>${maven.failsafe.plugin.version}</version>
                 <configuration>
+                    <argLine>${failsafeArgLine}</argLine>
                     <includes>
                         <include>**/*Test.java</include>
                         <include>**/*Tests.java</include>
@@ -180,7 +211,7 @@
                             <mainClass>io.github.absketches.mitbauen.nativeapp.MitbauenApplication</mainClass>
                             <buildArgs>
                                 <buildArg>--no-fallback</buildArg>
-                                <buildArg>-H:IncludeResources=(frontend/.*|db/migrations/.*|application.properties|simplelogger.properties)</buildArg>
+                                <buildArg>-H:IncludeResources=(frontend/.*|db/migrations/.*|simplelogger.properties)</buildArg>
                             </buildArgs>
                         </configuration>
                         <executions>

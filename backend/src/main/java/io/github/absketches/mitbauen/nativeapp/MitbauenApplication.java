@@ -1,28 +1,46 @@
 package io.github.absketches.mitbauen.nativeapp;
 
 import io.github.absketches.mitbauen.nativeapp.auth.AuthService;
+import io.github.absketches.mitbauen.nativeapp.db.DatabaseConfig;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
-import io.github.absketches.mitbauen.nativeapp.db.DatabaseService;
+import io.github.absketches.mitbauen.nativeapp.db.MigrationRunner;
 import io.github.absketches.mitbauen.nativeapp.projects.ProjectFeedService;
 import io.github.absketches.mitbauen.nativeapp.shell.AppShellService;
 import org.nanonative.nano.core.Nano;
+import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.services.http.HttpClient;
 import org.nanonative.nano.services.http.HttpServer;
 
 public class MitbauenApplication {
 
-    private MitbauenApplication() {
-    }
-
     public static void main(final String[] ignoredArgs) {
-        final DatabaseRuntime databaseRuntime = new DatabaseRuntime();
+        final DatabaseRuntime databaseRuntime = dbStartup();
         final Nano nano = new Nano(
                 new HttpServer(),
                 new HttpClient(),
-                new DatabaseService(databaseRuntime),
                 new AppShellService(),
                 new ProjectFeedService(databaseRuntime),
                 new AuthService(databaseRuntime)
         );
+        nano.subscribeEvent(Context.EVENT_APP_SHUTDOWN, event -> databaseRuntime.stop());
+    }
+
+    public static DatabaseRuntime dbStartup() {
+        DatabaseRuntime databaseRuntime = null;
+        try {
+            final DatabaseConfig databaseConfig = DatabaseConfig.fromEnvironment();
+            databaseRuntime = new DatabaseRuntime(
+                    databaseConfig.jdbcUrl(),
+                    databaseConfig.jdbcUser(),
+                    databaseConfig.jdbcPassword()
+            );
+            new MigrationRunner().migrate(databaseRuntime.dataSource());
+        } catch (RuntimeException | Error throwable) {
+            if (databaseRuntime != null) {
+                databaseRuntime.stop();
+            }
+            throw throwable;
+        }
+        return databaseRuntime;
     }
 }
