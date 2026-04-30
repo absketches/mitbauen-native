@@ -23,9 +23,7 @@ class ProjectFeedApiTest {
 
     @AfterEach
     void tearDown() {
-        if (nano != null) {
-            nano.stop(ProjectFeedApiTest.class).waitForStop();
-        }
+        nano.stop(ProjectFeedApiTest.class).waitForStop();
         if (databaseRuntime != null) {
             databaseRuntime.stop();
             databaseRuntime = null;

@@ -44,7 +44,7 @@ test('renders the project feed and completes invite registration plus login', as
   )
   await page.getByLabel('Role title 1').fill('Frontend Engineer')
   await page.getByLabel('Role commitment 1').fill('Build the first contributor-facing workflows.')
-  await page.getByRole('button', { name: 'Create project' }).click()
+  await page.locator('form').getByRole('button', { name: 'Create project', exact: true }).click()
 
   await expect(page.getByRole('heading', { name: 'Circular Kitchen Atlas' })).toBeVisible()
   await expect(page.getByText('Project created. It is ready for people to discover, and the feed can highlight it for you.')).toBeVisible()
