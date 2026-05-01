@@ -2,8 +2,6 @@
 
 ## Intent
 
-Mitbauen Native is a reset of the current app with these constraints:
-
 - one repo
 - one packaged app artifact that serves the SPA shell and `/api`
 - Java backend
@@ -47,7 +45,6 @@ Mitbauen Native is a reset of the current app with these constraints:
 ## Testing principles
 
 - backend tests should be integration-style only; no backend unit-test layer
-- backend integration tests should follow the `NanoNative/dev-console` pattern: JUnit, Surefire disabled for normal test execution, Failsafe running integration tests during `integration-test` and `verify`
 - backend end-to-end and integration coverage should use Nano's built-in HTTP client instead of a browser
 - browser-based frontend tests should stay lightweight and focus on component and page behavior in a real browser
 - Vitest Browser Mode is the default browser test layer for frontend components; use the Playwright provider for reliable headless CI runs
@@ -57,9 +54,8 @@ Mitbauen Native is a reset of the current app with these constraints:
 
 - test code must not be packaged into deployment artifacts for the Pi
 - Maven test dependencies stay in `test` scope, and we do not produce a `test-jar`
-- frontend browser-test tooling stays in `devDependencies`
 - deployment should center on a single app artifact that contains backend code, built frontend assets, and embedded SQL migrations
-- production artifacts must not require `psql`, a separate reverse proxy, or separate static-file deployment just to serve the app shell
+- production artifacts must not require `psql`, a separate static-file deployment just to serve the app shell
 
 ## Deployment principles
 

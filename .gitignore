@@ -36,3 +36,6 @@ frontend/playwright-report/
 frontend/test-results/
 frontend/.vitest-attachments/
 frontend/src/__screenshots__/
+
+# Local ops notes
+docs/pi-database-reset.md

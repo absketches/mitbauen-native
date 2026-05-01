@@ -118,7 +118,7 @@ download_release_bundle() {
         release_version="$DEPLOY_RELEASE_VERSION"
     else
         metadata_file="$ARTIFACTS_DIR/${GITHUB_PACKAGES_ARTIFACT_ID}-maven-metadata.xml"
-        curl --fail --silent --show-error \
+        curl --fail --location --silent --show-error \
             --user "$GITHUB_PACKAGES_USERNAME:$GITHUB_PACKAGES_TOKEN" \
             "$METADATA_URL" \
             -o "$metadata_file"
@@ -140,10 +140,15 @@ download_release_bundle() {
     release_url="$BASE_URL/$release_version/$release_file"
 
     echo "Downloading GitHub Packages release [$release_version]..."
-    curl --fail --silent --show-error \
+    curl --fail --location --silent --show-error \
         --user "$GITHUB_PACKAGES_USERNAME:$GITHUB_PACKAGES_TOKEN" \
         "$release_url" \
         -o "$ARTIFACTS_DIR/$ARCHIVE_NAME"
+    if ! tar -tzf "$ARTIFACTS_DIR/$ARCHIVE_NAME" >/dev/null 2>&1; then
+        echo "Downloaded file is not a valid gzip tar archive: $ARTIFACTS_DIR/$ARCHIVE_NAME"
+        echo "This usually means the package download returned an HTML or error response instead of the release bundle."
+        exit 1
+    fi
     echo "Downloaded release bundle:"
     echo "  $ARTIFACTS_DIR/$ARCHIVE_NAME"
 }
