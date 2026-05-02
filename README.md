@@ -3,7 +3,7 @@
 Fresh reboot of Mitbauen as a single-repo system with:
 
 - one packaged app artifact that serves both SPA routes and `/api`
-- Java 21 + Nano on the backend
+- Java 25 + Nano on the backend
 - PostgreSQL as a separately managed datastore
 - Vite + React + TypeScript on the frontend
 - local Docker Compose for contributor onboarding
@@ -11,7 +11,7 @@ Fresh reboot of Mitbauen as a single-repo system with:
 
 ## Planned stack
 
-- Backend: Java 21, Nano-oriented structure, plain JDBC
+- Backend: Java 25, Nano-oriented structure, plain JDBC
 - Database: PostgreSQL
 - DB driver: `org.postgresql:postgresql`
 - Pooling: `HikariCP`
@@ -96,7 +96,7 @@ The generated host deployment expects:
 - PostgreSQL
 - `systemd`
 - a remote user with `ssh` access and `sudo` privileges
-- Java 21 only when deploying the jar mode
+- Java 25 only when deploying the jar mode
 - `curl` when pulling the deploy bundle from GitHub Packages
 
 For the preferred native-image deploy, no host Java runtime is required.
