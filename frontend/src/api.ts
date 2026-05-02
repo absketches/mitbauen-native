@@ -1,6 +1,8 @@
 import type {
   InviteValidationResponse,
   LoginPayload,
+  PublicUserProfile,
+  PublicUserProfileResponse,
   Project,
   ProjectDetails,
   ProjectDetailsResponse,
@@ -17,15 +19,7 @@ import type {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 export async function loadProjects(): Promise<Project[]> {
-  const response = await fetch(`${API_BASE_URL}/projects`, {
-    credentials: 'same-origin',
-  })
-
-  if (!response.ok) {
-    throw new Error(`Failed to load projects (${response.status})`)
-  }
-
-  const payload = (await response.json()) as ProjectFeedResponse
+  const payload = await requestJson<ProjectFeedResponse>(`${API_BASE_URL}/projects`)
   return payload.projects
 }
 
@@ -40,6 +34,11 @@ export async function loadSession(): Promise<SessionResponse> {
 
 export async function loadProfile(): Promise<UserProfile> {
   const payload = await requestJson<UserProfileResponse>(`${API_BASE_URL}/profile`)
+  return payload.profile
+}
+
+export async function loadPublicProfile(publicId: string): Promise<PublicUserProfile> {
+  const payload = await requestJson<PublicUserProfileResponse>(`${API_BASE_URL}/users/${encodeURIComponent(publicId)}`)
   return payload.profile
 }
 
@@ -64,7 +63,6 @@ export async function loginUser(payload: LoginPayload): Promise<SessionResponse>
 export async function logoutUser(): Promise<void> {
   await requestJson<SessionResponse>(`${API_BASE_URL}/auth/logout`, {
     method: 'POST',
-    body: JSON.stringify({}),
   })
 }
 
@@ -97,12 +95,15 @@ export async function deleteProject(slug: string): Promise<void> {
 }
 
 async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
+  const headers = init?.body
+    ? {
+        'Content-Type': 'application/json',
+        ...(init.headers ?? {}),
+      }
+    : init?.headers
   const response = await fetch(input, {
     credentials: 'same-origin',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
+    headers,
     ...init,
   })
 

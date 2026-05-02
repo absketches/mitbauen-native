@@ -61,6 +61,8 @@ class ProjectsApiTest {
         final LinkedTypeMap project = detailResponse.bodyAsMap().asMap("project");
         assertThat(project.asString("title")).isEqualTo("Circular Kitchen Atlas");
         assertThat(project.asString("description")).contains("surplus food");
+        assertThat(project.asBoolean("canManage")).isFalse();
+        assertThat(project.asMap("founder").asString("publicId")).isNotBlank();
         assertThat(project.asMap("founder").asString("role")).isEqualTo("Founder + Community Ops");
         assertThat(project.asMap("founder").asString("commitment")).contains("pilot dinners every week");
 
@@ -76,6 +78,7 @@ class ProjectsApiTest {
         final TypeList feedProjects = feedResponse.bodyAsMap().asList("projects");
         final LinkedTypeMap firstProject = new LinkedTypeMap((Map<?, ?>) feedProjects.get(0));
         assertThat(firstProject.asString("slug")).isEqualTo(slug);
+        assertThat(firstProject.asMap("founder").asString("publicId")).isNotBlank();
     }
 
     @Test

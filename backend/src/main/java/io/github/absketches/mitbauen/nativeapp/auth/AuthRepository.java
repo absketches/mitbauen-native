@@ -51,6 +51,15 @@ public class AuthRepository {
         where id = ?
         """;
 
+    private static final String PUBLIC_PROFILE_LOOKUP_SQL = """
+        select
+            display_name,
+            bio,
+            case when is_email_public then email end as email
+        from users
+        where public_id = ?
+        """;
+
     private AuthRepository() {
     }
 
@@ -191,7 +200,6 @@ public class AuthRepository {
                     return Optional.empty();
                 }
                 return Optional.of(new UserProfile(
-                    resultSet.getLong("id"),
                     resultSet.getString("display_name"),
                     resultSet.getString("bio"),
                     resultSet.getString("email"),
@@ -200,6 +208,26 @@ public class AuthRepository {
             }
         } catch (SQLException exception) {
             throw new IllegalStateException("Unable to load user profile", exception);
+        }
+    }
+
+    public static Optional<UserProfile> findPublicProfileByPublicId(final DataSource dataSource, final String publicId) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(PUBLIC_PROFILE_LOOKUP_SQL)) {
+            statement.setString(1, publicId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    return Optional.empty();
+                }
+                return Optional.of(new UserProfile(
+                    resultSet.getString("display_name"),
+                    resultSet.getString("bio"),
+                    resultSet.getString("email"),
+                    resultSet.getString("email") != null
+                ));
+            }
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Unable to load public user profile", exception);
         }
     }
 
@@ -238,11 +266,11 @@ public class AuthRepository {
         final boolean emailPublic
     ) throws SQLException {
         final String sql = """
-            insert into users (handle, display_name, email, bio, is_email_public)
+            insert into users (public_id, display_name, email, bio, is_email_public)
             values (?, ?, ?, ?, ?)
             """;
         try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            statement.setString(1, nextHandle(connection, displayName, normalizedEmail));
+            statement.setString(1, AuthUtil.newPublicProfileId());
             statement.setString(2, displayName);
             statement.setString(3, normalizedEmail);
             statement.setString(4, bio);
@@ -309,31 +337,6 @@ public class AuthRepository {
             statement.setTimestamp(1, Timestamp.from(Instant.now()));
             statement.setLong(2, sessionId);
             statement.executeUpdate();
-        }
-    }
-
-    private static String nextHandle(final Connection connection, final String displayName, final String normalizedEmail) throws SQLException {
-        final String baseHandle = AuthUtil.handleFrom(displayName, normalizedEmail);
-        String handle = baseHandle;
-        int suffix = 2;
-        while (handleExists(connection, handle)) {
-            handle = baseHandle + "-" + suffix;
-            suffix++;
-        }
-        return handle;
-    }
-
-    private static boolean handleExists(final Connection connection, final String handle) throws SQLException {
-        final String sql = """
-            select 1
-            from users
-            where handle = ?
-            """;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, handle);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                return resultSet.next();
-            }
         }
     }
 

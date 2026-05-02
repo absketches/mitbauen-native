@@ -1,9 +1,11 @@
 import type { FormEvent } from 'react'
 import { useEffect, useState } from 'react'
+import { COPY, persistLanguage, readStoredLanguage, type Dictionary, type Language } from './i18n'
 import {
   createProject,
   deleteProject,
   loadProfile,
+  loadPublicProfile,
   loadProject,
   loadProjects,
   loadSession,
@@ -18,9 +20,11 @@ import { ProjectCard } from './components/ProjectCard'
 import { ProjectDetailView } from './components/ProjectDetailView'
 import { ProjectFormView } from './components/ProjectFormView'
 import { ProfileView } from './components/ProfileView'
+import { PublicProfileView } from './components/PublicProfileView'
 import type {
   InviteValidationResponse,
   LoginPayload,
+  PublicUserProfile,
   Project,
   ProjectDetails,
   ProjectMutationResponse,
@@ -38,6 +42,7 @@ type AppApi = {
   loadProjects: () => Promise<Project[]>
   loadProject: (slug: string) => Promise<ProjectDetails>
   loadProfile: () => Promise<UserProfile>
+  loadPublicProfile: (publicId: string) => Promise<PublicUserProfile>
   loadSession: () => Promise<SessionResponse>
   validateInvite: (token: string) => Promise<InviteValidationResponse>
   registerUser: (payload: RegisterPayload) => Promise<SessionResponse>
@@ -58,6 +63,7 @@ type RouteState =
   | { name: 'login' }
   | { name: 'register'; inviteToken: string }
   | { name: 'profile' }
+  | { name: 'publicProfile'; publicId: string }
   | { name: 'projectCreate' }
   | { name: 'projectDetail'; slug: string; notice: DetailNotice }
   | { name: 'projectEdit'; slug: string }
@@ -66,6 +72,7 @@ const defaultApi: AppApi = {
   loadProjects,
   loadProject,
   loadProfile,
+  loadPublicProfile,
   loadSession,
   validateInvite,
   registerUser,
@@ -78,19 +85,23 @@ const defaultApi: AppApi = {
 }
 
 export default function App({ api }: AppProps) {
-  const apiClient = { ...defaultApi, ...api }
-  const fetchProjects = apiClient.loadProjects
-  const fetchProject = apiClient.loadProject
-  const fetchProfile = apiClient.loadProfile
-  const fetchSession = apiClient.loadSession
-  const checkInvite = apiClient.validateInvite
-  const register = apiClient.registerUser
-  const login = apiClient.loginUser
-  const logout = apiClient.logoutUser
-  const saveProfile = apiClient.updateProfile
-  const saveProject = apiClient.createProject
-  const saveProjectEdits = apiClient.updateProject
-  const destroyProject = apiClient.deleteProject
+  const {
+    loadProjects: fetchProjects,
+    loadProject: fetchProject,
+    loadProfile: fetchProfile,
+    loadPublicProfile: fetchPublicProfile,
+    loadSession: fetchSession,
+    validateInvite: checkInvite,
+    registerUser: register,
+    loginUser: login,
+    logoutUser: logout,
+    updateProfile: saveProfile,
+    createProject: saveProject,
+    updateProject: saveProjectEdits,
+    deleteProject: destroyProject,
+  } = { ...defaultApi, ...api }
+  const [language, setLanguage] = useState<Language>(readStoredLanguage)
+  const copy = COPY[language]
 
   const [route, setRoute] = useState<RouteState>(() => routeFromLocation(window.location))
   const [session, setSession] = useState<SessionResponse>({ authenticated: false })
@@ -98,6 +109,11 @@ export default function App({ api }: AppProps) {
   const [projects, setProjects] = useState<Project[]>([])
   const [projectsLoading, setProjectsLoading] = useState(true)
   const [projectsError, setProjectsError] = useState<string | null>(null)
+
+  useEffect(() => {
+    document.documentElement.lang = language
+    persistLanguage(language)
+  }, [language])
 
   useEffect(() => {
     let cancelled = false
@@ -141,7 +157,7 @@ export default function App({ api }: AppProps) {
       })
       .catch((nextError: Error) => {
         if (!cancelled) {
-          setProjectsError('We could not load the projects right now. Please try again in a moment.')
+          setProjectsError(copy.feed.error)
           setProjectsLoading(false)
           console.error(nextError)
         }
@@ -150,7 +166,7 @@ export default function App({ api }: AppProps) {
     return () => {
       cancelled = true
     }
-  }, [fetchProjects])
+  }, [copy.feed.error, fetchProjects])
 
   useEffect(() => {
     if (sessionLoading) {
@@ -225,30 +241,51 @@ export default function App({ api }: AppProps) {
         <button className="brand-lockup" type="button" onClick={() => navigateTo(homePathForRoute(route), setRoute)}>
           <img className="brand-lockup__mark" src="/mitbauen-mark.svg" alt="" />
           <span className="brand-lockup__text">
-            <span className="hero__eyebrow">Mitbauen Projects</span>
+            <span className="hero__eyebrow">{copy.brand.eyebrow}</span>
             <strong>Mitbauen Native</strong>
           </span>
         </button>
 
         <div className="page-header__actions">
-          {sessionLoading ? <span className="page-header__status">Loading...</span> : null}
+          <div className="language-switch" role="group" aria-label={copy.header.languageSwitchLabel}>
+            <button
+              className={`language-switch__button${language === 'en' ? ' language-switch__button--active' : ''}`}
+              type="button"
+              aria-pressed={language === 'en'}
+              title={copy.header.englishLong}
+              onClick={() => setLanguage('en')}
+            >
+              {copy.header.englishShort}
+            </button>
+            <button
+              className={`language-switch__button${language === 'de' ? ' language-switch__button--active' : ''}`}
+              type="button"
+              aria-pressed={language === 'de'}
+              title={copy.header.germanLong}
+              onClick={() => setLanguage('de')}
+            >
+              {copy.header.germanShort}
+            </button>
+          </div>
+
+          {sessionLoading ? <span className="page-header__status">{copy.header.loading}</span> : null}
           {!sessionLoading && session.authenticated && session.user ? (
             <>
               <button className="ghost-button" type="button" onClick={() => navigateTo('/projects/new', setRoute)}>
-                Create project
+                {copy.header.createProject}
               </button>
               <button className="ghost-button" type="button" onClick={() => navigateTo('/profile', setRoute)}>
-                Profile
+                {copy.header.profile}
               </button>
-              <span className="page-header__status">Welcome, {session.user.displayName}</span>
+              <span className="page-header__status">{copy.header.welcome(session.user.displayName)}</span>
               <button className="ghost-button" type="button" onClick={() => void handleLogout()}>
-                Log out
+                {copy.header.logout}
               </button>
             </>
           ) : null}
           {!sessionLoading && !session.authenticated ? (
             <button className="ghost-button" type="button" onClick={() => navigateTo('/login', setRoute)}>
-              Sign in
+              {copy.header.signIn}
             </button>
           ) : null}
         </div>
@@ -256,17 +293,20 @@ export default function App({ api }: AppProps) {
 
       {route.name === 'feed' ? (
         <FeedView
+          copy={copy}
           projects={projects}
           loading={projectsLoading}
           error={projectsError}
           highlightSlug={route.highlightSlug}
           notice={route.notice}
           onOpenProject={(slug) => navigateTo(`/projects/${slug}`, setRoute)}
+          onOpenFounderProfile={(publicId) => navigateTo(`/users/${encodeURIComponent(publicId)}`, setRoute)}
         />
       ) : null}
 
       {route.name === 'login' ? (
         <LoginView
+          copy={copy.login}
           onAuthenticate={handleAuthenticated}
           onLogin={login}
           onNavigate={setRoute}
@@ -275,6 +315,7 @@ export default function App({ api }: AppProps) {
 
       {route.name === 'register' ? (
         <RegisterView
+          copy={copy.register}
           inviteToken={route.inviteToken}
           onAuthenticate={handleAuthenticated}
           onNavigate={setRoute}
@@ -285,9 +326,10 @@ export default function App({ api }: AppProps) {
 
       {route.name === 'profile' ? (
         sessionLoading ? (
-          <p className="state-card">Loading profile...</p>
+          <p className="state-card">{copy.profile.loading}</p>
         ) : session.authenticated ? (
           <ProfileView
+            copy={copy.profile}
             onLoadProfile={fetchProfile}
             onSubmit={handleUpdateProfile}
             onBack={() => navigateTo('/', setRoute)}
@@ -295,10 +337,19 @@ export default function App({ api }: AppProps) {
         ) : null
       ) : null}
 
+      {route.name === 'publicProfile' ? (
+        <PublicProfileView
+          copy={copy.publicProfile}
+          publicId={route.publicId}
+          onLoadProfile={fetchPublicProfile}
+          onBack={() => navigateTo('/', setRoute)}
+        />
+      ) : null}
+
       {route.name === 'projectCreate' ? (
         <ProjectFormView
+          copy={copy.projectForm}
           mode="create"
-          sessionUserId={session.user?.id}
           onSubmit={handleCreateProject}
           onCancel={() => navigateTo('/', setRoute)}
         />
@@ -306,10 +357,11 @@ export default function App({ api }: AppProps) {
 
       {route.name === 'projectDetail' ? (
         <ProjectDetailView
+          copy={copy.projectDetail}
           slug={route.slug}
           notice={route.notice}
-          currentUserId={session.user?.id}
           onLoadProject={fetchProject}
+          onOpenFounderProfile={(publicId) => navigateTo(`/users/${encodeURIComponent(publicId)}`, setRoute)}
           onEdit={(slug) => navigateTo(`/projects/${slug}/edit`, setRoute)}
           onDelete={handleDeleteProject}
           onBackToFeed={(slug, notice) => navigateTo(feedPathForProject(slug, notice), setRoute)}
@@ -318,9 +370,9 @@ export default function App({ api }: AppProps) {
 
       {route.name === 'projectEdit' ? (
         <ProjectFormView
+          copy={copy.projectForm}
           mode="edit"
           slug={route.slug}
-          sessionUserId={session.user?.id}
           loadProject={fetchProject}
           onSubmit={(payload) => handleUpdateProject(route.slug, payload)}
           onCancel={() => navigateTo(`/projects/${route.slug}`, setRoute)}
@@ -331,15 +383,17 @@ export default function App({ api }: AppProps) {
 }
 
 type FeedViewProps = {
+  copy: Dictionary
   projects: Project[]
   loading: boolean
   error: string | null
   highlightSlug: string | null
   notice: FeedNotice
   onOpenProject: (slug: string) => void
+  onOpenFounderProfile: (publicId: string) => void
 }
 
-function FeedView({ projects, loading, error, highlightSlug, notice, onOpenProject }: FeedViewProps) {
+function FeedView({ copy, projects, loading, error, highlightSlug, notice, onOpenProject, onOpenFounderProfile }: FeedViewProps) {
   useEffect(() => {
     if (!highlightSlug || loading || error) {
       return
@@ -355,30 +409,21 @@ function FeedView({ projects, loading, error, highlightSlug, notice, onOpenProje
     <>
       <section className="hero-grid">
         <div className="hero">
-          <p className="hero__eyebrow">Mitbauen Projects</p>
-          <h1>Discover real projects looking for the right people.</h1>
-          <p className="hero__copy">
-            Explore early-stage ideas, founder-led projects, and opportunities where your skills can make a real
-            difference.
-          </p>
+          <p className="hero__eyebrow">{copy.feed.eyebrow}</p>
+          <h1>{copy.feed.title}</h1>
+          <p className="hero__copy">{copy.feed.copy}</p>
         </div>
 
         <div className="hero-stack">
           <article className="hero-panel hero-panel--dark">
-            <p className="hero-panel__eyebrow">For Builders</p>
-            <h2>Find projects with momentum.</h2>
-            <p>
-              Browse projects where founders have already shared what they are building, what they need, and how others
-              can get involved.
-            </p>
+            <p className="hero-panel__eyebrow">{copy.feed.buildersEyebrow}</p>
+            <h2>{copy.feed.buildersTitle}</h2>
+            <p>{copy.feed.buildersCopy}</p>
           </article>
 
           <article className="hero-panel">
-            <p className="hero-panel__eyebrow">Public Snapshot</p>
-            <p className="hero-panel__copy">
-              Start with the public feed: scan the founder role, energy level, and open roles before deciding where you
-              want to lean in.
-            </p>
+            <p className="hero-panel__eyebrow">{copy.feed.snapshotEyebrow}</p>
+            <p className="hero-panel__copy">{copy.feed.snapshotCopy}</p>
           </article>
         </div>
       </section>
@@ -386,34 +431,34 @@ function FeedView({ projects, loading, error, highlightSlug, notice, onOpenProje
       {notice ? (
         <p className="state-card state-card--success">
           {notice === 'created'
-            ? 'Your new project is live in the feed.'
+            ? copy.feed.noticeCreated
             : notice === 'updated'
-              ? 'Your project changes are now reflected in the feed.'
-              : 'Your project has been deleted.'}
+              ? copy.feed.noticeUpdated
+              : copy.feed.noticeDeleted}
         </p>
       ) : null}
 
-      {loading ? <p className="state-card">Loading projects...</p> : null}
+      {loading ? <p className="state-card">{copy.feed.loading}</p> : null}
       {error ? <p className="state-card state-card--error">{error}</p> : null}
       {!loading && !error && projects.length === 0 ? (
         <section className="state-shell">
           <article className="state-card">
-            <strong>No projects yet.</strong>
-            <p className="state-card__copy">
-              The public feed will show founder commitment and open roles here once the first project is posted.
-            </p>
+            <strong>{copy.feed.emptyTitle}</strong>
+            <p className="state-card__copy">{copy.feed.emptyCopy}</p>
           </article>
         </section>
       ) : null}
 
       {!loading && !error && projects.length > 0 ? (
-        <section className="feed-grid" aria-label="Project feed">
+        <section className="feed-grid" aria-label={copy.feed.ariaLabel}>
           {projects.map((project) => (
             <ProjectCard
+              copy={copy.projectCard}
               key={project.id}
               project={project}
               highlighted={highlightSlug === project.slug}
               onOpen={onOpenProject}
+              onOpenFounderProfile={onOpenFounderProfile}
             />
           ))}
         </section>
@@ -423,12 +468,13 @@ function FeedView({ projects, loading, error, highlightSlug, notice, onOpenProje
 }
 
 type LoginViewProps = {
+  copy: Dictionary['login']
   onAuthenticate: (session: SessionResponse) => void
   onLogin: (payload: LoginPayload) => Promise<SessionResponse>
   onNavigate: (route: RouteState) => void
 }
 
-function LoginView({ onAuthenticate, onLogin, onNavigate }: LoginViewProps) {
+function LoginView({ copy, onAuthenticate, onLogin, onNavigate }: LoginViewProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -442,7 +488,7 @@ function LoginView({ onAuthenticate, onLogin, onNavigate }: LoginViewProps) {
       const nextSession = await onLogin({ email, password })
       onAuthenticate(nextSession)
     } catch {
-      setError('We could not sign you in. Please check your email and password.')
+      setError(copy.error)
       setSubmitting(false)
     }
   }
@@ -450,32 +496,30 @@ function LoginView({ onAuthenticate, onLogin, onNavigate }: LoginViewProps) {
   return (
     <section className="auth-shell">
       <article className="auth-card">
-        <p className="hero__eyebrow">Sign in</p>
-        <h1>Welcome back.</h1>
-        <p className="auth-card__copy">
-          Sign in to continue exploring projects and following the work you care about.
-        </p>
+        <p className="hero__eyebrow">{copy.eyebrow}</p>
+        <h1>{copy.title}</h1>
+        <p className="auth-card__copy">{copy.copy}</p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <label>
-            Email
+            {copy.email}
             <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
           </label>
 
           <label>
-            Password
+            {copy.password}
             <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" required />
           </label>
 
           {error ? <p className="auth-error">{error}</p> : null}
 
           <button className="primary-button" type="submit" disabled={submitting}>
-            {submitting ? 'Signing in...' : 'Sign in'}
+            {submitting ? copy.submitting : copy.submit}
           </button>
         </form>
 
         <button className="ghost-button auth-card__secondary" type="button" onClick={() => navigateTo('/', onNavigate)}>
-          Back to projects
+          {copy.back}
         </button>
       </article>
     </section>
@@ -483,6 +527,7 @@ function LoginView({ onAuthenticate, onLogin, onNavigate }: LoginViewProps) {
 }
 
 type RegisterViewProps = {
+  copy: Dictionary['register']
   inviteToken: string
   onAuthenticate: (session: SessionResponse) => void
   onNavigate: (route: RouteState) => void
@@ -490,7 +535,7 @@ type RegisterViewProps = {
   onValidateInvite: (token: string) => Promise<InviteValidationResponse>
 }
 
-function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onValidateInvite }: RegisterViewProps) {
+function RegisterView({ copy, inviteToken, onAuthenticate, onNavigate, onRegister, onValidateInvite }: RegisterViewProps) {
   const [validation, setValidation] = useState<InviteValidationResponse | null>(null)
   const [validating, setValidating] = useState(true)
   const [email, setEmail] = useState('')
@@ -519,7 +564,7 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
       })
       .catch(() => {
         if (!cancelled) {
-          setError('We could not check this invite link. Please try again.')
+          setError(copy.inviteCheckError)
           setValidating(false)
         }
       })
@@ -527,7 +572,7 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
     return () => {
       cancelled = true
     }
-  }, [inviteToken, onValidateInvite])
+  }, [copy.inviteCheckError, inviteToken, onValidateInvite])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -537,7 +582,7 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
       const nextSession = await onRegister({ inviteToken, email, emailPublic, bio, displayName, password })
       onAuthenticate(nextSession)
     } catch {
-      setError('We could not create your account. Please check your details and try again.')
+      setError(copy.error)
       setSubmitting(false)
     }
   }
@@ -545,18 +590,16 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
   return (
     <section className="auth-shell">
       <article className="auth-card">
-        <p className="hero__eyebrow">Create account</p>
-        <h1>Join Mitbauen.</h1>
-        <p className="auth-card__copy">
-          Create your account with your invite link and start discovering projects you can help build.
-        </p>
+        <p className="hero__eyebrow">{copy.eyebrow}</p>
+        <h1>{copy.title}</h1>
+        <p className="auth-card__copy">{copy.copy}</p>
 
-        {validating ? <p className="state-card">Checking your invite...</p> : null}
+        {validating ? <p className="state-card">{copy.checkingInvite}</p> : null}
 
         {!validating && validation?.valid ? (
           <form className="auth-form" onSubmit={handleSubmit}>
             <label>
-              Email
+              {copy.email}
               <input
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -573,13 +616,13 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
               />
               <span className="checkbox-field__box" aria-hidden="true" />
               <span className="checkbox-field__copy">
-                <span className="checkbox-field__title">Make my email public</span>
-                <span className="checkbox-field__hint">Show this on your profile so collaborators can reach you.</span>
+                <span className="checkbox-field__title">{copy.emailPublicTitle}</span>
+                <span className="checkbox-field__hint">{copy.emailPublicHint}</span>
               </span>
             </label>
 
             <label>
-              Display name
+              {copy.displayName}
               <input
                 value={displayName}
                 onChange={(event) => setDisplayName(event.target.value)}
@@ -590,7 +633,7 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
             </label>
 
             <label>
-              Bio
+              {copy.bio}
               <textarea
                 value={bio}
                 onChange={(event) => setBio(event.target.value)}
@@ -600,7 +643,7 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
             </label>
 
             <label>
-              Password
+              {copy.password}
               <input
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -610,24 +653,24 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
               />
             </label>
 
-            <p className="auth-note">Use at least 8 characters, including a number and both uppercase and lowercase letters.</p>
+            <p className="auth-note">{copy.passwordHint}</p>
 
             {error ? <p className="auth-error">{error}</p> : null}
 
             <button className="primary-button" type="submit" disabled={submitting}>
-              {submitting ? 'Creating account...' : 'Create account'}
+              {submitting ? copy.submitting : copy.submit}
             </button>
           </form>
         ) : null}
 
         {!validating && validation && !validation.valid ? (
           <div className="state-card state-card--error">
-            This invite link does not work anymore. Please ask for a new invite link.
+            {copy.invalidInvite}
           </div>
         ) : null}
 
         <button className="ghost-button auth-card__secondary" type="button" onClick={() => navigateTo('/login', onNavigate)}>
-          I already have an account
+          {copy.existingAccount}
         </button>
       </article>
     </section>
@@ -652,6 +695,9 @@ function routeFromLocation(location: Location): RouteState {
   }
   if (location.pathname === '/profile') {
     return { name: 'profile' }
+  }
+  if (segments.length === 2 && segments[0] === 'users') {
+    return { name: 'publicProfile', publicId: decodeURIComponent(segments[1]) }
   }
   if (segments.length === 2 && segments[0] === 'projects' && segments[1] === 'new') {
     return { name: 'projectCreate' }

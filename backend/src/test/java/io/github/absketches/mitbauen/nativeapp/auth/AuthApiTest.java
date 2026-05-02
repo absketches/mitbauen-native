@@ -197,6 +197,45 @@ class AuthApiTest {
     }
 
     @Test
+    void exposesPublicProfilesByOpaquePublicIdAndOnlyShowsEmailWhenAllowed() {
+        nano = newTestNano();
+
+        final HttpObject firstRegister = post("/api/auth/register", Map.of(
+            "inviteToken", OPEN_INVITE,
+            "email", PRIMARY_EMAIL,
+            "displayName", PRIMARY_DISPLAY_NAME,
+            "bio", "Building the first contributor path for neighborhood projects.",
+            "emailPublic", false,
+            "password", PRIMARY_PASSWORD
+        ));
+        assertThat(firstRegister.statusCode()).isEqualTo(201);
+        final String firstPublicId = userPublicIdByEmail(PRIMARY_EMAIL);
+
+        final HttpObject privateProfile = get("/api/users/" + firstPublicId, null);
+        assertThat(privateProfile.statusCode()).isEqualTo(200);
+        final LinkedTypeMap privateBody = privateProfile.bodyAsMap().asMap("profile");
+        assertThat(privateBody.asString("displayName")).isEqualTo(PRIMARY_DISPLAY_NAME);
+        assertThat(privateBody.asString("bio")).contains("contributor path");
+        assertThat(privateBody.asString("email")).isNull();
+
+        final HttpObject secondRegister = post("/api/auth/register", Map.of(
+            "inviteToken", OPEN_INVITE,
+            "email", "public.builder@example.test",
+            "displayName", "Public Builder",
+            "bio", "Happy to be reachable by collaborators.",
+            "emailPublic", true,
+            "password", PRIMARY_PASSWORD
+        ));
+        assertThat(secondRegister.statusCode()).isEqualTo(201);
+        final String secondPublicId = userPublicIdByEmail("public.builder@example.test");
+
+        final HttpObject publicProfile = get("/api/users/" + secondPublicId, null);
+        assertThat(publicProfile.statusCode()).isEqualTo(200);
+        final LinkedTypeMap publicBody = publicProfile.bodyAsMap().asMap("profile");
+        assertThat(publicBody.asString("email")).isEqualTo("public.builder@example.test");
+    }
+
+    @Test
     void validatesInviteToken() {
         nano = newTestNano();
 
@@ -333,6 +372,24 @@ class AuthApiTest {
             }
         } catch (SQLException exception) {
             throw new IllegalStateException("Unable to load session last_seen_at", exception);
+        }
+    }
+
+    private String userPublicIdByEmail(final String email) {
+        final String sql = """
+            select public_id
+            from users
+            where email = ?
+            """;
+        try (Connection connection = databaseRuntime.dataSource().getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, email);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).isTrue();
+                return resultSet.getString("public_id");
+            }
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Unable to load public_id", exception);
         }
     }
 

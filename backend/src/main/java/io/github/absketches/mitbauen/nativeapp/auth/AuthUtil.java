@@ -5,6 +5,7 @@ import org.mindrot.jbcrypt.BCrypt;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.HttpObject;
 
+import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -27,6 +28,7 @@ public class AuthUtil {
     public static final String AUTH_LOGOUT_PATH = "/api/auth/logout";
     public static final String AUTH_SESSION_PATH = "/api/auth/session";
     public static final String AUTH_PROFILE_PATH = "/api/profile";
+    public static final String PUBLIC_PROFILE_BASE_PATH = "/api/users";
     public static final int DISPLAY_NAME_MIN_LENGTH = 2;
     public static final int DISPLAY_NAME_MAX_LENGTH = 120;
     public static final int BIO_MAX_LENGTH = 560;
@@ -40,6 +42,7 @@ public class AuthUtil {
         LOGOUT,
         SESSION,
         PROFILE,
+        PUBLIC_PROFILE,
         NO_MATCH
     }
 
@@ -65,19 +68,31 @@ public class AuthUtil {
         if (request.pathMatch(AUTH_PROFILE_PATH)) {
             return Route.PROFILE;
         }
+        if (publicProfileId(request).isPresent()) {
+            return Route.PUBLIC_PROFILE;
+        }
         return Route.NO_MATCH;
+    }
+
+    public static Optional<String> publicProfileId(final HttpObject request) {
+        final String path = request.uri().getPath();
+        final String prefix = PUBLIC_PROFILE_BASE_PATH + "/";
+        if (path == null || !path.startsWith(prefix)) {
+            return Optional.empty();
+        }
+        final String publicId = path.substring(prefix.length());
+        if (publicId.isEmpty() || publicId.indexOf('/') >= 0) {
+            return Optional.empty();
+        }
+        return Optional.of(publicId);
     }
 
     public static String normalizeEmail(final String email) {
         return email == null ? "" : email.trim().toLowerCase();
     }
 
-    public static String handleFrom(final String displayName, final String normalizedEmail) {
-        final String candidate = (displayName == null || displayName.isBlank()) ? normalizedEmail : displayName;
-        final String slug = candidate.toLowerCase()
-            .replaceAll("[^a-z0-9]+", "-")
-            .replaceAll("(^-|-$)", "");
-        return slug.isBlank() ? "member" : slug;
+    public static String newPublicProfileId() {
+        return "usr_" + randomToken(18);
     }
 
     public static String hashPassword(final String password) {
@@ -127,6 +142,11 @@ public class AuthUtil {
             }
         }
         return Optional.empty();
+    }
+
+    public static Optional<SessionUser> currentSessionUser(final HttpObject request, final DataSource dataSource) {
+        return readSessionToken(request)
+            .flatMap(token -> AuthRepository.findSessionUserByTokenHash(dataSource, hashToken(token)));
     }
 
     public static String sessionCookie(final HttpObject request, final String token) {
@@ -191,6 +211,13 @@ public class AuthUtil {
             .respond(event);
     }
 
+    public static void respondPublicProfile(final Event<HttpObject, HttpObject> event, final UserProfile profile) {
+        event.payload().createCorsResponse()
+            .statusCode(200)
+            .body(Map.of("profile", publicProfilePayload(profile)))
+            .respond(event);
+    }
+
     public static void respondLogout(final Event<HttpObject, HttpObject> event, final String clearedCookie) {
         event.payload().createCorsResponse()
             .statusCode(200)
@@ -243,7 +270,6 @@ public class AuthUtil {
         payload.put("authenticated", authenticated);
         if (sessionUser != null) {
             final Map<String, Object> user = new LinkedHashMap<>();
-            user.put("id", sessionUser.id());
             user.put("displayName", sessionUser.displayName());
             user.put("email", sessionUser.email());
             payload.put("user", user);
@@ -253,11 +279,18 @@ public class AuthUtil {
 
     private static Map<String, Object> profilePayload(final UserProfile profile) {
         final Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("id", profile.id());
         payload.put("displayName", profile.displayName());
         payload.put("bio", profile.bio());
         payload.put("email", profile.email());
         payload.put("emailPublic", profile.emailPublic());
+        return payload;
+    }
+
+    private static Map<String, Object> publicProfilePayload(final UserProfile profile) {
+        final Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("displayName", profile.displayName());
+        payload.put("bio", profile.bio());
+        payload.put("email", profile.email());
         return payload;
     }
 

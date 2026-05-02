@@ -25,6 +25,7 @@ public class ProjectFeedRepository {
             p.description,
             p.status,
             p.created_at,
+            u.public_id as founder_public_id,
             u.display_name as founder_name,
             founder_role.title as founder_role_title,
             founder_role.commitment as founder_commitment
@@ -51,6 +52,7 @@ public class ProjectFeedRepository {
             p.status,
             p.created_at,
             p.updated_at,
+            u.public_id as founder_public_id,
             u.display_name as founder_name,
             founder_role.title as founder_role_title,
             founder_role.commitment as founder_commitment
@@ -80,6 +82,7 @@ public class ProjectFeedRepository {
                     resultSet.getString("description"),
                     resultSet.getString("status"),
                     new FounderInfo(
+                        resultSet.getString("founder_public_id"),
                         resultSet.getString("founder_name"),
                         resultSet.getString("founder_role_title"),
                         resultSet.getString("founder_commitment")
@@ -128,6 +131,7 @@ public class ProjectFeedRepository {
                     resultSet.getString("description"),
                     resultSet.getString("status"),
                     new FounderInfo(
+                        resultSet.getString("founder_public_id"),
                         resultSet.getString("founder_name"),
                         resultSet.getString("founder_role_title"),
                         resultSet.getString("founder_commitment")

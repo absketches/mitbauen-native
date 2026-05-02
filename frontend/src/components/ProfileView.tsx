@@ -1,24 +1,19 @@
 import type { FormEvent } from 'react'
 import { useEffect, useState } from 'react'
+import type { Dictionary } from '../i18n'
 import type { UserProfile, UserProfilePayload } from '../types'
 
 type ProfileViewProps = {
+  copy: Dictionary['profile']
   onLoadProfile: () => Promise<UserProfile>
   onSubmit: (payload: UserProfilePayload) => Promise<void>
   onBack: () => void
 }
 
-type ProfileFormState = {
-  displayName: string
-  bio: string
-  email: string
-  emailPublic: boolean
-}
-
-export function ProfileView({ onLoadProfile, onSubmit, onBack }: ProfileViewProps) {
+export function ProfileView({ copy, onLoadProfile, onSubmit, onBack }: ProfileViewProps) {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [form, setForm] = useState<ProfileFormState>({
+  const [form, setForm] = useState<UserProfile>({
     displayName: '',
     bio: '',
     email: '',
@@ -52,23 +47,23 @@ export function ProfileView({ onLoadProfile, onSubmit, onBack }: ProfileViewProp
         if (cancelled) {
           return
         }
-        setLoadError(error instanceof Error ? error.message : 'We could not load your profile right now.')
+        setLoadError(error instanceof Error ? error.message : copy.loadError)
         setLoading(false)
       })
 
     return () => {
       cancelled = true
     }
-  }, [onLoadProfile])
+  }, [copy.loadError, onLoadProfile])
 
-  function validate(nextForm: ProfileFormState) {
+  function validate(nextForm: UserProfile) {
     const errors: Record<string, string> = {}
 
     if (nextForm.displayName.trim().length < 2 || nextForm.displayName.trim().length > 120) {
-      errors.displayName = 'Use a display name between 2 and 120 characters.'
+      errors.displayName = copy.validationName
     }
     if (nextForm.bio.trim().length > 560) {
-      errors.bio = 'Keep your bio to 560 characters or fewer.'
+      errors.bio = copy.validationBio
     }
 
     return errors
@@ -95,16 +90,16 @@ export function ProfileView({ onLoadProfile, onSubmit, onBack }: ProfileViewProp
         bio: form.bio.trim(),
         emailPublic: form.emailPublic,
       })
-      setSuccess('Your profile is updated.')
+      setSuccess(copy.success)
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'We could not save your profile right now.')
+      setFormError(error instanceof Error ? error.message : copy.saveError)
     } finally {
       setSubmitting(false)
     }
   }
 
   if (loading) {
-    return <p className="state-card">Loading profile...</p>
+    return <p className="state-card">{copy.loading}</p>
   }
 
   if (loadError) {
@@ -114,10 +109,10 @@ export function ProfileView({ onLoadProfile, onSubmit, onBack }: ProfileViewProp
   return (
     <section className="project-editor">
       <div className="project-editor__intro">
-        <p className="hero__eyebrow">Profile</p>
-        <h1>Shape how other builders recognize you.</h1>
+        <p className="hero__eyebrow">{copy.eyebrow}</p>
+        <h1>{copy.title}</h1>
         <p className="project-editor__copy">
-          Keep your name current, add a short bio, and decide whether collaborators should be able to see your email.
+          {copy.copy}
         </p>
       </div>
 
@@ -127,14 +122,14 @@ export function ProfileView({ onLoadProfile, onSubmit, onBack }: ProfileViewProp
 
         <section className="project-form__section">
           <div className="project-form__section-header">
-            <p className="hero__eyebrow">Identity</p>
-            <h2>Update the basics.</h2>
+            <p className="hero__eyebrow">{copy.identityEyebrow}</p>
+            <h2>{copy.identityTitle}</h2>
           </div>
 
           <label>
-            Name
+            {copy.name}
             <input
-              aria-label="Name"
+              aria-label={copy.name}
               value={form.displayName}
               onChange={(event) => setForm((current) => ({ ...current, displayName: event.target.value }))}
               type="text"
@@ -145,9 +140,9 @@ export function ProfileView({ onLoadProfile, onSubmit, onBack }: ProfileViewProp
           </label>
 
           <label>
-            Bio
+            {copy.bio}
             <textarea
-              aria-label="Bio"
+              aria-label={copy.bio}
               value={form.bio}
               onChange={(event) => setForm((current) => ({ ...current, bio: event.target.value }))}
               rows={5}
@@ -159,14 +154,14 @@ export function ProfileView({ onLoadProfile, onSubmit, onBack }: ProfileViewProp
 
         <section className="project-form__section">
           <div className="project-form__section-header">
-            <p className="hero__eyebrow">Contact</p>
-            <h2>Control how reachable you are.</h2>
+            <p className="hero__eyebrow">{copy.contactEyebrow}</p>
+            <h2>{copy.contactTitle}</h2>
           </div>
 
           <label>
-            Email
+            {copy.email}
             <input
-              aria-label="Email"
+              aria-label={copy.email}
               value={form.email}
               type="email"
               maxLength={320}
@@ -176,25 +171,25 @@ export function ProfileView({ onLoadProfile, onSubmit, onBack }: ProfileViewProp
 
           <label className="checkbox-field">
             <input
-              aria-label="Make my email public"
+              aria-label={copy.emailPublicTitle}
               checked={form.emailPublic}
               onChange={(event) => setForm((current) => ({ ...current, emailPublic: event.target.checked }))}
               type="checkbox"
             />
             <span className="checkbox-field__box" aria-hidden="true" />
             <span className="checkbox-field__copy">
-              <span className="checkbox-field__title">Make my email public</span>
-              <span className="checkbox-field__hint">Show this on your profile so collaborators can reach you.</span>
+              <span className="checkbox-field__title">{copy.emailPublicTitle}</span>
+              <span className="checkbox-field__hint">{copy.emailPublicHint}</span>
             </span>
           </label>
         </section>
 
         <div className="project-form__actions">
           <button className="ghost-button" type="button" onClick={onBack}>
-            Back to projects
+            {copy.back}
           </button>
           <button className="primary-button" type="submit" disabled={submitting}>
-            {submitting ? 'Saving profile...' : 'Save profile'}
+            {submitting ? copy.submitting : copy.submit}
           </button>
         </div>
       </form>

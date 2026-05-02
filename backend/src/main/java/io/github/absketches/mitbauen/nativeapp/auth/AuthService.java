@@ -70,6 +70,7 @@ public class AuthService extends Service {
             case INVITE_VALIDATE -> handleInviteValidate(event);
             case SESSION -> handleSessionLookup(event);
             case PROFILE -> handleProfileLookup(event);
+            case PUBLIC_PROFILE -> handlePublicProfileLookup(event);
             default -> AuthUtil.respondMethodNotAllowed(event);
         }
     }
@@ -196,7 +197,7 @@ public class AuthService extends Service {
     }
 
     protected void handleProfileLookup(final Event<HttpObject, HttpObject> event) {
-        final Optional<SessionUser> sessionUser = currentSessionUser(event.payload());
+        final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
         if (sessionUser.isEmpty()) {
             AuthUtil.respondUnauthorized(event, "You must be signed in to view your profile.");
             return;
@@ -209,8 +210,22 @@ public class AuthService extends Service {
             );
     }
 
+    protected void handlePublicProfileLookup(final Event<HttpObject, HttpObject> event) {
+        final Optional<String> publicId = AuthUtil.publicProfileId(event.payload());
+        if (publicId.isEmpty()) {
+            AuthUtil.respondNotFound(event, "Profile not found.");
+            return;
+        }
+
+        AuthRepository.findPublicProfileByPublicId(databaseRuntime.dataSource(), publicId.get())
+            .ifPresentOrElse(
+                profile -> AuthUtil.respondPublicProfile(event, profile),
+                () -> AuthUtil.respondNotFound(event, "Profile not found.")
+            );
+    }
+
     protected void handleProfileUpdate(final Event<HttpObject, HttpObject> event) {
-        final Optional<SessionUser> sessionUser = currentSessionUser(event.payload());
+        final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
         if (sessionUser.isEmpty()) {
             AuthUtil.respondUnauthorized(event, "You must be signed in to update your profile.");
             return;
@@ -245,11 +260,6 @@ public class AuthService extends Service {
 
     private static String safeTrim(final String value) {
         return value == null ? "" : value.trim();
-    }
-
-    private Optional<SessionUser> currentSessionUser(final HttpObject request) {
-        return AuthUtil.readSessionToken(request)
-            .flatMap(token -> AuthRepository.findSessionUserByTokenHash(databaseRuntime.dataSource(), AuthUtil.hashToken(token)));
     }
 
     private static Optional<String> validateRegistrationProfileInput(final String displayName, final String bio, final String email) {

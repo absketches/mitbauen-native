@@ -1,38 +1,31 @@
 import type { FormEvent } from 'react'
 import { useEffect, useState } from 'react'
+import type { Dictionary } from '../i18n'
 import type { OpenRole, ProjectDetails, ProjectPayload } from '../types'
 
 type ProjectFormViewProps = {
+  copy: Dictionary['projectForm']
   mode: 'create' | 'edit'
   slug?: string
-  sessionUserId?: number
   loadProject?: (slug: string) => Promise<ProjectDetails>
   onSubmit: (payload: ProjectPayload) => Promise<void>
   onCancel: () => void
 }
 
-type ProjectFormState = {
-  title: string
-  description: string
-  founderRole: string
-  founderCommitment: string
-  openRoles: OpenRole[]
-}
-
 const BLANK_ROLE: OpenRole = { title: '', commitment: '' }
 
 export function ProjectFormView({
+  copy,
   mode,
   slug,
-  sessionUserId,
   loadProject,
   onSubmit,
   onCancel,
 }: ProjectFormViewProps) {
   const [loadingProject, setLoadingProject] = useState(mode === 'edit')
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [loadedProject, setLoadedProject] = useState<ProjectDetails | null>(null)
-  const [form, setForm] = useState<ProjectFormState>({
+  const [canManage, setCanManage] = useState(mode !== 'edit')
+  const [form, setForm] = useState<ProjectPayload>({
     title: '',
     description: '',
     founderRole: '',
@@ -47,19 +40,21 @@ export function ProjectFormView({
     let cancelled = false
 
     if (mode !== 'edit' || !slug || !loadProject) {
+      setCanManage(true)
       setLoadingProject(false)
       return
     }
 
     setLoadingProject(true)
     setLoadError(null)
+    setCanManage(false)
 
     loadProject(slug)
       .then((project) => {
         if (cancelled) {
           return
         }
-        setLoadedProject(project)
+        setCanManage(project.canManage)
         setForm({
           title: project.title,
           description: project.description,
@@ -73,16 +68,16 @@ export function ProjectFormView({
         if (cancelled) {
           return
         }
-        setLoadError('We could not load this project right now.')
+        setLoadError(copy.loadError)
         setLoadingProject(false)
       })
 
     return () => {
       cancelled = true
     }
-  }, [loadProject, mode, slug])
+  }, [copy.loadError, loadProject, mode, slug])
 
-  function updateField(field: keyof Omit<ProjectFormState, 'openRoles'>, value: string) {
+  function updateField(field: keyof Omit<ProjectPayload, 'openRoles'>, value: string) {
     setForm((current) => ({ ...current, [field]: value }))
   }
 
@@ -109,34 +104,34 @@ export function ProjectFormView({
     }))
   }
 
-  function validate(nextForm: ProjectFormState) {
+  function validate(nextForm: ProjectPayload) {
     const errors: Record<string, string> = {}
 
     if (nextForm.title.trim().length < 5 || nextForm.title.trim().length > 120) {
-      errors.title = 'Use a project title between 5 and 120 characters.'
+      errors.title = copy.validationTitle
     }
     if (nextForm.description.trim().length < 40 || nextForm.description.trim().length > 1024) {
-      errors.description = 'Use a project description between 40 and 1024 characters.'
+      errors.description = copy.validationDescription
     }
     if (nextForm.founderRole.trim().length < 3 || nextForm.founderRole.trim().length > 80) {
-      errors.founderRole = 'Use a founder role between 3 and 80 characters.'
+      errors.founderRole = copy.validationFounderRole
     }
     if (nextForm.founderCommitment.trim().length < 10 || nextForm.founderCommitment.trim().length > 280) {
-      errors.founderCommitment = 'Use a founder commitment between 10 and 280 characters.'
+      errors.founderCommitment = copy.validationFounderCommitment
     }
     if (nextForm.openRoles.length < 1) {
-      errors.openRoles = 'Add at least one open role.'
+      errors.openRoles = copy.validationOpenRolesMin
     }
     if (nextForm.openRoles.length > 6) {
-      errors.openRoles = 'You can add up to 6 open roles.'
+      errors.openRoles = copy.validationOpenRolesMax
     }
 
     nextForm.openRoles.forEach((role, index) => {
       if (role.title.trim().length < 3 || role.title.trim().length > 80) {
-        errors[`openRoleTitle_${index}`] = 'Use a role title between 3 and 80 characters.'
+        errors[`openRoleTitle_${index}`] = copy.validationRoleTitle
       }
       if (role.commitment.trim().length < 3 || role.commitment.trim().length > 80) {
-        errors[`openRoleCommitment_${index}`] = 'Use a role commitment between 3 and 80 characters.'
+        errors[`openRoleCommitment_${index}`] = copy.validationRoleCommitment
       }
     })
 
@@ -168,7 +163,7 @@ export function ProjectFormView({
         })),
       })
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'We could not save this project right now.')
+      setFormError(error instanceof Error ? error.message : copy.saveError)
       setSubmitting(false)
       return
     }
@@ -177,21 +172,21 @@ export function ProjectFormView({
   }
 
   if (loadingProject) {
-    return <p className="state-card">Loading project...</p>
+    return <p className="state-card">{copy.loading}</p>
   }
 
   if (loadError) {
     return <p className="state-card state-card--error">{loadError}</p>
   }
 
-  if (mode === 'edit' && loadedProject && loadedProject.ownerUserId !== sessionUserId) {
+  if (mode === 'edit' && !canManage) {
     return (
       <section className="state-shell">
         <article className="state-card state-card--error">
-          Only the project owner can edit this project.
+          {copy.ownerOnly}
         </article>
         <button className="ghost-button" type="button" onClick={onCancel}>
-          Back to project
+          {copy.backToProject}
         </button>
       </section>
     )
@@ -200,11 +195,10 @@ export function ProjectFormView({
   return (
     <section className="project-editor">
       <div className="project-editor__intro">
-        <p className="hero__eyebrow">{mode === 'create' ? 'Create project' : 'Edit project'}</p>
-        <h1>{mode === 'create' ? 'Post a project that shows real momentum.' : 'Refine the project story people will join.'}</h1>
+        <p className="hero__eyebrow">{mode === 'create' ? copy.createEyebrow : copy.editEyebrow}</p>
+        <h1>{mode === 'create' ? copy.createTitle : copy.editTitle}</h1>
         <p className="project-editor__copy">
-          Lead with what you are actually building, what you are personally committing, and the roles that would make
-          the project meaningfully stronger.
+          {copy.introCopy}
         </p>
       </div>
 
@@ -213,14 +207,14 @@ export function ProjectFormView({
 
         <section className="project-form__section">
           <div className="project-form__section-header">
-            <p className="hero__eyebrow">Idea</p>
-            <h2>Frame the project clearly.</h2>
+            <p className="hero__eyebrow">{copy.ideaEyebrow}</p>
+            <h2>{copy.ideaTitle}</h2>
           </div>
 
           <label>
-            Title
+            {copy.titleLabel}
             <input
-              aria-label="Project title"
+              aria-label={copy.titleLabel}
               value={form.title}
               onChange={(event) => updateField('title', event.target.value)}
               type="text"
@@ -231,9 +225,9 @@ export function ProjectFormView({
           </label>
 
           <label>
-            Description
+            {copy.descriptionLabel}
             <textarea
-              aria-label="Project description"
+              aria-label={copy.descriptionLabel}
               value={form.description}
               onChange={(event) => updateField('description', event.target.value)}
               rows={7}
@@ -246,14 +240,14 @@ export function ProjectFormView({
 
         <section className="project-form__section">
           <div className="project-form__section-header">
-            <p className="hero__eyebrow">Founder commitment</p>
-            <h2>Show how you are leading from the front.</h2>
+            <p className="hero__eyebrow">{copy.founderEyebrow}</p>
+            <h2>{copy.founderTitle}</h2>
           </div>
 
           <label>
-            Your role in this project
+            {copy.founderRoleLabel}
             <input
-              aria-label="Your role in this project"
+              aria-label={copy.founderRoleLabel}
               value={form.founderRole}
               onChange={(event) => updateField('founderRole', event.target.value)}
               type="text"
@@ -264,9 +258,9 @@ export function ProjectFormView({
           </label>
 
           <label>
-            What you are personally committing
+            {copy.founderCommitmentLabel}
             <textarea
-              aria-label="What you are personally committing"
+              aria-label={copy.founderCommitmentLabel}
               value={form.founderCommitment}
               onChange={(event) => updateField('founderCommitment', event.target.value)}
               rows={5}
@@ -281,8 +275,8 @@ export function ProjectFormView({
 
         <section className="project-form__section">
           <div className="project-form__section-header">
-            <p className="hero__eyebrow">Open roles</p>
-            <h2>Make it obvious where others can lean in.</h2>
+            <p className="hero__eyebrow">{copy.openRolesEyebrow}</p>
+            <h2>{copy.openRolesTitle}</h2>
           </div>
 
           {fieldErrors.openRoles ? <p className="project-form__error">{fieldErrors.openRoles}</p> : null}
@@ -291,18 +285,18 @@ export function ProjectFormView({
             {form.openRoles.map((role, index) => (
               <article className="project-form__role-card" key={`${index}-${mode}`}>
                 <div className="project-form__role-header">
-                  <strong>Role {index + 1}</strong>
+                  <strong>{copy.roleCardLabel(index + 1)}</strong>
                   {form.openRoles.length > 1 ? (
                     <button className="ghost-button ghost-button--small" type="button" onClick={() => removeRole(index)}>
-                      Remove
+                      {copy.removeRole}
                     </button>
                   ) : null}
                 </div>
 
                 <label>
-                  Role title
+                  {copy.roleTitleFieldLabel}
                   <input
-                    aria-label={`Role title ${index + 1}`}
+                    aria-label={copy.roleTitleAriaLabel(index + 1)}
                     value={role.title}
                     onChange={(event) => updateRole(index, 'title', event.target.value)}
                     type="text"
@@ -315,9 +309,9 @@ export function ProjectFormView({
                 </label>
 
                 <label>
-                  Role commitment
+                  {copy.roleCommitmentFieldLabel}
                   <textarea
-                    aria-label={`Role commitment ${index + 1}`}
+                    aria-label={copy.roleCommitmentAriaLabel(index + 1)}
                     value={role.commitment}
                     onChange={(event) => updateRole(index, 'commitment', event.target.value)}
                     rows={3}
@@ -338,22 +332,22 @@ export function ProjectFormView({
             onClick={addRole}
             disabled={form.openRoles.length >= 6}
           >
-            Add another role
+            {copy.addRole}
           </button>
         </section>
 
         <div className="project-form__actions">
           <button className="ghost-button" type="button" onClick={onCancel}>
-            Cancel
+            {mode === 'create' ? copy.cancelCreate : copy.cancelEdit}
           </button>
           <button className="primary-button" type="submit" disabled={submitting}>
             {submitting
               ? mode === 'create'
-                ? 'Creating project...'
-                : 'Saving changes...'
+                ? copy.submittingCreate
+                : copy.submittingEdit
               : mode === 'create'
-                ? 'Create project'
-                : 'Save changes'}
+                ? copy.submitCreate
+                : copy.submitEdit}
           </button>
         </div>
       </form>

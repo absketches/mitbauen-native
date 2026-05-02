@@ -2,7 +2,6 @@ package io.github.absketches.mitbauen.nativeapp.projects;
 
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeMapI;
-import io.github.absketches.mitbauen.nativeapp.auth.AuthRepository;
 import io.github.absketches.mitbauen.nativeapp.auth.AuthUtil;
 import io.github.absketches.mitbauen.nativeapp.auth.SessionUser;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
@@ -81,7 +80,13 @@ public class ProjectFeedService extends Service {
             case ProjectFeedUtil.ProjectDetailsRoute detailsRoute ->
                 ProjectFeedRepository.findProjectBySlug(databaseRuntime.dataSource(), detailsRoute.slug())
                     .ifPresentOrElse(
-                        project -> ProjectFeedUtil.respondProjectDetails(event, project),
+                        project -> ProjectFeedUtil.respondProjectDetails(
+                            event,
+                            project,
+                            AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource())
+                                .map(sessionUser -> sessionUser.id() == project.ownerUserId())
+                                .orElse(false)
+                        ),
                         () -> ProjectFeedUtil.respondNotFound(event, "Project not found.")
                     );
             case ProjectFeedUtil.NoMatch __ -> {
@@ -95,7 +100,7 @@ public class ProjectFeedService extends Service {
             return;
         }
 
-        final Optional<SessionUser> sessionUser = currentSessionUser(event.payload());
+        final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
         if (sessionUser.isEmpty()) {
             ProjectFeedUtil.respondUnauthorized(event, "You must be signed in to create a project.");
             return;
@@ -119,7 +124,7 @@ public class ProjectFeedService extends Service {
             return;
         }
 
-        final Optional<SessionUser> sessionUser = currentSessionUser(event.payload());
+        final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
         if (sessionUser.isEmpty()) {
             ProjectFeedUtil.respondUnauthorized(event, "You must be signed in to edit a project.");
             return;
@@ -153,7 +158,7 @@ public class ProjectFeedService extends Service {
             return;
         }
 
-        final Optional<SessionUser> sessionUser = currentSessionUser(event.payload());
+        final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
         if (sessionUser.isEmpty()) {
             ProjectFeedUtil.respondUnauthorized(event, "You must be signed in to delete a project.");
             return;
@@ -171,10 +176,5 @@ public class ProjectFeedService extends Service {
 
         ProjectFeedRepository.deleteProject(databaseRuntime.dataSource(), existingProject.get().id());
         ProjectFeedUtil.respondDeleted(event);
-    }
-
-    private Optional<SessionUser> currentSessionUser(final HttpObject request) {
-        return AuthUtil.readSessionToken(request)
-            .flatMap(token -> AuthRepository.findSessionUserByTokenHash(databaseRuntime.dataSource(), AuthUtil.hashToken(token)));
     }
 }
