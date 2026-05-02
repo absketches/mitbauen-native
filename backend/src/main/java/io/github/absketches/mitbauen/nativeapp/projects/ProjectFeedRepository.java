@@ -183,6 +183,23 @@ public class ProjectFeedRepository {
         }
     }
 
+    public static void deleteProject(final DataSource dataSource, final long projectId) {
+        final String sql = """
+            delete from projects
+            where id = ?
+            """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, projectId);
+            final int deletedRows = statement.executeUpdate();
+            if (deletedRows != 1) {
+                throw new IllegalStateException("Expected one project delete for id " + projectId + " but deleted " + deletedRows);
+            }
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Unable to delete project", exception);
+        }
+    }
+
     private static long insertProject(
         final Connection connection,
         final long ownerUserId,

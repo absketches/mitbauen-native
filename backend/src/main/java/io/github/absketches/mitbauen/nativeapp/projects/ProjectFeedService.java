@@ -69,6 +69,7 @@ public class ProjectFeedService extends Service {
             case GET -> handleGet(event, route);
             case POST -> handlePost(event, route);
             case PUT -> handlePut(event, route);
+            case DELETE -> handleDelete(event, route);
             default -> ProjectFeedUtil.respondMethodNotAllowed(event);
         }
     }
@@ -146,15 +147,30 @@ public class ProjectFeedService extends Service {
         ProjectFeedUtil.respondProjectSaved(event, existingProject.get().slug(), 200);
     }
 
-    protected void handleHttpFailure(final Event<HttpObject, HttpObject> event, final Throwable error) {
-        switch (ProjectFeedUtil.match(event.payload(), basePath)) {
-            case ProjectFeedUtil.ProjectFeedRoute ignored ->
-                ProjectFeedUtil.respondFailure(event, error);
-            case ProjectFeedUtil.ProjectDetailsRoute ignored ->
-                ProjectFeedUtil.respondFailure(event, error);
-            case ProjectFeedUtil.NoMatch __ -> {
-            }
+    protected void handleDelete(final Event<HttpObject, HttpObject> event, final ProjectFeedUtil.RoutesMatch route) {
+        if (!(route instanceof ProjectFeedUtil.ProjectDetailsRoute(String slug))) {
+            ProjectFeedUtil.respondMethodNotAllowed(event);
+            return;
         }
+
+        final Optional<SessionUser> sessionUser = currentSessionUser(event.payload());
+        if (sessionUser.isEmpty()) {
+            ProjectFeedUtil.respondUnauthorized(event, "You must be signed in to delete a project.");
+            return;
+        }
+
+        final Optional<ProjectDetails> existingProject = ProjectFeedRepository.findProjectBySlug(databaseRuntime.dataSource(), slug);
+        if (existingProject.isEmpty()) {
+            ProjectFeedUtil.respondNotFound(event, "Project not found.");
+            return;
+        }
+        if (existingProject.get().ownerUserId() != sessionUser.get().id()) {
+            ProjectFeedUtil.respondForbidden(event, "Only the project owner can delete this project.");
+            return;
+        }
+
+        ProjectFeedRepository.deleteProject(databaseRuntime.dataSource(), existingProject.get().id());
+        ProjectFeedUtil.respondDeleted(event);
     }
 
     private Optional<SessionUser> currentSessionUser(final HttpObject request) {

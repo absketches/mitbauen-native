@@ -9,6 +9,7 @@ type ProjectDetailViewProps = {
   currentUserId?: number
   onLoadProject: (slug: string) => Promise<ProjectDetails>
   onEdit: (slug: string) => void
+  onDelete: (slug: string) => Promise<void>
   onBackToFeed: (slug: string, notice: DetailNotice) => void
 }
 
@@ -29,11 +30,14 @@ export function ProjectDetailView({
   currentUserId,
   onLoadProject,
   onEdit,
+  onDelete,
   onBackToFeed,
 }: ProjectDetailViewProps) {
   const [project, setProject] = useState<ProjectDetails | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -74,11 +78,27 @@ export function ProjectDetailView({
     return <p className="state-card state-card--error">Project not found.</p>
   }
 
+  const currentProject = project
   const canEdit = currentUserId === project.ownerUserId
+
+  async function handleDelete() {
+    if (!window.confirm('Delete this project? This cannot be undone.')) {
+      return
+    }
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await onDelete(currentProject.slug)
+    } catch (nextError) {
+      setDeleteError(nextError instanceof Error ? nextError.message : 'We could not delete this project right now.')
+      setDeleting(false)
+    }
+  }
 
   return (
     <section className="project-detail">
       {notice ? <p className="state-card project-detail__notice">{noticeCopy[notice]}</p> : null}
+      {deleteError ? <p className="state-card state-card--error">{deleteError}</p> : null}
 
       <div className="project-detail__header">
         <div className="project-detail__title-block">
@@ -95,9 +115,14 @@ export function ProjectDetailView({
             Back to feed
           </button>
           {canEdit ? (
-            <button className="primary-button" type="button" onClick={() => onEdit(project.slug)}>
-              Edit project
-            </button>
+            <>
+              <button className="primary-button" type="button" onClick={() => onEdit(project.slug)}>
+                Edit project
+              </button>
+              <button className="ghost-button ghost-button--danger" type="button" onClick={() => void handleDelete()} disabled={deleting}>
+                {deleting ? 'Deleting...' : 'Delete project'}
+              </button>
+            </>
           ) : null}
         </div>
       </div>

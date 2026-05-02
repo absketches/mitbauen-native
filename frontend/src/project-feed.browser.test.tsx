@@ -86,7 +86,7 @@ test('renders the invite-only registration view for an open invite', async () =>
   )
 
   await expect.element(screen.getByText('Join Mitbauen.')).toBeVisible()
-  await expect.element(screen.getByLabelText('Email')).toHaveValue('')
+  await expect.element(screen.getByRole('textbox', { name: 'Email' })).toHaveValue('')
   await expect.element(screen.getByRole('button', { name: 'Create account' })).toBeVisible()
 })
 

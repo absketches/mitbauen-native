@@ -123,6 +123,12 @@ public class ProjectFeedUtil {
             .respond(event);
     }
 
+    public static void respondDeleted(final Event<HttpObject, HttpObject> event) {
+        event.payload().createCorsResponse()
+            .statusCode(204)
+            .respond(event);
+    }
+
     public static void respondBadRequest(final Event<HttpObject, HttpObject> event, final String message) {
         event.payload().createCorsResponse()
             .statusCode(400)
@@ -160,10 +166,6 @@ public class ProjectFeedUtil {
             .statusCode(405)
             .body(Map.of("error", "Method Not Allowed", "path", event.payload().path()))
             .respond(event);
-    }
-
-    public static void respondFailure(final Event<HttpObject, HttpObject> event, final Throwable error) {
-        event.payload().createCorsResponse().failure(500, error).respond(event);
     }
 
     private static Map<String, Object> projectToMap(final ProjectCard project) {

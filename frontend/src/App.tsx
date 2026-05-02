@@ -2,18 +2,22 @@ import type { FormEvent } from 'react'
 import { useEffect, useState } from 'react'
 import {
   createProject,
+  deleteProject,
+  loadProfile,
   loadProject,
   loadProjects,
   loadSession,
   loginUser,
   logoutUser,
   registerUser,
+  updateProfile,
   updateProject,
   validateInvite,
 } from './api'
 import { ProjectCard } from './components/ProjectCard'
 import { ProjectDetailView } from './components/ProjectDetailView'
 import { ProjectFormView } from './components/ProjectFormView'
+import { ProfileView } from './components/ProfileView'
 import type {
   InviteValidationResponse,
   LoginPayload,
@@ -23,20 +27,26 @@ import type {
   ProjectPayload,
   RegisterPayload,
   SessionResponse,
+  UserProfile,
+  UserProfilePayload,
 } from './types'
 
-type ProjectNotice = 'created' | 'updated' | null
+type FeedNotice = 'created' | 'updated' | 'deleted' | null
+type DetailNotice = 'created' | 'updated' | null
 
 type AppApi = {
   loadProjects: () => Promise<Project[]>
   loadProject: (slug: string) => Promise<ProjectDetails>
+  loadProfile: () => Promise<UserProfile>
   loadSession: () => Promise<SessionResponse>
   validateInvite: (token: string) => Promise<InviteValidationResponse>
   registerUser: (payload: RegisterPayload) => Promise<SessionResponse>
   loginUser: (payload: LoginPayload) => Promise<SessionResponse>
   logoutUser: () => Promise<void>
+  updateProfile: (payload: UserProfilePayload) => Promise<UserProfile>
   createProject: (payload: ProjectPayload) => Promise<ProjectMutationResponse>
   updateProject: (slug: string, payload: ProjectPayload) => Promise<ProjectMutationResponse>
+  deleteProject: (slug: string) => Promise<void>
 }
 
 type AppProps = {
@@ -44,36 +54,43 @@ type AppProps = {
 }
 
 type RouteState =
-  | { name: 'feed'; highlightSlug: string | null; notice: ProjectNotice }
+  | { name: 'feed'; highlightSlug: string | null; notice: FeedNotice }
   | { name: 'login' }
   | { name: 'register'; inviteToken: string }
+  | { name: 'profile' }
   | { name: 'projectCreate' }
-  | { name: 'projectDetail'; slug: string; notice: ProjectNotice }
+  | { name: 'projectDetail'; slug: string; notice: DetailNotice }
   | { name: 'projectEdit'; slug: string }
 
 const defaultApi: AppApi = {
   loadProjects,
   loadProject,
+  loadProfile,
   loadSession,
   validateInvite,
   registerUser,
   loginUser,
   logoutUser,
+  updateProfile,
   createProject,
   updateProject,
+  deleteProject,
 }
 
 export default function App({ api }: AppProps) {
   const apiClient = { ...defaultApi, ...api }
   const fetchProjects = apiClient.loadProjects
   const fetchProject = apiClient.loadProject
+  const fetchProfile = apiClient.loadProfile
   const fetchSession = apiClient.loadSession
   const checkInvite = apiClient.validateInvite
   const register = apiClient.registerUser
   const login = apiClient.loginUser
   const logout = apiClient.logoutUser
+  const saveProfile = apiClient.updateProfile
   const saveProject = apiClient.createProject
   const saveProjectEdits = apiClient.updateProject
+  const destroyProject = apiClient.deleteProject
 
   const [route, setRoute] = useState<RouteState>(() => routeFromLocation(window.location))
   const [session, setSession] = useState<SessionResponse>({ authenticated: false })
@@ -143,7 +160,7 @@ export default function App({ api }: AppProps) {
       navigateTo('/', setRoute)
       return
     }
-    if (!session.authenticated && (route.name === 'projectCreate' || route.name === 'projectEdit')) {
+    if (!session.authenticated && (route.name === 'projectCreate' || route.name === 'projectEdit' || route.name === 'profile')) {
       navigateTo('/login', setRoute)
     }
   }, [route, session, sessionLoading])
@@ -170,6 +187,14 @@ export default function App({ api }: AppProps) {
     }
   }
 
+  async function refreshSessionState() {
+    try {
+      setSession(await fetchSession())
+    } catch (nextError) {
+      console.error(nextError)
+    }
+  }
+
   async function handleCreateProject(payload: ProjectPayload) {
     const result = await saveProject(payload)
     void refreshProjectsAfterMutation()
@@ -180,6 +205,18 @@ export default function App({ api }: AppProps) {
     const result = await saveProjectEdits(slug, payload)
     void refreshProjectsAfterMutation()
     navigateTo(`/projects/${result.slug}?updated=1`, setRoute)
+  }
+
+  async function handleDeleteProject(slug: string) {
+    await destroyProject(slug)
+    void refreshProjectsAfterMutation()
+    navigateTo('/?deleted=1', setRoute)
+  }
+
+  async function handleUpdateProfile(payload: UserProfilePayload) {
+    await saveProfile(payload)
+    await refreshSessionState()
+    void refreshProjectsAfterMutation()
   }
 
   return (
@@ -199,6 +236,9 @@ export default function App({ api }: AppProps) {
             <>
               <button className="ghost-button" type="button" onClick={() => navigateTo('/projects/new', setRoute)}>
                 Create project
+              </button>
+              <button className="ghost-button" type="button" onClick={() => navigateTo('/profile', setRoute)}>
+                Profile
               </button>
               <span className="page-header__status">Welcome, {session.user.displayName}</span>
               <button className="ghost-button" type="button" onClick={() => void handleLogout()}>
@@ -243,6 +283,18 @@ export default function App({ api }: AppProps) {
         />
       ) : null}
 
+      {route.name === 'profile' ? (
+        sessionLoading ? (
+          <p className="state-card">Loading profile...</p>
+        ) : session.authenticated ? (
+          <ProfileView
+            onLoadProfile={fetchProfile}
+            onSubmit={handleUpdateProfile}
+            onBack={() => navigateTo('/', setRoute)}
+          />
+        ) : null
+      ) : null}
+
       {route.name === 'projectCreate' ? (
         <ProjectFormView
           mode="create"
@@ -259,6 +311,7 @@ export default function App({ api }: AppProps) {
           currentUserId={session.user?.id}
           onLoadProject={fetchProject}
           onEdit={(slug) => navigateTo(`/projects/${slug}/edit`, setRoute)}
+          onDelete={handleDeleteProject}
           onBackToFeed={(slug, notice) => navigateTo(feedPathForProject(slug, notice), setRoute)}
         />
       ) : null}
@@ -282,7 +335,7 @@ type FeedViewProps = {
   loading: boolean
   error: string | null
   highlightSlug: string | null
-  notice: ProjectNotice
+  notice: FeedNotice
   onOpenProject: (slug: string) => void
 }
 
@@ -334,7 +387,9 @@ function FeedView({ projects, loading, error, highlightSlug, notice, onOpenProje
         <p className="state-card state-card--success">
           {notice === 'created'
             ? 'Your new project is live in the feed.'
-            : 'Your project changes are now reflected in the feed.'}
+            : notice === 'updated'
+              ? 'Your project changes are now reflected in the feed.'
+              : 'Your project has been deleted.'}
         </p>
       ) : null}
 
@@ -439,7 +494,9 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
   const [validation, setValidation] = useState<InviteValidationResponse | null>(null)
   const [validating, setValidating] = useState(true)
   const [email, setEmail] = useState('')
+  const [emailPublic, setEmailPublic] = useState(false)
   const [displayName, setDisplayName] = useState('')
+  const [bio, setBio] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -477,7 +534,7 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
     setSubmitting(true)
     setError(null)
     try {
-      const nextSession = await onRegister({ inviteToken, email, displayName, password })
+      const nextSession = await onRegister({ inviteToken, email, emailPublic, bio, displayName, password })
       onAuthenticate(nextSession)
     } catch {
       setError('We could not create your account. Please check your details and try again.')
@@ -508,6 +565,19 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
               />
             </label>
 
+            <label className="checkbox-field">
+              <input
+                checked={emailPublic}
+                onChange={(event) => setEmailPublic(event.target.checked)}
+                type="checkbox"
+              />
+              <span className="checkbox-field__box" aria-hidden="true" />
+              <span className="checkbox-field__copy">
+                <span className="checkbox-field__title">Make my email public</span>
+                <span className="checkbox-field__hint">Show this on your profile so collaborators can reach you.</span>
+              </span>
+            </label>
+
             <label>
               Display name
               <input
@@ -516,6 +586,16 @@ function RegisterView({ inviteToken, onAuthenticate, onNavigate, onRegister, onV
                 type="text"
                 minLength={2}
                 required
+              />
+            </label>
+
+            <label>
+              Bio
+              <textarea
+                value={bio}
+                onChange={(event) => setBio(event.target.value)}
+                rows={5}
+                maxLength={560}
               />
             </label>
 
@@ -562,13 +642,16 @@ function navigateTo(path: string, onNavigate: (route: RouteState) => void) {
 function routeFromLocation(location: Location): RouteState {
   const segments = location.pathname.split('/').filter(Boolean)
   const search = new URLSearchParams(location.search)
-  const notice = noticeFromSearch(search)
+  const detailNotice = detailNoticeFromSearch(search)
 
   if (location.pathname === '/login') {
     return { name: 'login' }
   }
   if (location.pathname === '/register') {
     return { name: 'register', inviteToken: search.get('invite') ?? '' }
+  }
+  if (location.pathname === '/profile') {
+    return { name: 'profile' }
   }
   if (segments.length === 2 && segments[0] === 'projects' && segments[1] === 'new') {
     return { name: 'projectCreate' }
@@ -577,16 +660,16 @@ function routeFromLocation(location: Location): RouteState {
     return { name: 'projectEdit', slug: decodeURIComponent(segments[1]) }
   }
   if (segments.length === 2 && segments[0] === 'projects') {
-    return { name: 'projectDetail', slug: decodeURIComponent(segments[1]), notice }
+    return { name: 'projectDetail', slug: decodeURIComponent(segments[1]), notice: detailNotice }
   }
   return {
     name: 'feed',
     highlightSlug: search.get('highlight'),
-    notice,
+    notice: feedNoticeFromSearch(search),
   }
 }
 
-function noticeFromSearch(search: URLSearchParams): ProjectNotice {
+function detailNoticeFromSearch(search: URLSearchParams): DetailNotice {
   if (search.get('created') === '1') {
     return 'created'
   }
@@ -596,6 +679,13 @@ function noticeFromSearch(search: URLSearchParams): ProjectNotice {
   return null
 }
 
+function feedNoticeFromSearch(search: URLSearchParams): FeedNotice {
+  if (search.get('deleted') === '1') {
+    return 'deleted'
+  }
+  return detailNoticeFromSearch(search)
+}
+
 function homePathForRoute(route: RouteState) {
   if (route.name === 'projectDetail') {
     return feedPathForProject(route.slug, route.notice)
@@ -603,7 +693,7 @@ function homePathForRoute(route: RouteState) {
   return '/'
 }
 
-function feedPathForProject(slug: string, notice: ProjectNotice) {
+function feedPathForProject(slug: string, notice: DetailNotice) {
   if (!notice) {
     return '/'
   }

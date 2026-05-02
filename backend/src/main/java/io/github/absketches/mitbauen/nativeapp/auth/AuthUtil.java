@@ -26,49 +26,46 @@ public class AuthUtil {
     public static final String AUTH_LOGIN_PATH = "/api/auth/login";
     public static final String AUTH_LOGOUT_PATH = "/api/auth/logout";
     public static final String AUTH_SESSION_PATH = "/api/auth/session";
+    public static final String AUTH_PROFILE_PATH = "/api/profile";
+    public static final int DISPLAY_NAME_MIN_LENGTH = 2;
+    public static final int DISPLAY_NAME_MAX_LENGTH = 120;
+    public static final int BIO_MAX_LENGTH = 560;
+    public static final int EMAIL_MAX_LENGTH = 320;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
-    public sealed interface RoutesMatch permits InviteValidateRoute, RegisterRoute, LoginRoute, LogoutRoute, SessionRoute, NoMatch {
-    }
-
-    public record InviteValidateRoute() implements RoutesMatch {
-    }
-
-    public record RegisterRoute() implements RoutesMatch {
-    }
-
-    public record LoginRoute() implements RoutesMatch {
-    }
-
-    public record LogoutRoute() implements RoutesMatch {
-    }
-
-    public record SessionRoute() implements RoutesMatch {
-    }
-
-    public record NoMatch() implements RoutesMatch {
+    public enum Route {
+        INVITE_VALIDATE,
+        REGISTER,
+        LOGIN,
+        LOGOUT,
+        SESSION,
+        PROFILE,
+        NO_MATCH
     }
 
     private AuthUtil() {
     }
 
-    public static RoutesMatch match(final HttpObject request) {
+    public static Route match(final HttpObject request) {
         if (request.pathMatch(INVITE_VALIDATE_PATH)) {
-            return new InviteValidateRoute();
+            return Route.INVITE_VALIDATE;
         }
         if (request.pathMatch(AUTH_REGISTER_PATH)) {
-            return new RegisterRoute();
+            return Route.REGISTER;
         }
         if (request.pathMatch(AUTH_LOGIN_PATH)) {
-            return new LoginRoute();
+            return Route.LOGIN;
         }
         if (request.pathMatch(AUTH_LOGOUT_PATH)) {
-            return new LogoutRoute();
+            return Route.LOGOUT;
         }
         if (request.pathMatch(AUTH_SESSION_PATH)) {
-            return new SessionRoute();
+            return Route.SESSION;
         }
-        return new NoMatch();
+        if (request.pathMatch(AUTH_PROFILE_PATH)) {
+            return Route.PROFILE;
+        }
+        return Route.NO_MATCH;
     }
 
     public static String normalizeEmail(final String email) {
@@ -144,7 +141,7 @@ public class AuthUtil {
         return request.bodyAsMap();
     }
 
-    public static void respondInviteValidation(final Event<HttpObject, HttpObject> event, final InviteLink inviteLink) {
+    public static void respondInviteValidation(final Event<HttpObject, HttpObject> event) {
         final Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("valid", true);
         event.payload().createCorsResponse()
@@ -187,6 +184,13 @@ public class AuthUtil {
             .respond(event);
     }
 
+    public static void respondProfile(final Event<HttpObject, HttpObject> event, final UserProfile profile) {
+        event.payload().createCorsResponse()
+            .statusCode(200)
+            .body(Map.of("profile", profilePayload(profile)))
+            .respond(event);
+    }
+
     public static void respondLogout(final Event<HttpObject, HttpObject> event, final String clearedCookie) {
         event.payload().createCorsResponse()
             .statusCode(200)
@@ -216,6 +220,13 @@ public class AuthUtil {
             .respond(event);
     }
 
+    public static void respondNotFound(final Event<HttpObject, HttpObject> event, final String message) {
+        event.payload().createCorsResponse()
+            .statusCode(404)
+            .body(Map.of("error", message))
+            .respond(event);
+    }
+
     public static void respondOptions(final Event<HttpObject, HttpObject> event) {
         event.payload().createCorsResponse().respond(event);
     }
@@ -225,10 +236,6 @@ public class AuthUtil {
             .statusCode(405)
             .body(Map.of("error", "Method Not Allowed", "path", event.payload().path()))
             .respond(event);
-    }
-
-    public static void respondFailure(final Event<HttpObject, HttpObject> event, final Throwable error) {
-        event.payload().createCorsResponse().failure(500, error).respond(event);
     }
 
     private static Map<String, Object> sessionPayload(final boolean authenticated, final SessionUser sessionUser) {
@@ -241,6 +248,16 @@ public class AuthUtil {
             user.put("email", sessionUser.email());
             payload.put("user", user);
         }
+        return payload;
+    }
+
+    private static Map<String, Object> profilePayload(final UserProfile profile) {
+        final Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("id", profile.id());
+        payload.put("displayName", profile.displayName());
+        payload.put("bio", profile.bio());
+        payload.put("email", profile.email());
+        payload.put("emailPublic", profile.emailPublic());
         return payload;
     }
 

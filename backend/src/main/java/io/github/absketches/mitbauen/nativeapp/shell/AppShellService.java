@@ -59,12 +59,4 @@ public class AppShellService extends Service {
             }
         }
     }
-
-    protected void handleHttpFailure(final Event<HttpObject, HttpObject> event, final Throwable error) {
-        switch (AppShellUtil.match(event.payload())) {
-            case AppShellUtil.AssetRoute __ -> AppShellUtil.respondFailure(event, error);
-            case AppShellUtil.NoMatch __ -> {
-            }
-        }
-    }
 }

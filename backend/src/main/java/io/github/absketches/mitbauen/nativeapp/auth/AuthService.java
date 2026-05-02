@@ -45,8 +45,8 @@ public class AuthService extends Service {
     }
 
     protected void handleHttpEvent(final Event<HttpObject, HttpObject> event) {
-        final AuthUtil.RoutesMatch route = AuthUtil.match(event.payload());
-        if (route instanceof AuthUtil.NoMatch) {
+        final AuthUtil.Route route = AuthUtil.match(event.payload());
+        if (route == AuthUtil.Route.NO_MATCH) {
             return;
         }
         if (event.payload().isMethodOptions()) {
@@ -56,27 +56,36 @@ public class AuthService extends Service {
         handleHttpRequest(event, route);
     }
 
-    protected void handleHttpRequest(final Event<HttpObject, HttpObject> event, final AuthUtil.RoutesMatch route) {
+    protected void handleHttpRequest(final Event<HttpObject, HttpObject> event, final AuthUtil.Route route) {
         switch (event.payload().methodType()) {
             case GET -> handleGet(event, route);
             case POST -> handlePost(event, route);
+            case PUT -> handlePut(event, route);
             default -> AuthUtil.respondMethodNotAllowed(event);
         }
     }
 
-    protected void handleGet(final Event<HttpObject, HttpObject> event, final AuthUtil.RoutesMatch route) {
+    protected void handleGet(final Event<HttpObject, HttpObject> event, final AuthUtil.Route route) {
         switch (route) {
-            case AuthUtil.InviteValidateRoute __ -> handleInviteValidate(event);
-            case AuthUtil.SessionRoute __ -> handleSessionLookup(event);
+            case INVITE_VALIDATE -> handleInviteValidate(event);
+            case SESSION -> handleSessionLookup(event);
+            case PROFILE -> handleProfileLookup(event);
             default -> AuthUtil.respondMethodNotAllowed(event);
         }
     }
 
-    protected void handlePost(final Event<HttpObject, HttpObject> event, final AuthUtil.RoutesMatch route) {
+    protected void handlePost(final Event<HttpObject, HttpObject> event, final AuthUtil.Route route) {
         switch (route) {
-            case AuthUtil.RegisterRoute __ -> handleRegister(event);
-            case AuthUtil.LoginRoute __ -> handleLogin(event);
-            case AuthUtil.LogoutRoute __ -> handleLogout(event);
+            case REGISTER -> handleRegister(event);
+            case LOGIN -> handleLogin(event);
+            case LOGOUT -> handleLogout(event);
+            default -> AuthUtil.respondMethodNotAllowed(event);
+        }
+    }
+
+    protected void handlePut(final Event<HttpObject, HttpObject> event, final AuthUtil.Route route) {
+        switch (route) {
+            case PROFILE -> handleProfileUpdate(event);
             default -> AuthUtil.respondMethodNotAllowed(event);
         }
     }
@@ -90,7 +99,7 @@ public class AuthService extends Service {
         AuthRepository.findInviteByToken(databaseRuntime.dataSource(), token)
             .filter(InviteLink::active)
             .ifPresentOrElse(
-                inviteLink -> AuthUtil.respondInviteValidation(event, inviteLink),
+                inviteLink -> AuthUtil.respondInviteValidation(event),
                 () -> AuthUtil.respondInvalidInvite(event)
             );
     }
@@ -100,10 +109,17 @@ public class AuthService extends Service {
         final String inviteToken = body.asString("inviteToken");
         final String email = AuthUtil.normalizeEmail(body.asString("email"));
         final String displayName = safeTrim(body.asString("displayName"));
+        final String bio = safeTrim(body.asString("bio"));
         final String password = body.asString("password");
+        final boolean emailPublic = safeBoolean(body.get("emailPublic"));
 
         if (inviteToken == null || inviteToken.isBlank() || email.isBlank() || displayName.isBlank() || password == null || password.isBlank()) {
             AuthUtil.respondBadRequest(event, "Invite token, email, display name, and password are required.");
+            return;
+        }
+        final Optional<String> registrationValidation = validateRegistrationProfileInput(displayName, bio, email);
+        if (registrationValidation.isPresent()) {
+            AuthUtil.respondBadRequest(event, registrationValidation.get());
             return;
         }
         if (!AuthUtil.meetsPasswordRequirements(password)) {
@@ -117,19 +133,20 @@ public class AuthService extends Service {
             return;
         }
         final String passwordHash = AuthUtil.hashPassword(password);
-        final SessionUser sessionUser;
-        try {
-            sessionUser = AuthRepository.createUserFromInvite(
-                databaseRuntime.dataSource(),
-                invite.get(),
-                email,
-                displayName,
-                passwordHash
-            );
-        } catch (AuthRepository.DuplicateEmailException exception) {
+        final Optional<SessionUser> createdUser = AuthRepository.createUserFromInvite(
+            databaseRuntime.dataSource(),
+            invite.get(),
+            email,
+            displayName,
+            passwordHash,
+            bio,
+            emailPublic
+        );
+        if (createdUser.isEmpty()) {
             AuthUtil.respondConflict(event, "An account already exists for that email.");
             return;
         }
+        final SessionUser sessionUser = createdUser.get();
         final String sessionToken = AuthUtil.newSessionToken();
         AuthRepository.createSession(
             databaseRuntime.dataSource(),
@@ -178,21 +195,97 @@ public class AuthService extends Service {
             );
     }
 
+    protected void handleProfileLookup(final Event<HttpObject, HttpObject> event) {
+        final Optional<SessionUser> sessionUser = currentSessionUser(event.payload());
+        if (sessionUser.isEmpty()) {
+            AuthUtil.respondUnauthorized(event, "You must be signed in to view your profile.");
+            return;
+        }
+
+        AuthRepository.findProfileByUserId(databaseRuntime.dataSource(), sessionUser.get().id())
+            .ifPresentOrElse(
+                profile -> AuthUtil.respondProfile(event, profile),
+                () -> AuthUtil.respondNotFound(event, "Profile not found.")
+            );
+    }
+
+    protected void handleProfileUpdate(final Event<HttpObject, HttpObject> event) {
+        final Optional<SessionUser> sessionUser = currentSessionUser(event.payload());
+        if (sessionUser.isEmpty()) {
+            AuthUtil.respondUnauthorized(event, "You must be signed in to update your profile.");
+            return;
+        }
+
+        final LinkedTypeMap body = AuthUtil.bodyAsMap(event.payload());
+        final String displayName = safeTrim(body.asString("displayName"));
+        final String bio = safeTrim(body.asString("bio"));
+        final boolean emailPublic = safeBoolean(body.get("emailPublic"));
+
+        final Optional<String> validation = validateEditableProfileInput(displayName, bio);
+        if (validation.isPresent()) {
+            AuthUtil.respondBadRequest(event, validation.get());
+            return;
+        }
+
+        final UserProfile profile = AuthRepository.updateProfile(
+            databaseRuntime.dataSource(),
+            sessionUser.get().id(),
+            displayName,
+            bio,
+            emailPublic
+        );
+        AuthUtil.respondProfile(event, profile);
+    }
+
     protected void handleLogout(final Event<HttpObject, HttpObject> event) {
         AuthUtil.readSessionToken(event.payload())
             .ifPresent(token -> AuthRepository.deleteSession(databaseRuntime.dataSource(), AuthUtil.hashToken(token)));
         AuthUtil.respondLogout(event, AuthUtil.clearedSessionCookie(event.payload()));
     }
 
-    protected void handleHttpFailure(final Event<HttpObject, HttpObject> event) {
-        switch (AuthUtil.match(event.payload())) {
-            case AuthUtil.NoMatch __ -> {
-            }
-            default -> AuthUtil.respondFailure(event, event.error());
-        }
-    }
-
     private static String safeTrim(final String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private Optional<SessionUser> currentSessionUser(final HttpObject request) {
+        return AuthUtil.readSessionToken(request)
+            .flatMap(token -> AuthRepository.findSessionUserByTokenHash(databaseRuntime.dataSource(), AuthUtil.hashToken(token)));
+    }
+
+    private static Optional<String> validateRegistrationProfileInput(final String displayName, final String bio, final String email) {
+        final Optional<String> editableValidation = validateEditableProfileInput(displayName, bio);
+        if (editableValidation.isPresent()) {
+            return editableValidation;
+        }
+        if (email.isBlank()) {
+            return Optional.of("Email is required.");
+        }
+        if (email.length() > AuthUtil.EMAIL_MAX_LENGTH) {
+            return Optional.of("Email must be 320 characters or fewer.");
+        }
+        if (!email.contains("@")) {
+            return Optional.of("Email must be a valid address.");
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<String> validateEditableProfileInput(final String displayName, final String bio) {
+        if (displayName.length() < AuthUtil.DISPLAY_NAME_MIN_LENGTH || displayName.length() > AuthUtil.DISPLAY_NAME_MAX_LENGTH) {
+            return Optional.of("Display name must be between 2 and 120 characters.");
+        }
+        if (bio.length() > AuthUtil.BIO_MAX_LENGTH) {
+            return Optional.of("Bio must be 560 characters or fewer.");
+        }
+        return Optional.empty();
+    }
+
+    private static boolean safeBoolean(final Object value) {
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        if (value instanceof String stringValue) {
+            return Boolean.parseBoolean(stringValue);
+        }
+        return false;
     }
 }

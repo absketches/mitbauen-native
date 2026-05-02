@@ -39,9 +39,21 @@ export type SessionUser = {
   email: string
 }
 
+export type UserProfile = {
+  id: number
+  displayName: string
+  bio: string
+  email: string
+  emailPublic: boolean
+}
+
 export type SessionResponse = {
   authenticated: boolean
   user?: SessionUser
+}
+
+export type UserProfileResponse = {
+  profile: UserProfile
 }
 
 export type InviteValidationResponse = {
@@ -51,6 +63,8 @@ export type InviteValidationResponse = {
 export type RegisterPayload = {
   inviteToken: string
   email: string
+  bio: string
+  emailPublic: boolean
   displayName: string
   password: string
 }
@@ -70,4 +84,10 @@ export type ProjectPayload = {
 
 export type ProjectMutationResponse = {
   slug: string
+}
+
+export type UserProfilePayload = {
+  displayName: string
+  bio: string
+  emailPublic: boolean
 }

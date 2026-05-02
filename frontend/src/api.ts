@@ -9,6 +9,9 @@ import type {
   ProjectPayload,
   RegisterPayload,
   SessionResponse,
+  UserProfile,
+  UserProfilePayload,
+  UserProfileResponse,
 } from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
@@ -33,6 +36,11 @@ export async function loadProject(slug: string): Promise<ProjectDetails> {
 
 export async function loadSession(): Promise<SessionResponse> {
   return requestJson<SessionResponse>(`${API_BASE_URL}/auth/session`)
+}
+
+export async function loadProfile(): Promise<UserProfile> {
+  const payload = await requestJson<UserProfileResponse>(`${API_BASE_URL}/profile`)
+  return payload.profile
 }
 
 export async function validateInvite(token: string): Promise<InviteValidationResponse> {
@@ -60,6 +68,14 @@ export async function logoutUser(): Promise<void> {
   })
 }
 
+export async function updateProfile(payload: UserProfilePayload): Promise<UserProfile> {
+  const response = await requestJson<UserProfileResponse>(`${API_BASE_URL}/profile`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+  return response.profile
+}
+
 export async function createProject(payload: ProjectPayload): Promise<ProjectMutationResponse> {
   return requestJson<ProjectMutationResponse>(`${API_BASE_URL}/projects`, {
     method: 'POST',
@@ -71,6 +87,12 @@ export async function updateProject(slug: string, payload: ProjectPayload): Prom
   return requestJson<ProjectMutationResponse>(`${API_BASE_URL}/projects/${encodeURIComponent(slug)}`, {
     method: 'PUT',
     body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteProject(slug: string): Promise<void> {
+  await requestJson<null>(`${API_BASE_URL}/projects/${encodeURIComponent(slug)}`, {
+    method: 'DELETE',
   })
 }
 

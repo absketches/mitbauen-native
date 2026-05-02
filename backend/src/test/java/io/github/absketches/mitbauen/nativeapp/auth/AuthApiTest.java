@@ -10,7 +10,13 @@ import org.nanonative.nano.services.http.HttpClient;
 import org.nanonative.nano.services.http.HttpServer;
 import org.nanonative.nano.services.http.model.HttpObject;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.time.Instant;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -138,6 +144,59 @@ class AuthApiTest {
     }
 
     @Test
+    void authenticatedRequestsUpdateSessionLastSeenAt() throws Exception {
+        nano = newTestNano();
+
+        final HttpObject loginResponse = registerPrimaryUser();
+        final String sessionCookie = cookieValue(loginResponse, AuthUtil.AUTH_SESSION_COOKIE);
+        final Instant initialLastSeenAt = sessionLastSeenAt(sessionCookie);
+
+        TimeUnit.MILLISECONDS.sleep(1100);
+
+        final HttpObject sessionResponse = get("/api/auth/session", sessionCookie);
+        assertThat(sessionResponse.statusCode()).isEqualTo(200);
+        assertThat(sessionLastSeenAt(sessionCookie)).isAfter(initialLastSeenAt);
+    }
+
+    @Test
+    void readsAndUpdatesTheAuthenticatedUserProfile() {
+        nano = newTestNano();
+
+        final HttpObject registerResponse = post("/api/auth/register", Map.of(
+            "inviteToken", OPEN_INVITE,
+            "email", PRIMARY_EMAIL,
+            "emailPublic", true,
+            "displayName", PRIMARY_DISPLAY_NAME,
+            "bio", "Building the first contributor path for neighborhood projects.",
+            "password", PRIMARY_PASSWORD
+        ));
+        assertThat(registerResponse.statusCode()).isEqualTo(201);
+        final String sessionCookie = cookieValue(registerResponse, AuthUtil.AUTH_SESSION_COOKIE);
+
+        final HttpObject initialProfile = get("/api/profile", sessionCookie);
+        assertThat(initialProfile.statusCode()).isEqualTo(200);
+        final LinkedTypeMap initialBody = initialProfile.bodyAsMap().asMap("profile");
+        assertThat(initialBody.asString("displayName")).isEqualTo(PRIMARY_DISPLAY_NAME);
+        assertThat(initialBody.asString("bio")).contains("contributor path");
+        assertThat(initialBody.asString("email")).isEqualTo(PRIMARY_EMAIL);
+        assertThat(initialBody.asBoolean("emailPublic")).isTrue();
+
+        final HttpObject updateResponse = put("/api/profile", Map.of(
+            "displayName", "Alex Builder Updated",
+            "bio", "Now focusing on trust, onboarding, and the first project handoffs.",
+            "email", "changed@example.test",
+            "emailPublic", false
+        ), sessionCookie);
+
+        assertThat(updateResponse.statusCode()).isEqualTo(200);
+        final LinkedTypeMap updatedProfile = updateResponse.bodyAsMap().asMap("profile");
+        assertThat(updatedProfile.asString("displayName")).isEqualTo("Alex Builder Updated");
+        assertThat(updatedProfile.asString("bio")).contains("first project handoffs");
+        assertThat(updatedProfile.asString("email")).isEqualTo(PRIMARY_EMAIL);
+        assertThat(updatedProfile.asBoolean("emailPublic")).isFalse();
+    }
+
+    @Test
     void validatesInviteToken() {
         nano = newTestNano();
 
@@ -208,6 +267,17 @@ class AuthApiTest {
         );
     }
 
+    private HttpObject registerPrimaryUser() {
+        final HttpObject registerResponse = post("/api/auth/register", Map.of(
+            "inviteToken", OPEN_INVITE,
+            "email", PRIMARY_EMAIL,
+            "displayName", PRIMARY_DISPLAY_NAME,
+            "password", PRIMARY_PASSWORD
+        ));
+        assertThat(registerResponse.statusCode()).isEqualTo(201);
+        return registerResponse;
+    }
+
     private HttpObject post(final String path, final Map<String, Object> body) {
         return post(path, body, null);
     }
@@ -232,8 +302,38 @@ class AuthApiTest {
         return request.send(nano.context(AuthApiTest.class));
     }
 
+    private HttpObject put(final String path, final Map<String, Object> body, final String sessionCookie) {
+        final HttpObject request = new HttpObject()
+            .path(baseUrl(path))
+            .methodType("PUT")
+            .contentType("application/json")
+            .body(body);
+        if (sessionCookie != null) {
+            request.header("Cookie", AuthUtil.AUTH_SESSION_COOKIE + "=" + sessionCookie);
+        }
+        return request.send(nano.context(AuthApiTest.class));
+    }
+
     private String baseUrl(final String path) {
         return "http://localhost:" + nano.service(HttpServer.class).port() + path;
+    }
+
+    private Instant sessionLastSeenAt(final String sessionCookie) {
+        final String sql = """
+            select last_seen_at
+            from sessions
+            where token_hash = ?
+            """;
+        try (Connection connection = databaseRuntime.dataSource().getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, AuthUtil.hashToken(sessionCookie));
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).isTrue();
+                return resultSet.getTimestamp("last_seen_at").toInstant();
+            }
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Unable to load session last_seen_at", exception);
+        }
     }
 
     private String cookieValue(final HttpObject response, final String cookieName) {
