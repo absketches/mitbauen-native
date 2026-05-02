@@ -13,7 +13,7 @@ public class DatabaseRuntime {
     }
 
     public DatabaseRuntime(final String jdbcUrl, final String jdbcUser, final String jdbcPassword, final String poolName) {
-        this.dataSource = Database.open(jdbcUrl, jdbcUser, jdbcPassword, poolName);
+        this.dataSource = DataSourceFactory.create(jdbcUrl, jdbcUser, jdbcPassword, poolName);
     }
 
     public DataSource dataSource() {
@@ -21,6 +21,8 @@ public class DatabaseRuntime {
     }
 
     public void stop() {
-        Database.close(dataSource);
+        if (dataSource != null) {
+            dataSource.close();
+        }
     }
 }

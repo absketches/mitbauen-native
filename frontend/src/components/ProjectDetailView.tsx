@@ -1,39 +1,35 @@
+import type { Dictionary } from '../i18n'
 import { useEffect, useState } from 'react'
 import type { ProjectDetails } from '../types'
 
 type DetailNotice = 'created' | 'updated' | null
 
 type ProjectDetailViewProps = {
+  copy: Dictionary['projectDetail']
   slug: string
   notice: DetailNotice
-  currentUserId?: number
   onLoadProject: (slug: string) => Promise<ProjectDetails>
+  onOpenFounderProfile: (publicId: string) => void
   onEdit: (slug: string) => void
+  onDelete: (slug: string) => Promise<void>
   onBackToFeed: (slug: string, notice: DetailNotice) => void
 }
 
-const noticeCopy: Record<Exclude<DetailNotice, null>, string> = {
-  created: 'Project created. It is ready for people to discover, and the feed can highlight it for you.',
-  updated: 'Project updated. The detail page and feed will now reflect the latest version.',
-}
-
-const statusLabels: Record<ProjectDetails['status'], string> = {
-  active: 'Active',
-  completed: 'Completed',
-  dormant: 'Dormant',
-}
-
 export function ProjectDetailView({
+  copy,
   slug,
   notice,
-  currentUserId,
   onLoadProject,
+  onOpenFounderProfile,
   onEdit,
+  onDelete,
   onBackToFeed,
 }: ProjectDetailViewProps) {
   const [project, setProject] = useState<ProjectDetails | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -53,17 +49,17 @@ export function ProjectDetailView({
         if (cancelled) {
           return
         }
-        setError(nextError instanceof Error ? nextError.message : 'We could not load this project right now.')
+        setError(nextError instanceof Error ? nextError.message : copy.loadError)
         setLoading(false)
       })
 
     return () => {
       cancelled = true
     }
-  }, [onLoadProject, slug])
+  }, [copy.loadError, onLoadProject, slug])
 
   if (loading) {
-    return <p className="state-card">Loading project...</p>
+    return <p className="state-card">{copy.loading}</p>
   }
 
   if (error) {
@@ -71,57 +67,85 @@ export function ProjectDetailView({
   }
 
   if (!project) {
-    return <p className="state-card state-card--error">Project not found.</p>
+    return <p className="state-card state-card--error">{copy.notFound}</p>
   }
 
-  const canEdit = currentUserId === project.ownerUserId
+  const currentProject = project
+
+  async function handleDelete() {
+    if (!window.confirm(copy.deleteConfirm)) {
+      return
+    }
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await onDelete(currentProject.slug)
+    } catch (nextError) {
+      setDeleteError(nextError instanceof Error ? nextError.message : copy.deleteError)
+      setDeleting(false)
+    }
+  }
 
   return (
     <section className="project-detail">
-      {notice ? <p className="state-card project-detail__notice">{noticeCopy[notice]}</p> : null}
+      {notice ? (
+        <p className="state-card project-detail__notice">
+          {notice === 'created' ? copy.noticeCreated : copy.noticeUpdated}
+        </p>
+      ) : null}
+      {deleteError ? <p className="state-card state-card--error">{deleteError}</p> : null}
 
       <div className="project-detail__header">
         <div className="project-detail__title-block">
-          <span className={`status-pill status-pill--${project.status}`}>{statusLabels[project.status]}</span>
-          <p className="hero__eyebrow">Founder-led project</p>
-          <h1>{project.title}</h1>
+          <span className={`status-pill status-pill--${currentProject.status}`}>{copy.status[currentProject.status]}</span>
+          <p className="hero__eyebrow">{copy.eyebrow}</p>
+          <h1>{currentProject.title}</h1>
           <p className="project-detail__meta-copy">
-            Led by {project.founder.name} as {project.founder.role}.
+            {copy.ledByPrefix}
+            <button className="founder-link" type="button" onClick={() => onOpenFounderProfile(currentProject.founder.publicId)}>
+              {currentProject.founder.name}
+            </button>
+            {copy.ledBySuffix(currentProject.founder.role)}
           </p>
         </div>
 
         <div className="project-detail__actions">
-          <button className="ghost-button" type="button" onClick={() => onBackToFeed(project.slug, notice)}>
-            Back to feed
+          <button className="ghost-button" type="button" onClick={() => onBackToFeed(currentProject.slug, notice)}>
+            {copy.back}
           </button>
-          {canEdit ? (
-            <button className="primary-button" type="button" onClick={() => onEdit(project.slug)}>
-              Edit project
-            </button>
+          {currentProject.canManage ? (
+            <>
+              <button className="primary-button" type="button" onClick={() => onEdit(currentProject.slug)}>
+                {copy.edit}
+              </button>
+              <button className="ghost-button ghost-button--danger" type="button" onClick={() => void handleDelete()} disabled={deleting}>
+                {deleting ? copy.deleting : copy.delete}
+              </button>
+            </>
           ) : null}
         </div>
       </div>
 
       <div className="project-detail__grid">
         <article className="project-detail__panel project-detail__panel--primary">
-          <p className="hero__eyebrow">What is being built</p>
-          <h2>Project description</h2>
-          <p className="project-detail__body">{project.description}</p>
+          <p className="hero__eyebrow">{copy.whatEyebrow}</p>
+          <h2>{copy.whatTitle}</h2>
+          <p className="project-detail__body">{currentProject.description}</p>
         </article>
 
         <aside className="project-detail__stack">
           <article className="project-detail__panel project-detail__panel--dark">
-            <p className="hero__eyebrow">Founder commitment</p>
-            <h2>{project.founder.role}</h2>
-            <p>{project.founder.commitment}</p>
+            <p className="hero__eyebrow">{copy.commitmentEyebrow}</p>
+            <h2>{currentProject.founder.role}</h2>
+            <p>{currentProject.founder.commitment}</p>
           </article>
 
           <article className="project-detail__panel">
-            <p className="hero__eyebrow">Open roles</p>
-            <h2>{project.openRoles.length} ways to contribute</h2>
+            <p className="hero__eyebrow">{copy.openRolesEyebrow}</p>
+            <h2>{copy.openRolesTitle(currentProject.openRoles.length)}</h2>
             <ul className="project-detail__roles">
-              {project.openRoles.map((role) => (
-                <li key={`${project.slug}-${role.title}`}>
+              {currentProject.openRoles.map((role) => (
+                <li key={`${currentProject.slug}-${role.title}`}>
                   <strong>{role.title}</strong>
                   <span>{role.commitment}</span>
                 </li>

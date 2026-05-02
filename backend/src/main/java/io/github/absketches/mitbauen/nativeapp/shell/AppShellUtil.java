@@ -18,7 +18,7 @@ public class AppShellUtil {
     public sealed interface RoutesMatch permits AssetRoute, NoMatch {
     }
 
-    public record AssetRoute(String requestPath, String resourcePath, String contentType, boolean spaShell) implements RoutesMatch {
+    public record AssetRoute(String resourcePath, String contentType, boolean spaShell) implements RoutesMatch {
     }
 
     public record NoMatch() implements RoutesMatch {
@@ -28,22 +28,24 @@ public class AppShellUtil {
     }
 
     public static RoutesMatch match(final HttpObject request) {
-        final String path = normalizePath(request.uri().getPath());
+        final String path = request.uri().getPath();
+        if (path == null || path.isEmpty() || "/".equals(path)) {
+            return new AssetRoute(INDEX_RESOURCE, ContentType.TEXT_HTML.value(), true);
+        }
+        if (!path.startsWith("/")) {
+            return new NoMatch();
+        }
         if (path.equals(API_PREFIX) || path.startsWith(API_PREFIX + "/")) {
             return new NoMatch();
         }
 
-        if ("/".equals(path)) {
-            return new AssetRoute(path, INDEX_RESOURCE, ContentType.TEXT_HTML.value(), true);
-        }
-
         final String resourcePath = FRONTEND_RESOURCE_ROOT + stripLeadingSlash(path);
         if (resourceExists(resourcePath)) {
-            return new AssetRoute(path, resourcePath, contentType(path), false);
+            return new AssetRoute(resourcePath, contentType(path), false);
         }
 
         if (!looksLikeAsset(path)) {
-            return new AssetRoute(path, INDEX_RESOURCE, ContentType.TEXT_HTML.value(), true);
+            return new AssetRoute(INDEX_RESOURCE, ContentType.TEXT_HTML.value(), true);
         }
         return new NoMatch();
     }
@@ -72,10 +74,6 @@ public class AppShellUtil {
             .respond(event);
     }
 
-    public static void respondFailure(final Event<HttpObject, HttpObject> event, final Throwable error) {
-        event.payload().createResponse().failure(500, error).respond(event);
-    }
-
     private static void respondMissingFrontend(final Event<HttpObject, HttpObject> event, final AssetRoute route) {
         final int statusCode = route.spaShell() ? 503 : 404;
         final String message = route.spaShell()
@@ -98,13 +96,6 @@ public class AppShellUtil {
         } catch (IOException exception) {
             throw new IllegalStateException("Unable to read frontend resource " + resourcePath, exception);
         }
-    }
-
-    private static String normalizePath(final String path) {
-        if (path == null || path.isBlank()) {
-            return "/";
-        }
-        return path.startsWith("/") ? path : "/" + path;
     }
 
     private static String stripLeadingSlash(final String path) {

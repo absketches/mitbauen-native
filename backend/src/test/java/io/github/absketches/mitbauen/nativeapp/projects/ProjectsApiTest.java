@@ -61,6 +61,8 @@ class ProjectsApiTest {
         final LinkedTypeMap project = detailResponse.bodyAsMap().asMap("project");
         assertThat(project.asString("title")).isEqualTo("Circular Kitchen Atlas");
         assertThat(project.asString("description")).contains("surplus food");
+        assertThat(project.asBoolean("canManage")).isFalse();
+        assertThat(project.asMap("founder").asString("publicId")).isNotBlank();
         assertThat(project.asMap("founder").asString("role")).isEqualTo("Founder + Community Ops");
         assertThat(project.asMap("founder").asString("commitment")).contains("pilot dinners every week");
 
@@ -76,6 +78,7 @@ class ProjectsApiTest {
         final TypeList feedProjects = feedResponse.bodyAsMap().asList("projects");
         final LinkedTypeMap firstProject = new LinkedTypeMap((Map<?, ?>) feedProjects.get(0));
         assertThat(firstProject.asString("slug")).isEqualTo(slug);
+        assertThat(firstProject.asMap("founder").asString("publicId")).isNotBlank();
     }
 
     @Test
@@ -159,6 +162,37 @@ class ProjectsApiTest {
             .containsExactly("Data Volunteer", "Operations Support");
     }
 
+    @Test
+    void onlyProjectOwnerCanDelete() {
+        nano = newTestNano();
+        final String ownerCookie = registerAndReturnSessionCookie("owner.delete@example.test", "Owner Delete");
+        final String intruderCookie = registerAndReturnSessionCookie("intruder.delete@example.test", "Intruder Delete");
+
+        final String slug = sendJson("/api/projects", "POST", Map.of(
+            "title", "Community Repair Ledger",
+            "description", "A shared ledger for volunteer repair collectives so each fix, failed attempt, and reused part can be tracked and learned from across neighborhoods.",
+            "founderRole", "Founder + Repair Lead",
+            "founderCommitment", "I am already organizing the repair nights, capturing the notes, and coordinating the volunteers every week.",
+            "openRoles", List.of(Map.of("title", "Data Steward", "commitment", "Organize the repair records."))
+        ), ownerCookie).bodyAsMap().asString("slug");
+
+        final HttpObject forbiddenDelete = sendRequest("/api/projects/" + slug, "DELETE", null, intruderCookie);
+        assertThat(forbiddenDelete.statusCode()).isEqualTo(403);
+        assertThat(forbiddenDelete.bodyAsMap().asString("error")).isEqualTo("Only the project owner can delete this project.");
+
+        final HttpObject ownerDelete = sendRequest("/api/projects/" + slug, "DELETE", null, ownerCookie);
+        assertThat(ownerDelete.statusCode()).isEqualTo(204);
+
+        final HttpObject missingDetail = sendGet("/api/projects/" + slug, null);
+        assertThat(missingDetail.statusCode()).isEqualTo(404);
+
+        final TypeList feedProjects = sendGet("/api/projects", null).bodyAsMap().asList("projects");
+        assertThat(feedProjects.stream()
+            .map(project -> new LinkedTypeMap((Map<?, ?>) project).asString("slug"))
+            .toList())
+            .doesNotContain(slug);
+    }
+
     private Nano newTestNano() {
         final String jdbcUrl = "jdbc:h2:mem:mitbauen_projects_" + UUID.randomUUID() + ";MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1";
         TestDatabaseMigrations.migrate(jdbcUrl, "sa", "");
@@ -200,6 +234,19 @@ class ProjectsApiTest {
             .methodType(method)
             .contentType("application/json")
             .body(body);
+        if (sessionCookie != null) {
+            request.header("Cookie", AuthUtil.AUTH_SESSION_COOKIE + "=" + sessionCookie);
+        }
+        return request.send(nano.context(ProjectsApiTest.class));
+    }
+
+    private HttpObject sendRequest(final String path, final String method, final Map<String, Object> body, final String sessionCookie) {
+        final HttpObject request = new HttpObject()
+            .path(baseUrl(path))
+            .methodType(method);
+        if (body != null) {
+            request.contentType("application/json").body(body);
+        }
         if (sessionCookie != null) {
             request.header("Cookie", AuthUtil.AUTH_SESSION_COOKIE + "=" + sessionCookie);
         }

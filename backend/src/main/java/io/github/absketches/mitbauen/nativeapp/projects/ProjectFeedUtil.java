@@ -43,14 +43,17 @@ public class ProjectFeedUtil {
     }
 
     public static RoutesMatch match(final HttpObject request, final String basePath) {
-        final String requestPath = normalizePath(request.uri().getPath());
-        if (requestPath.equals(basePath)) {
+        final String path = request.uri().getPath();
+        if (path == null) {
+            return new NoMatch();
+        }
+        if (path.equals(basePath)) {
             return new ProjectFeedRoute();
         }
         final String detailPrefix = basePath + "/";
-        if (requestPath.startsWith(detailPrefix)) {
-            final String slug = requestPath.substring(detailPrefix.length()).trim();
-            if (!slug.isBlank() && !slug.contains("/")) {
+        if (path.startsWith(detailPrefix)) {
+            final String slug = path.substring(detailPrefix.length());
+            if (!slug.isEmpty() && !slug.contains("/")) {
                 return new ProjectDetailsRoute(slug);
             }
         }
@@ -109,10 +112,10 @@ public class ProjectFeedUtil {
             .respond(event);
     }
 
-    public static void respondProjectDetails(final Event<HttpObject, HttpObject> event, final ProjectDetails project) {
+    public static void respondProjectDetails(final Event<HttpObject, HttpObject> event, final ProjectDetails project, final boolean canManage) {
         event.payload().createCorsResponse()
             .statusCode(200)
-            .body(Map.of("project", projectDetailsToMap(project)))
+            .body(Map.of("project", projectDetailsToMap(project, canManage)))
             .respond(event);
     }
 
@@ -120,6 +123,12 @@ public class ProjectFeedUtil {
         event.payload().createCorsResponse()
             .statusCode(statusCode)
             .body(Map.of("slug", slug))
+            .respond(event);
+    }
+
+    public static void respondDeleted(final Event<HttpObject, HttpObject> event) {
+        event.payload().createCorsResponse()
+            .statusCode(204)
             .respond(event);
     }
 
@@ -162,10 +171,6 @@ public class ProjectFeedUtil {
             .respond(event);
     }
 
-    public static void respondFailure(final Event<HttpObject, HttpObject> event, final Throwable error) {
-        event.payload().createCorsResponse().failure(500, error).respond(event);
-    }
-
     private static Map<String, Object> projectToMap(final ProjectCard project) {
         final Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("id", project.id());
@@ -179,10 +184,10 @@ public class ProjectFeedUtil {
         return payload;
     }
 
-    private static Map<String, Object> projectDetailsToMap(final ProjectDetails project) {
+    private static Map<String, Object> projectDetailsToMap(final ProjectDetails project, final boolean canManage) {
         final Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("id", project.id());
-        payload.put("ownerUserId", project.ownerUserId());
+        payload.put("canManage", canManage);
         payload.put("slug", project.slug());
         payload.put("title", project.title());
         payload.put("description", project.description());
@@ -196,6 +201,7 @@ public class ProjectFeedUtil {
 
     private static Map<String, Object> founderToMap(final FounderInfo founder) {
         return Map.of(
+            "publicId", founder.publicId(),
             "name", founder.name(),
             "role", founder.role(),
             "commitment", founder.commitment()
@@ -215,12 +221,5 @@ public class ProjectFeedUtil {
 
     private static String safeTrim(final String value) {
         return value == null ? "" : value.trim();
-    }
-
-    private static String normalizePath(final String path) {
-        if (path == null || path.isBlank()) {
-            return "/";
-        }
-        return path.startsWith("/") ? path : "/" + path;
     }
 }

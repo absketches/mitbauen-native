@@ -1,7 +1,7 @@
 /// <reference types="@vitest/browser/matchers" />
 /// <reference types="@vitest/browser/providers/playwright" />
 
-import { expect, test, vi } from 'vitest'
+import { beforeEach, expect, test, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
 import App from './App'
 import type {
@@ -21,6 +21,7 @@ const baseProjects: Project[] = [
       'A cooperative toolkit for apartment blocks to coordinate balcony solar installs, document rooftop constraints, and help neighbors compare realistic energy savings before they commit to a shared rollout.',
     status: 'active',
     founder: {
+      publicId: 'usr_avery_bloom_01',
       name: 'Avery Bloom',
       role: 'Founder + Product',
       commitment: '10 hrs/week',
@@ -39,6 +40,7 @@ const baseProjects: Project[] = [
       'A simple way for neighbors to share tools, coordinate booking windows, and capture repair know-how so the same drill, ladder, or sewing machine can stay useful across an entire street.',
     status: 'active',
     founder: {
+      publicId: 'usr_nora_patel_01',
       name: 'Nora Patel',
       role: 'Founder + Ops',
       commitment: '8 hrs/week',
@@ -50,6 +52,10 @@ const baseProjects: Project[] = [
     createdAt: '2026-04-20T14:30:00Z',
   },
 ]
+
+beforeEach(() => {
+  window.localStorage.clear()
+})
 
 test('renders the public project feed in browser mode', async () => {
   window.history.pushState({}, '', '/')
@@ -63,11 +69,11 @@ test('renders the public project feed in browser mode', async () => {
     />,
   )
 
-  await expect.element(screen.getByText('Discover real projects looking for the right people.')).toBeVisible()
-  await expect.element(screen.getByText('No projects yet.')).toBeVisible()
-  await expect.element(screen.getByText('The public feed will show founder commitment and open roles here once the first project is posted.')).toBeVisible()
-  await expect.element(screen.getByRole('button', { name: 'Sign in' })).toBeVisible()
-  expect(document.body.textContent).not.toContain('Join Mitbauen through an invite.')
+  await expect.element(screen.getByText('Finde Projekte mit konkretem Bedarf.')).toBeVisible()
+  await expect.element(screen.getByText('Noch keine Projekte.')).toBeVisible()
+  await expect.element(screen.getByText('Hier erscheinen Projekte, sobald das erste veröffentlicht ist.')).toBeVisible()
+  await expect.element(screen.getByRole('button', { name: 'Anmelden' })).toBeVisible()
+  expect(document.body.textContent).not.toContain('Join Mitbauen.')
 })
 
 test('renders the invite-only registration view for an open invite', async () => {
@@ -85,9 +91,32 @@ test('renders the invite-only registration view for an open invite', async () =>
     />,
   )
 
-  await expect.element(screen.getByText('Join Mitbauen.')).toBeVisible()
-  await expect.element(screen.getByLabelText('Email')).toHaveValue('')
-  await expect.element(screen.getByRole('button', { name: 'Create account' })).toBeVisible()
+  await expect.element(screen.getByText('Konto erstellen.')).toBeVisible()
+  await expect.element(screen.getByRole('textbox', { name: 'E-Mail' })).toHaveValue('')
+  await expect.element(screen.getByRole('button', { name: 'Konto erstellen' })).toBeVisible()
+})
+
+test('opens a founder profile from the public feed', async () => {
+  window.history.pushState({}, '', '/')
+
+  const screen = await render(
+    <App
+      api={{
+        loadProjects: async () => baseProjects,
+        loadPublicProfile: async (_publicId) => ({
+          displayName: 'Avery Bloom',
+          bio: 'Helping neighbors move ideas into real, founder-led experiments.',
+          email: null,
+        }),
+        loadSession: async (): Promise<SessionResponse> => ({ authenticated: false }),
+      }}
+    />,
+  )
+
+  await screen.getByRole('button', { name: 'Avery Bloom' }).click()
+
+  await expect.element(screen.getByRole('heading', { name: 'Avery Bloom' })).toBeVisible()
+  await expect.element(screen.getByText('Helping neighbors move ideas into real, founder-led experiments.')).toBeVisible()
 })
 
 test('validates the create project form for authenticated users', async () => {
@@ -101,27 +130,27 @@ test('validates the create project form for authenticated users', async () => {
         loadProjects: async () => baseProjects,
         loadSession: async (): Promise<SessionResponse> => ({
           authenticated: true,
-          user: { id: 42, displayName: 'Alex Builder', email: 'alex@example.test' },
+          user: { displayName: 'Alex Builder', email: 'alex@example.test' },
         }),
         createProject: createProjectMock,
       }}
     />,
   )
 
-  await screen.getByLabelText('Project title').fill('Tiny')
-  await screen.getByLabelText('Project description').fill('Too short to pass.')
-  await screen.getByLabelText('Your role in this project').fill('Go')
-  await screen.getByLabelText('What you are personally committing').fill('Too short')
-  await screen.getByLabelText('Role title 1').fill('No')
-  await screen.getByLabelText('Role commitment 1').fill('No')
-  await screen.getByRole('button', { name: 'Create project' }).nth(1).click()
+  await screen.getByRole('textbox', { name: 'Titel', exact: true }).fill('Tiny')
+  await screen.getByLabelText('Beschreibung').fill('Too short to pass.')
+  await screen.getByLabelText('Deine Rolle in diesem Projekt').fill('Go')
+  await screen.getByLabelText('Wozu du dich persönlich verpflichtest').fill('Too short')
+  await screen.getByLabelText('Titel für Rolle 1').fill('No')
+  await screen.getByLabelText('Commitment für Rolle 1').fill('No')
+  await screen.getByRole('button', { name: 'Projekt erstellen' }).nth(1).click()
 
-  await expect.element(screen.getByText('Use a project title between 5 and 120 characters.')).toBeVisible()
-  await expect.element(screen.getByText('Use a project description between 40 and 1024 characters.')).toBeVisible()
-  await expect.element(screen.getByText('Use a founder role between 3 and 80 characters.')).toBeVisible()
-  await expect.element(screen.getByText('Use a founder commitment between 10 and 280 characters.')).toBeVisible()
-  await expect.element(screen.getByText('Use a role title between 3 and 80 characters.')).toBeVisible()
-  await expect.element(screen.getByText('Use a role commitment between 3 and 80 characters.')).toBeVisible()
+  await expect.element(screen.getByText('Gib einen Projekttitel zwischen 5 und 120 Zeichen ein.')).toBeVisible()
+  await expect.element(screen.getByText('Gib eine Projektbeschreibung zwischen 40 und 1024 Zeichen ein.')).toBeVisible()
+  await expect.element(screen.getByText('Gib eine Gründerrolle zwischen 3 und 80 Zeichen ein.')).toBeVisible()
+  await expect.element(screen.getByText('Gib ein Gründer-Commitment zwischen 10 und 280 Zeichen ein.')).toBeVisible()
+  await expect.element(screen.getByText('Gib einen Rollentitel zwischen 3 und 80 Zeichen ein.')).toBeVisible()
+  await expect.element(screen.getByText('Gib ein Rollen-Commitment zwischen 3 und 80 Zeichen ein.')).toBeVisible()
   expect(createProjectMock).not.toHaveBeenCalled()
 })
 
@@ -143,17 +172,18 @@ test('creates a project, lands on detail, and returns to a highlighted feed card
         },
         loadSession: async (): Promise<SessionResponse> => ({
           authenticated: true,
-          user: { id: 42, displayName: 'Alex Builder', email: 'alex@example.test' },
+          user: { displayName: 'Alex Builder', email: 'alex@example.test' },
         }),
         createProject: async (payload: ProjectPayload) => {
           createdProject = {
             id: 99,
-            ownerUserId: 42,
+            canManage: true,
             slug: 'circular-kitchen-atlas',
             title: payload.title,
             description: payload.description,
             status: 'active',
             founder: {
+              publicId: 'usr_alex_builder_01',
               name: 'Alex Builder',
               role: payload.founderRole,
               commitment: payload.founderCommitment,
@@ -181,23 +211,23 @@ test('creates a project, lands on detail, and returns to a highlighted feed card
     />,
   )
 
-  await screen.getByLabelText('Project title').fill('Circular Kitchen Atlas')
-  await screen.getByLabelText('Project description').fill(
+  await screen.getByRole('textbox', { name: 'Titel', exact: true }).fill('Circular Kitchen Atlas')
+  await screen.getByLabelText('Beschreibung').fill(
     'A living guide for neighborhood kitchens that want to map surplus food, shared prep capacity, and the fastest path from extra ingredients to community meals.',
   )
-  await screen.getByLabelText('Your role in this project').fill('Founder + Community Ops')
-  await screen.getByLabelText('What you are personally committing').fill(
+  await screen.getByLabelText('Deine Rolle in diesem Projekt').fill('Founder + Community Ops')
+  await screen.getByLabelText('Wozu du dich persönlich verpflichtest').fill(
     'I am already running the pilot dinners, documenting learnings, and coordinating the volunteer operations myself.',
   )
-  await screen.getByLabelText('Role title 1').fill('Frontend Engineer')
-  await screen.getByLabelText('Role commitment 1').fill('Build the first contributor-facing workflows.')
-  await screen.getByRole('button', { name: 'Create project' }).nth(1).click()
+  await screen.getByLabelText('Titel für Rolle 1').fill('Frontend Engineer')
+  await screen.getByLabelText('Commitment für Rolle 1').fill('Build the first contributor-facing workflows.')
+  await screen.getByRole('button', { name: 'Projekt erstellen' }).nth(1).click()
 
   await expect.element(screen.getByRole('heading', { name: 'Circular Kitchen Atlas' })).toBeVisible()
-  await expect.element(screen.getByText('Project created. It is ready for people to discover, and the feed can highlight it for you.')).toBeVisible()
+  await expect.element(screen.getByText('Projekt erstellt.')).toBeVisible()
 
-  await screen.getByRole('button', { name: 'Back to feed' }).click()
+  await screen.getByRole('button', { name: 'Zurück zu den Projekten' }).click()
 
-  await expect.element(screen.getByText('Your new project is live in the feed.')).toBeVisible()
+  await expect.element(screen.getByText('Projekt veröffentlicht.')).toBeVisible()
   await expect.element(screen.getByTestId('project-circular-kitchen-atlas')).toBeVisible()
 })

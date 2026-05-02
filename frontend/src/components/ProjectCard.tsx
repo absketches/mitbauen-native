@@ -1,18 +1,15 @@
+import type { Dictionary } from '../i18n'
 import type { Project } from '../types'
 
 type ProjectCardProps = {
+  copy: Dictionary['projectCard']
   project: Project
   highlighted?: boolean
   onOpen?: (slug: string) => void
+  onOpenFounderProfile?: (publicId: string) => void
 }
 
-const statusLabels: Record<Project['status'], string> = {
-  active: 'Active',
-  completed: 'Completed',
-  dormant: 'Dormant',
-}
-
-export function ProjectCard({ project, highlighted = false, onOpen }: ProjectCardProps) {
+export function ProjectCard({ copy, project, highlighted = false, onOpen, onOpenFounderProfile }: ProjectCardProps) {
   const descriptionPreview =
     project.description.length > 190 ? `${project.description.slice(0, 187).trimEnd()}...` : project.description
 
@@ -23,7 +20,7 @@ export function ProjectCard({ project, highlighted = false, onOpen }: ProjectCar
       data-testid={`project-${project.slug}`}
     >
       <div className="project-card__header">
-        <span className={`status-pill status-pill--${project.status}`}>{statusLabels[project.status]}</span>
+        <span className={`status-pill status-pill--${project.status}`}>{copy.status[project.status]}</span>
         <h2>{project.title}</h2>
       </div>
 
@@ -31,21 +28,29 @@ export function ProjectCard({ project, highlighted = false, onOpen }: ProjectCar
 
       <dl className="project-card__meta">
         <div>
-          <dt>Founder</dt>
-          <dd>{project.founder.name}</dd>
+          <dt>{copy.founder}</dt>
+          <dd>
+            {onOpenFounderProfile ? (
+              <button className="founder-link" type="button" onClick={() => onOpenFounderProfile(project.founder.publicId)}>
+                {project.founder.name}
+              </button>
+            ) : (
+              project.founder.name
+            )}
+          </dd>
         </div>
         <div>
-          <dt>Owner Role</dt>
+          <dt>{copy.ownerRole}</dt>
           <dd>{project.founder.role}</dd>
         </div>
         <div>
-          <dt>Commitment</dt>
+          <dt>{copy.commitment}</dt>
           <dd>{project.founder.commitment}</dd>
         </div>
       </dl>
 
       <section className="project-card__roles">
-        <h3>Open Roles</h3>
+        <h3>{copy.openRoles}</h3>
         <ul>
           {project.openRoles.map((role) => (
             <li key={`${project.id}-${role.title}`}>
@@ -58,7 +63,7 @@ export function ProjectCard({ project, highlighted = false, onOpen }: ProjectCar
 
       {onOpen ? (
         <button className="ghost-button project-card__cta" type="button" onClick={() => onOpen(project.slug)}>
-          View project
+          {copy.viewProject}
         </button>
       ) : null}
     </article>

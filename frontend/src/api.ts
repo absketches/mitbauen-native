@@ -1,6 +1,8 @@
 import type {
   InviteValidationResponse,
   LoginPayload,
+  PublicUserProfile,
+  PublicUserProfileResponse,
   Project,
   ProjectDetails,
   ProjectDetailsResponse,
@@ -9,20 +11,15 @@ import type {
   ProjectPayload,
   RegisterPayload,
   SessionResponse,
+  UserProfile,
+  UserProfilePayload,
+  UserProfileResponse,
 } from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 export async function loadProjects(): Promise<Project[]> {
-  const response = await fetch(`${API_BASE_URL}/projects`, {
-    credentials: 'same-origin',
-  })
-
-  if (!response.ok) {
-    throw new Error(`Failed to load projects (${response.status})`)
-  }
-
-  const payload = (await response.json()) as ProjectFeedResponse
+  const payload = await requestJson<ProjectFeedResponse>(`${API_BASE_URL}/projects`)
   return payload.projects
 }
 
@@ -33,6 +30,16 @@ export async function loadProject(slug: string): Promise<ProjectDetails> {
 
 export async function loadSession(): Promise<SessionResponse> {
   return requestJson<SessionResponse>(`${API_BASE_URL}/auth/session`)
+}
+
+export async function loadProfile(): Promise<UserProfile> {
+  const payload = await requestJson<UserProfileResponse>(`${API_BASE_URL}/profile`)
+  return payload.profile
+}
+
+export async function loadPublicProfile(publicId: string): Promise<PublicUserProfile> {
+  const payload = await requestJson<PublicUserProfileResponse>(`${API_BASE_URL}/users/${encodeURIComponent(publicId)}`)
+  return payload.profile
 }
 
 export async function validateInvite(token: string): Promise<InviteValidationResponse> {
@@ -56,8 +63,15 @@ export async function loginUser(payload: LoginPayload): Promise<SessionResponse>
 export async function logoutUser(): Promise<void> {
   await requestJson<SessionResponse>(`${API_BASE_URL}/auth/logout`, {
     method: 'POST',
-    body: JSON.stringify({}),
   })
+}
+
+export async function updateProfile(payload: UserProfilePayload): Promise<UserProfile> {
+  const response = await requestJson<UserProfileResponse>(`${API_BASE_URL}/profile`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+  return response.profile
 }
 
 export async function createProject(payload: ProjectPayload): Promise<ProjectMutationResponse> {
@@ -74,13 +88,22 @@ export async function updateProject(slug: string, payload: ProjectPayload): Prom
   })
 }
 
+export async function deleteProject(slug: string): Promise<void> {
+  await requestJson<null>(`${API_BASE_URL}/projects/${encodeURIComponent(slug)}`, {
+    method: 'DELETE',
+  })
+}
+
 async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
+  const headers = init?.body
+    ? {
+        'Content-Type': 'application/json',
+        ...(init.headers ?? {}),
+      }
+    : init?.headers
   const response = await fetch(input, {
     credentials: 'same-origin',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
+    headers,
     ...init,
   })
 

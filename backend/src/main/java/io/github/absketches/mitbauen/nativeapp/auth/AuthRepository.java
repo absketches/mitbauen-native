@@ -40,6 +40,26 @@ public class AuthRepository {
         where s.token_hash = ? and s.expires_at > ?
         """;
 
+    private static final String PROFILE_LOOKUP_SQL = """
+        select
+            id,
+            display_name,
+            bio,
+            email,
+            is_email_public
+        from users
+        where id = ?
+        """;
+
+    private static final String PUBLIC_PROFILE_LOOKUP_SQL = """
+        select
+            display_name,
+            bio,
+            case when is_email_public then email end as email
+        from users
+        where public_id = ?
+        """;
+
     private AuthRepository() {
     }
 
@@ -61,22 +81,30 @@ public class AuthRepository {
         }
     }
 
-    public static SessionUser createUserFromInvite(
+    public static Optional<SessionUser> createUserFromInvite(
         final DataSource dataSource,
         final InviteLink invite,
         final String normalizedEmail,
         final String displayName,
-        final String passwordHash
+        final String passwordHash,
+        final String bio,
+        final boolean emailPublic
     ) {
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
-                final long userId = insertUser(connection, normalizedEmail, displayName);
+                final long userId = insertUser(connection, normalizedEmail, displayName, bio, emailPublic);
                 insertPasswordCredential(connection, userId, passwordHash);
                 insertInviteRedemption(connection, invite.id(), userId, normalizedEmail);
                 incrementInviteUseCount(connection, invite.id());
                 connection.commit();
-                return new SessionUser(userId, displayName, normalizedEmail);
+                return Optional.of(new SessionUser(userId, displayName, normalizedEmail));
+            } catch (SQLException exception) {
+                connection.rollback();
+                if (isDuplicateEmail(connection, normalizedEmail, exception)) {
+                    return Optional.empty();
+                }
+                throw exception;
             } catch (Exception exception) {
                 connection.rollback();
                 throw exception;
@@ -163,15 +191,90 @@ public class AuthRepository {
         }
     }
 
-    private static long insertUser(final Connection connection, final String normalizedEmail, final String displayName) throws SQLException {
+    public static Optional<UserProfile> findProfileByUserId(final DataSource dataSource, final long userId) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(PROFILE_LOOKUP_SQL)) {
+            statement.setLong(1, userId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    return Optional.empty();
+                }
+                return Optional.of(new UserProfile(
+                    resultSet.getString("display_name"),
+                    resultSet.getString("bio"),
+                    resultSet.getString("email"),
+                    resultSet.getBoolean("is_email_public")
+                ));
+            }
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Unable to load user profile", exception);
+        }
+    }
+
+    public static Optional<UserProfile> findPublicProfileByPublicId(final DataSource dataSource, final String publicId) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(PUBLIC_PROFILE_LOOKUP_SQL)) {
+            statement.setString(1, publicId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    return Optional.empty();
+                }
+                return Optional.of(new UserProfile(
+                    resultSet.getString("display_name"),
+                    resultSet.getString("bio"),
+                    resultSet.getString("email"),
+                    resultSet.getString("email") != null
+                ));
+            }
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Unable to load public user profile", exception);
+        }
+    }
+
+    public static UserProfile updateProfile(
+        final DataSource dataSource,
+        final long userId,
+        final String displayName,
+        final String bio,
+        final boolean emailPublic
+    ) {
         final String sql = """
-            insert into users (handle, display_name, email)
-            values (?, ?, ?)
+            update users
+            set display_name = ?, bio = ?, is_email_public = ?
+            where id = ?
+            """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, displayName);
+            statement.setString(2, bio);
+            statement.setBoolean(3, emailPublic);
+            statement.setLong(4, userId);
+            statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Unable to update user profile", exception);
+        }
+
+        return findProfileByUserId(dataSource, userId)
+            .orElseThrow(() -> new IllegalStateException("Updated profile not found for user " + userId));
+    }
+
+    private static long insertUser(
+        final Connection connection,
+        final String normalizedEmail,
+        final String displayName,
+        final String bio,
+        final boolean emailPublic
+    ) throws SQLException {
+        final String sql = """
+            insert into users (public_id, display_name, email, bio, is_email_public)
+            values (?, ?, ?, ?, ?)
             """;
         try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            statement.setString(1, nextHandle(connection, displayName, normalizedEmail));
+            statement.setString(1, AuthUtil.newPublicProfileId());
             statement.setString(2, displayName);
             statement.setString(3, normalizedEmail);
+            statement.setString(4, bio);
+            statement.setBoolean(5, emailPublic);
             statement.executeUpdate();
             try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
                 if (generatedKeys.next()) {
@@ -179,11 +282,6 @@ public class AuthRepository {
                 }
             }
             throw new IllegalStateException("User insert did not return a generated id");
-        } catch (SQLException exception) {
-            if (isDuplicateEmail(connection, normalizedEmail, exception)) {
-                throw new DuplicateEmailException(normalizedEmail, exception);
-            }
-            throw exception;
         }
     }
 
@@ -242,31 +340,6 @@ public class AuthRepository {
         }
     }
 
-    private static String nextHandle(final Connection connection, final String displayName, final String normalizedEmail) throws SQLException {
-        final String baseHandle = AuthUtil.handleFrom(displayName, normalizedEmail);
-        String handle = baseHandle;
-        int suffix = 2;
-        while (handleExists(connection, handle)) {
-            handle = baseHandle + "-" + suffix;
-            suffix++;
-        }
-        return handle;
-    }
-
-    private static boolean handleExists(final Connection connection, final String handle) throws SQLException {
-        final String sql = """
-            select 1
-            from users
-            where handle = ?
-            """;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, handle);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                return resultSet.next();
-            }
-        }
-    }
-
     private static Optional<Long> userIdByEmail(final Connection connection, final String normalizedEmail) throws SQLException {
         final String sql = """
             select id
@@ -303,10 +376,4 @@ public class AuthRepository {
         return false;
     }
 
-    public static final class DuplicateEmailException extends RuntimeException {
-
-        public DuplicateEmailException(final String normalizedEmail, final SQLException cause) {
-            super("An account already exists for " + normalizedEmail, cause);
-        }
-    }
 }

@@ -13,7 +13,7 @@ public final class TestDatabaseMigrations {
     }
 
     public static void migrate(final String jdbcUrl, final String jdbcUser, final String jdbcPassword) {
-        try (HikariDataSource dataSource = Database.open(jdbcUrl, jdbcUser, jdbcPassword, "mitbauen-test-migrations")) {
+        try (HikariDataSource dataSource = DataSourceFactory.create(jdbcUrl, jdbcUser, jdbcPassword, "mitbauen-test-migrations")) {
             new MigrationRunner(TestDatabaseMigrations.class.getClassLoader()).migrate(dataSource);
         }
     }
@@ -24,7 +24,7 @@ public final class TestDatabaseMigrations {
         final String jdbcPassword,
         final String token
     ) {
-        try (HikariDataSource dataSource = Database.open(jdbcUrl, jdbcUser, jdbcPassword, "mitbauen-test-seed");
+        try (HikariDataSource dataSource = DataSourceFactory.create(jdbcUrl, jdbcUser, jdbcPassword, "mitbauen-test-seed");
              Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement("""
                  insert into invite_links (token_hash, is_active, use_count)

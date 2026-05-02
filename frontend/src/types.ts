@@ -1,4 +1,5 @@
 export type FounderInfo = {
+  publicId: string
   name: string
   role: string
   commitment: string
@@ -25,7 +26,7 @@ export type ProjectFeedResponse = {
 }
 
 export type ProjectDetails = Project & {
-  ownerUserId: number
+  canManage: boolean
   updatedAt: string
 }
 
@@ -34,14 +35,30 @@ export type ProjectDetailsResponse = {
 }
 
 export type SessionUser = {
-  id: number
   displayName: string
   email: string
 }
 
+export type UserProfile = {
+  displayName: string
+  bio: string
+  email: string
+  emailPublic: boolean
+}
+
+export type PublicUserProfile = Pick<UserProfile, 'displayName' | 'bio' | 'email'>
+
 export type SessionResponse = {
   authenticated: boolean
   user?: SessionUser
+}
+
+export type UserProfileResponse = {
+  profile: UserProfile
+}
+
+export type PublicUserProfileResponse = {
+  profile: PublicUserProfile
 }
 
 export type InviteValidationResponse = {
@@ -51,6 +68,8 @@ export type InviteValidationResponse = {
 export type RegisterPayload = {
   inviteToken: string
   email: string
+  bio: string
+  emailPublic: boolean
   displayName: string
   password: string
 }
@@ -70,4 +89,10 @@ export type ProjectPayload = {
 
 export type ProjectMutationResponse = {
   slug: string
+}
+
+export type UserProfilePayload = {
+  displayName: string
+  bio: string
+  emailPublic: boolean
 }
