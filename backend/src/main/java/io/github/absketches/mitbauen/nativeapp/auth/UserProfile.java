@@ -4,6 +4,7 @@ public record UserProfile(
     String displayName,
     String bio,
     String email,
-    boolean emailPublic
+    boolean emailPublic,
+    boolean emailVerified
 ) {
 }

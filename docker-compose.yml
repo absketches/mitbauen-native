@@ -35,6 +35,9 @@ services:
       jdbc_database_url: ${JDBC_DATABASE_URL}
       jdbc_database_user: ${JDBC_DATABASE_USER}
       jdbc_database_password: ${JDBC_DATABASE_PASSWORD}
+      app_public_base_url: ${APP_PUBLIC_BASE_URL:-http://127.0.0.1:8080}
+      app_email_from: ${APP_EMAIL_FROM:-Mitbauen <no-reply@mail.mitbauen.space>}
+      resend_api_key: ${RESEND_API_KEY:-test-api-key}
     depends_on:
       browser-tests:
         condition: service_completed_successfully

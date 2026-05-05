@@ -84,7 +84,7 @@ public class ProjectFeedService extends Service {
                             event,
                             project,
                             AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource())
-                                .map(sessionUser -> sessionUser.id() == project.ownerUserId())
+                                .map(sessionUser -> sessionUser.id() == project.ownerUserId() && sessionUser.emailVerified())
                                 .orElse(false)
                         ),
                         () -> ProjectFeedUtil.respondNotFound(event, "Project not found.")
@@ -103,6 +103,10 @@ public class ProjectFeedService extends Service {
         final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
         if (sessionUser.isEmpty()) {
             ProjectFeedUtil.respondUnauthorized(event, "You must be signed in to create a project.");
+            return;
+        }
+        if (!sessionUser.get().emailVerified()) {
+            ProjectFeedUtil.respondForbidden(event, "Verify your email before creating a project.");
             return;
         }
 
@@ -127,6 +131,10 @@ public class ProjectFeedService extends Service {
         final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
         if (sessionUser.isEmpty()) {
             ProjectFeedUtil.respondUnauthorized(event, "You must be signed in to edit a project.");
+            return;
+        }
+        if (!sessionUser.get().emailVerified()) {
+            ProjectFeedUtil.respondForbidden(event, "Verify your email before editing a project.");
             return;
         }
 
@@ -161,6 +169,10 @@ public class ProjectFeedService extends Service {
         final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
         if (sessionUser.isEmpty()) {
             ProjectFeedUtil.respondUnauthorized(event, "You must be signed in to delete a project.");
+            return;
+        }
+        if (!sessionUser.get().emailVerified()) {
+            ProjectFeedUtil.respondForbidden(event, "Verify your email before deleting a project.");
             return;
         }
 

@@ -3,6 +3,7 @@ package io.github.absketches.mitbauen.nativeapp.projects;
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeList;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
+import io.github.absketches.mitbauen.nativeapp.db.PostgresTestDatabase;
 import io.github.absketches.mitbauen.nativeapp.db.TestDatabaseMigrations;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -12,8 +13,6 @@ import org.nanonative.nano.services.http.HttpServer;
 import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.util.Map;
-import java.util.UUID;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ProjectFeedApiTest {
@@ -23,7 +22,10 @@ class ProjectFeedApiTest {
 
     @AfterEach
     void tearDown() {
-        nano.stop(ProjectFeedApiTest.class).waitForStop();
+        if (nano != null) {
+            nano.stop(ProjectFeedApiTest.class).waitForStop();
+            nano = null;
+        }
         if (databaseRuntime != null) {
             databaseRuntime.stop();
             databaseRuntime = null;
@@ -32,9 +34,14 @@ class ProjectFeedApiTest {
 
     @Test
     void returnsAnEmptyFeedWhenNoProjectsExist() {
-        final String jdbcUrl = "jdbc:h2:mem:mitbauen_" + UUID.randomUUID() + ";MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1";
-        TestDatabaseMigrations.migrate(jdbcUrl, "sa", "");
-        databaseRuntime = new DatabaseRuntime(jdbcUrl, "sa", "", "mitbauen-test-feed");
+        final PostgresTestDatabase.DatabaseConfig databaseConfig = PostgresTestDatabase.createDatabase("feed");
+        TestDatabaseMigrations.migrate(databaseConfig.jdbcUrl(), databaseConfig.jdbcUser(), databaseConfig.jdbcPassword());
+        databaseRuntime = new DatabaseRuntime(
+            databaseConfig.jdbcUrl(),
+            databaseConfig.jdbcUser(),
+            databaseConfig.jdbcPassword(),
+            "mitbauen-test-feed"
+        );
         nano = new Nano(
             Map.of(
                 HttpServer.CONFIG_SERVICE_HTTP_PORT, 0

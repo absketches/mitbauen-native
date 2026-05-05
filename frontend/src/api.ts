@@ -14,6 +14,8 @@ import type {
   UserProfile,
   UserProfilePayload,
   UserProfileResponse,
+  VerificationConfirmResponse,
+  VerificationEmailRequestResponse,
 } from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
@@ -66,12 +68,31 @@ export async function logoutUser(): Promise<void> {
   })
 }
 
+export async function requestEmailVerification(): Promise<VerificationEmailRequestResponse> {
+  return requestJson<VerificationEmailRequestResponse>(`${API_BASE_URL}/auth/verify-email/request`, {
+    method: 'POST',
+  })
+}
+
+export async function confirmEmailVerification(token: string): Promise<VerificationConfirmResponse> {
+  return requestJson<VerificationConfirmResponse>(`${API_BASE_URL}/auth/verify-email/confirm`, {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  })
+}
+
 export async function updateProfile(payload: UserProfilePayload): Promise<UserProfile> {
   const response = await requestJson<UserProfileResponse>(`${API_BASE_URL}/profile`, {
     method: 'PUT',
     body: JSON.stringify(payload),
   })
   return response.profile
+}
+
+export async function deleteAccount(): Promise<SessionResponse> {
+  return requestJson<SessionResponse>(`${API_BASE_URL}/profile`, {
+    method: 'DELETE',
+  })
 }
 
 export async function createProject(payload: ProjectPayload): Promise<ProjectMutationResponse> {

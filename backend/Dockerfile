@@ -8,7 +8,7 @@ RUN npm ci
 COPY frontend ./
 RUN npm run build
 
-FROM maven:3.9-eclipse-temurin-21 AS backend-build
+FROM maven:3.9-eclipse-temurin-25 AS backend-build
 
 WORKDIR /workspace
 
@@ -18,7 +18,7 @@ COPY --from=frontend-build /workspace/frontend/dist frontend/dist
 
 RUN mvn -f backend/pom.xml -q -DskipTests package
 
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:25-jre
 
 WORKDIR /app
 

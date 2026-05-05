@@ -130,7 +130,7 @@ test('validates the create project form for authenticated users', async () => {
         loadProjects: async () => baseProjects,
         loadSession: async (): Promise<SessionResponse> => ({
           authenticated: true,
-          user: { displayName: 'Alex Builder', email: 'alex@example.test' },
+          user: { displayName: 'Alex Builder', email: 'alex@example.test', emailVerified: true },
         }),
         createProject: createProjectMock,
       }}
@@ -172,7 +172,7 @@ test('creates a project, lands on detail, and returns to a highlighted feed card
         },
         loadSession: async (): Promise<SessionResponse> => ({
           authenticated: true,
-          user: { displayName: 'Alex Builder', email: 'alex@example.test' },
+          user: { displayName: 'Alex Builder', email: 'alex@example.test', emailVerified: true },
         }),
         createProject: async (payload: ProjectPayload) => {
           createdProject = {

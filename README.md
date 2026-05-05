@@ -3,7 +3,7 @@
 Fresh reboot of Mitbauen as a single-repo system with:
 
 - one packaged app artifact that serves both SPA routes and `/api`
-- Java 21 + Nano on the backend
+- Java 25 + Nano on the backend
 - PostgreSQL as a separately managed datastore
 - Vite + React + TypeScript on the frontend
 - local Docker Compose for contributor onboarding
@@ -11,7 +11,7 @@ Fresh reboot of Mitbauen as a single-repo system with:
 
 ## Planned stack
 
-- Backend: Java 21, Nano-oriented structure, plain JDBC
+- Backend: Java 25, Nano-oriented structure, plain JDBC
 - Database: PostgreSQL
 - DB driver: `org.postgresql:postgresql`
 - Pooling: `HikariCP`
@@ -60,6 +60,8 @@ If you only want to run the browser suite, use:
 docker compose up --build browser-tests
 ```
 
+Backend integration tests run against a real PostgreSQL Docker container. `mvn verify` in `backend/` therefore expects a working local Docker daemon in addition to Java 25.
+
 CI behavior:
 
 - `Native E2E` runs on pushes to every branch and on pull requests
@@ -96,7 +98,7 @@ The generated host deployment expects:
 - PostgreSQL
 - `systemd`
 - a remote user with `ssh` access and `sudo` privileges
-- Java 21 only when deploying the jar mode
+- Java 25 only when deploying the jar mode
 - `curl` when pulling the deploy bundle from GitHub Packages
 
 For the preferred native-image deploy, no host Java runtime is required.
@@ -110,6 +112,12 @@ The deployed shape is:
 - PostgreSQL data in its normal host-managed data directory or volume
 
 If the remote env file does not exist yet, `deploy.sh` will create it from the example template and stop, so you can fill in the real database credentials before rerunning the deployment. On a normal deploy, the installed `systemd` unit starts the app directly, and the app runs any pending embedded SQL migrations before opening the HTTP server.
+
+For email verification, add these runtime variables to `/etc/mitbauen/mitbauen.env`:
+
+- `app_public_base_url=https://www.mitbauen.space`
+- `app_email_from=Mitbauen <no-reply@mail.mitbauen.space>`
+- `resend_api_key=...`
 
 The production database volume is not meant to be cleaned up between releases. Forward-only migrations are tracked in `schema_migrations`, so new app versions only apply the SQL files that have not already been recorded.
 

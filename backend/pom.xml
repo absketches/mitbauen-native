@@ -11,13 +11,12 @@
     <name>mitbauen-native-backend</name>
 
     <properties>
-        <java.version>21</java.version>
+        <java.version>25</java.version>
         <nano.version>2026.01.0120644</nano.version>
         <hikaricp.version>6.3.0</hikaricp.version>
         <postgresql.version>42.7.5</postgresql.version>
         <jbcrypt.version>0.4</jbcrypt.version>
         <slf4j.simple.version>1.7.36</slf4j.simple.version>
-        <h2.version>2.3.232</h2.version>
         <junit.version>6.0.3</junit.version>
         <assertj.version>3.27.7</assertj.version>
         <maven.compiler.plugin.version>3.14.0</maven.compiler.plugin.version>
@@ -25,7 +24,7 @@
         <maven.failsafe.plugin.version>3.5.4</maven.failsafe.plugin.version>
         <maven.shade.plugin.version>3.6.0</maven.shade.plugin.version>
         <jacoco.version>0.8.13</jacoco.version>
-        <graalvm.native.maven.plugin.version>0.10.2</graalvm.native.maven.plugin.version>
+        <graalvm.native.maven.plugin.version>0.11.4</graalvm.native.maven.plugin.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -56,12 +55,6 @@
             <version>${slf4j.simple.version}</version>
         </dependency>
 
-        <dependency>
-            <groupId>com.h2database</groupId>
-            <artifactId>h2</artifactId>
-            <version>${h2.version}</version>
-            <scope>test</scope>
-        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>

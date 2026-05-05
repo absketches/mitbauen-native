@@ -1,5 +1,7 @@
 package io.github.absketches.mitbauen.nativeapp.auth;
 
+import io.github.absketches.mitbauen.nativeapp.db.SqlTransactions;
+
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -23,6 +25,7 @@ public class AuthRepository {
             u.id,
             u.display_name,
             u.email,
+            u.email_verified_at is not null as email_verified,
             pc.password_hash
         from users u
         join password_credentials pc on pc.user_id = u.id
@@ -34,7 +37,8 @@ public class AuthRepository {
             s.id,
             u.id as user_id,
             u.display_name,
-            u.email
+            u.email,
+            u.email_verified_at is not null as email_verified
         from sessions s
         join users u on u.id = s.user_id
         where s.token_hash = ? and s.expires_at > ?
@@ -46,7 +50,8 @@ public class AuthRepository {
             display_name,
             bio,
             email,
-            is_email_public
+            is_email_public,
+            email_verified_at is not null as email_verified
         from users
         where id = ?
         """;
@@ -88,32 +93,26 @@ public class AuthRepository {
         final String displayName,
         final String passwordHash,
         final String bio,
-        final boolean emailPublic
+        final boolean emailPublic,
+        final boolean markEmailVerified
     ) {
-        try (Connection connection = dataSource.getConnection()) {
-            connection.setAutoCommit(false);
-            try {
-                final long userId = insertUser(connection, normalizedEmail, displayName, bio, emailPublic);
+        return SqlTransactions.execute(
+            dataSource,
+            "Unable to register user",
+            connection -> {
+                final long userId = insertUser(connection, normalizedEmail, displayName, bio, emailPublic, markEmailVerified);
                 insertPasswordCredential(connection, userId, passwordHash);
                 insertInviteRedemption(connection, invite.id(), userId, normalizedEmail);
                 incrementInviteUseCount(connection, invite.id());
-                connection.commit();
-                return Optional.of(new SessionUser(userId, displayName, normalizedEmail));
-            } catch (SQLException exception) {
-                connection.rollback();
+                return Optional.of(new SessionUser(userId, displayName, normalizedEmail, markEmailVerified));
+            },
+            (connection, exception) -> {
                 if (isDuplicateEmail(connection, normalizedEmail, exception)) {
                     return Optional.empty();
                 }
                 throw exception;
-            } catch (Exception exception) {
-                connection.rollback();
-                throw exception;
-            } finally {
-                connection.setAutoCommit(true);
             }
-        } catch (SQLException exception) {
-            throw new IllegalStateException("Unable to register user", exception);
-        }
+        );
     }
 
     public static Optional<LoginIdentity> findLoginIdentityByEmail(final DataSource dataSource, final String normalizedEmail) {
@@ -127,6 +126,7 @@ public class AuthRepository {
                         userId,
                         resultSet.getString("display_name"),
                         resultSet.getString("email"),
+                        resultSet.getBoolean("email_verified"),
                         resultSet.getString("password_hash")
                     ));
                 }
@@ -165,7 +165,8 @@ public class AuthRepository {
                     final SessionUser sessionUser = new SessionUser(
                         userId,
                         resultSet.getString("display_name"),
-                        resultSet.getString("email")
+                        resultSet.getString("email"),
+                        resultSet.getBoolean("email_verified")
                     );
                     touchSession(connection, sessionId);
                     return Optional.of(sessionUser);
@@ -191,6 +192,22 @@ public class AuthRepository {
         }
     }
 
+    public static void deleteAccount(final DataSource dataSource, final long userId) {
+        final String sql = """
+            delete from users
+            where id = ?
+            """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, userId);
+            if (statement.executeUpdate() != 1) {
+                throw new IllegalStateException("User not found for account deletion " + userId);
+            }
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Unable to delete account", exception);
+        }
+    }
+
     public static Optional<UserProfile> findProfileByUserId(final DataSource dataSource, final long userId) {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(PROFILE_LOOKUP_SQL)) {
@@ -203,7 +220,8 @@ public class AuthRepository {
                     resultSet.getString("display_name"),
                     resultSet.getString("bio"),
                     resultSet.getString("email"),
-                    resultSet.getBoolean("is_email_public")
+                    resultSet.getBoolean("is_email_public"),
+                    resultSet.getBoolean("email_verified")
                 ));
             }
         } catch (SQLException exception) {
@@ -223,7 +241,8 @@ public class AuthRepository {
                     resultSet.getString("display_name"),
                     resultSet.getString("bio"),
                     resultSet.getString("email"),
-                    resultSet.getString("email") != null
+                    resultSet.getString("email") != null,
+                    true
                 ));
             }
         } catch (SQLException exception) {
@@ -263,11 +282,12 @@ public class AuthRepository {
         final String normalizedEmail,
         final String displayName,
         final String bio,
-        final boolean emailPublic
+        final boolean emailPublic,
+        final boolean markEmailVerified
     ) throws SQLException {
         final String sql = """
-            insert into users (public_id, display_name, email, bio, is_email_public)
-            values (?, ?, ?, ?, ?)
+            insert into users (public_id, display_name, email, bio, is_email_public, email_verified_at)
+            values (?, ?, ?, ?, ?, ?)
             """;
         try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             statement.setString(1, AuthUtil.newPublicProfileId());
@@ -275,6 +295,7 @@ public class AuthRepository {
             statement.setString(3, normalizedEmail);
             statement.setString(4, bio);
             statement.setBoolean(5, emailPublic);
+            statement.setTimestamp(6, markEmailVerified ? Timestamp.from(Instant.now()) : null);
             statement.executeUpdate();
             try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
                 if (generatedKeys.next()) {
@@ -374,6 +395,219 @@ public class AuthRepository {
             current = current.getCause();
         }
         return false;
+    }
+
+    public static boolean beginEmailVerificationSendAttempt(
+        final DataSource dataSource,
+        final long userId,
+        final String tokenHash,
+        final Instant expiresAt,
+        final Instant sendWindowStart,
+        final int maxEmailsPer24Hours
+    ) {
+        return SqlTransactions.execute(
+            dataSource,
+            "Unable to begin email verification send attempt",
+            connection -> {
+                lockUser(connection, userId);
+                if (countEmailVerificationSendsSince(connection, userId, sendWindowStart) >= maxEmailsPer24Hours) {
+                    return false;
+                }
+                insertEmailVerificationToken(connection, userId, tokenHash, expiresAt);
+                insertEmailVerificationSendRecord(connection, userId, tokenHash);
+                return true;
+            }
+        );
+    }
+
+    public static void completeEmailVerificationSendAttempt(
+        final DataSource dataSource,
+        final long userId,
+        final String tokenHash
+    ) {
+        SqlTransactions.execute(
+            dataSource,
+            "Unable to complete email verification send attempt",
+            connection -> {
+                lockUser(connection, userId);
+                deleteEmailVerificationTokensExcept(connection, userId, tokenHash);
+                return null;
+            }
+        );
+    }
+
+    public static void abortEmailVerificationSendAttempt(
+        final DataSource dataSource,
+        final String tokenHash
+    ) {
+        SqlTransactions.execute(
+            dataSource,
+            "Unable to abort email verification send attempt",
+            connection -> {
+                deleteEmailVerificationSendRecordByTokenHash(connection, tokenHash);
+                deleteEmailVerificationTokenByHash(connection, tokenHash);
+                return null;
+            }
+        );
+    }
+
+    public static boolean confirmEmailVerification(final DataSource dataSource, final String tokenHash) {
+        final String sql = """
+            select user_id
+            from email_verification_tokens
+            where token_hash = ? and expires_at > ?
+            """;
+        return SqlTransactions.execute(
+            dataSource,
+            "Unable to confirm email verification",
+            connection -> {
+                try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                    statement.setString(1, tokenHash);
+                    statement.setTimestamp(2, Timestamp.from(Instant.now()));
+                    try (ResultSet resultSet = statement.executeQuery()) {
+                        if (!resultSet.next()) {
+                            return false;
+                        }
+                        final long userId = resultSet.getLong("user_id");
+                        markEmailVerified(connection, userId);
+                        deleteEmailVerificationTokens(connection, userId);
+                        return true;
+                    }
+                }
+            }
+        );
+    }
+
+    private static void insertEmailVerificationToken(
+        final Connection connection,
+        final long userId,
+        final String tokenHash,
+        final Instant expiresAt
+    ) throws SQLException {
+        final String sql = """
+            insert into email_verification_tokens (user_id, token_hash, expires_at)
+            values (?, ?, ?)
+            """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, userId);
+            statement.setString(2, tokenHash);
+            statement.setTimestamp(3, Timestamp.from(expiresAt));
+            statement.executeUpdate();
+        }
+    }
+
+    private static void insertEmailVerificationSendRecord(
+        final Connection connection,
+        final long userId,
+        final String tokenHash
+    ) throws SQLException {
+        final String sql = """
+            insert into email_verification_sends (user_id, token_hash)
+            values (?, ?)
+            """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, userId);
+            statement.setString(2, tokenHash);
+            statement.executeUpdate();
+        }
+    }
+
+    private static long countEmailVerificationSendsSince(
+        final Connection connection,
+        final long userId,
+        final Instant sendWindowStart
+    ) throws SQLException {
+        final String sql = """
+            select count(*)
+            from email_verification_sends
+            where user_id = ? and created_at >= ?
+            """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, userId);
+            statement.setTimestamp(2, Timestamp.from(sendWindowStart));
+            try (ResultSet resultSet = statement.executeQuery()) {
+                resultSet.next();
+                return resultSet.getLong(1);
+            }
+        }
+    }
+
+    private static void deleteEmailVerificationTokens(final Connection connection, final long userId) throws SQLException {
+        final String sql = """
+            delete from email_verification_tokens
+            where user_id = ?
+            """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, userId);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void deleteEmailVerificationTokensExcept(
+        final Connection connection,
+        final long userId,
+        final String tokenHash
+    ) throws SQLException {
+        final String sql = """
+            delete from email_verification_tokens
+            where user_id = ? and token_hash <> ?
+            """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, userId);
+            statement.setString(2, tokenHash);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void deleteEmailVerificationTokenByHash(final Connection connection, final String tokenHash) throws SQLException {
+        final String sql = """
+            delete from email_verification_tokens
+            where token_hash = ?
+            """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, tokenHash);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void deleteEmailVerificationSendRecordByTokenHash(final Connection connection, final String tokenHash) throws SQLException {
+        final String sql = """
+            delete from email_verification_sends
+            where token_hash = ?
+            """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, tokenHash);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void lockUser(final Connection connection, final long userId) throws SQLException {
+        final String sql = """
+            select id
+            from users
+            where id = ?
+            for update
+            """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, userId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    throw new IllegalStateException("User not found for verification resend " + userId);
+                }
+            }
+        }
+    }
+
+    private static void markEmailVerified(final Connection connection, final long userId) throws SQLException {
+        final String sql = """
+            update users
+            set email_verified_at = current_timestamp
+            where id = ?
+            """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, userId);
+            statement.executeUpdate();
+        }
     }
 
 }

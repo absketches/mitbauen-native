@@ -735,6 +735,16 @@ textarea {
   opacity: 1;
 }
 
+.danger-zone__warning {
+  margin: 0;
+}
+
+.danger-zone__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
 .project-form input,
 .project-form textarea {
   width: 100%;

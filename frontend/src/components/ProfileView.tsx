@@ -7,13 +7,14 @@ type ProfileViewProps = {
   copy: Dictionary['profile']
   onLoadProfile: () => Promise<UserProfile>
   onSubmit: (payload: UserProfilePayload) => Promise<void>
+  onDeleteAccount: () => Promise<void>
   onBack: () => void
 }
 
-export function ProfileView({ copy, onLoadProfile, onSubmit, onBack }: ProfileViewProps) {
+export function ProfileView({ copy, onLoadProfile, onSubmit, onDeleteAccount, onBack }: ProfileViewProps) {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [form, setForm] = useState<UserProfile>({
+  const [form, setForm] = useState({
     displayName: '',
     bio: '',
     email: '',
@@ -23,6 +24,9 @@ export function ProfileView({ copy, onLoadProfile, onSubmit, onBack }: ProfileVi
   const [formError, setFormError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [deleteConfirming, setDeleteConfirming] = useState(false)
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -56,7 +60,7 @@ export function ProfileView({ copy, onLoadProfile, onSubmit, onBack }: ProfileVi
     }
   }, [copy.loadError, onLoadProfile])
 
-  function validate(nextForm: UserProfile) {
+  function validate(nextForm: typeof form) {
     const errors: Record<string, string> = {}
 
     if (nextForm.displayName.trim().length < 2 || nextForm.displayName.trim().length > 120) {
@@ -96,6 +100,21 @@ export function ProfileView({ copy, onLoadProfile, onSubmit, onBack }: ProfileVi
     } finally {
       setSubmitting(false)
     }
+  }
+
+  async function handleDeleteAccount() {
+    setDeleteError(null)
+    setDeleteSubmitting(true)
+
+    try {
+      await onDeleteAccount()
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : copy.deleteError)
+      setDeleteSubmitting(false)
+      return
+    }
+
+    setDeleteSubmitting(false)
   }
 
   if (loading) {
@@ -182,6 +201,58 @@ export function ProfileView({ copy, onLoadProfile, onSubmit, onBack }: ProfileVi
               <span className="checkbox-field__hint">{copy.emailPublicHint}</span>
             </span>
           </label>
+        </section>
+
+        <section className="project-form__section danger-zone">
+          <div className="project-form__section-header">
+            <p className="hero__eyebrow">{copy.deleteEyebrow}</p>
+            <h2>{copy.deleteTitle}</h2>
+          </div>
+
+          <p className="project-editor__copy">{copy.deleteCopy}</p>
+          <p className="state-card state-card--error danger-zone__warning">
+            <strong>{copy.deleteWarningTitle}</strong>
+            <span className="state-card__copy">{copy.deleteWarningCopy}</span>
+          </p>
+
+          {deleteError ? <p className="auth-error">{deleteError}</p> : null}
+
+          {!deleteConfirming ? (
+            <div className="danger-zone__actions">
+              <button
+                className="ghost-button ghost-button--danger"
+                type="button"
+                onClick={() => {
+                  setDeleteConfirming(true)
+                  setDeleteError(null)
+                }}
+              >
+                {copy.deleteAction}
+              </button>
+            </div>
+          ) : (
+            <div className="danger-zone__actions">
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={() => {
+                  setDeleteConfirming(false)
+                  setDeleteError(null)
+                }}
+                disabled={deleteSubmitting}
+              >
+                {copy.deleteCancel}
+              </button>
+              <button
+                className="ghost-button ghost-button--danger"
+                type="button"
+                onClick={() => void handleDeleteAccount()}
+                disabled={deleteSubmitting}
+              >
+                {deleteSubmitting ? copy.deleting : copy.deleteConfirm}
+              </button>
+            </div>
+          )}
         </section>
 
         <div className="project-form__actions">
