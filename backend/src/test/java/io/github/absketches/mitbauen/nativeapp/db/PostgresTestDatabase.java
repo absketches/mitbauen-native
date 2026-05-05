@@ -36,7 +36,7 @@ public final class PostgresTestDatabase {
         private final String maintenanceJdbcUrl;
 
         private PostgresTestContainer() {
-            containerId = runCommand(
+            containerId = lastNonEmptyLine(runCommand(
                 "docker",
                 "run",
                 "--rm",
@@ -46,7 +46,7 @@ public final class PostgresTestDatabase {
                 "-e", "POSTGRES_DB=postgres",
                 "-P",
                 IMAGE
-            ).trim();
+            ));
             if (containerId.isEmpty()) {
                 throw new IllegalStateException("Docker did not return a Postgres container id");
             }
@@ -140,6 +140,17 @@ public final class PostgresTestDatabase {
                 Thread.currentThread().interrupt();
                 throw new IllegalStateException("Interrupted while waiting for command: " + String.join(" ", command), exception);
             }
+        }
+
+        private static String lastNonEmptyLine(final String output) {
+            final String[] lines = output.split("\\R");
+            for (int index = lines.length - 1; index >= 0; index--) {
+                final String line = lines[index].trim();
+                if (!line.isEmpty()) {
+                    return line;
+                }
+            }
+            return "";
         }
     }
 }
