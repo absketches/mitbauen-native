@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { expect, test } from '@playwright/test'
 
 const sharedInvite = 'test-open-invite'
@@ -20,6 +21,7 @@ test('renders the project feed and completes invite registration plus login', as
   await page.getByRole('button', { name: 'Konto erstellen' }).click()
 
   await expect(page.getByText(`Willkommen, ${memberDisplayName}`)).toBeVisible()
+  markEmailVerified(memberEmail)
 
   await page.getByRole('button', { name: 'Abmelden' }).click()
   await expect(page.locator('header').getByRole('button', { name: 'Anmelden', exact: true })).toBeVisible()
@@ -53,3 +55,98 @@ test('renders the project feed and completes invite registration plus login', as
   await expect(page.getByText('Projekt veröffentlicht.')).toBeVisible()
   await expect(page.getByTestId('project-circular-kitchen-atlas')).toBeVisible()
 })
+
+function markEmailVerified(email: string) {
+  const jdbcUrl = process.env.jdbc_database_url
+  const jdbcUser = process.env.jdbc_database_user
+  if (!jdbcUrl || !jdbcUser) {
+    throw new Error('Missing JDBC connection details for native E2E email verification')
+  }
+
+  const sql = "update users set email_verified_at = current_timestamp where email = '" + escapeSql(email) + "'"
+
+  if (commandAvailable('psql')) {
+    execFileSync(
+      'psql',
+      [jdbcUrl.replace(/^jdbc:/, ''), '-U', jdbcUser, '-v', 'ON_ERROR_STOP=1', '-c', sql],
+      {
+        env: {
+          ...process.env,
+          PGPASSWORD: process.env.jdbc_database_password ?? '',
+        },
+        stdio: 'ignore',
+      },
+    )
+    return
+  }
+
+  const dockerContainerId = findPostgresContainerId(jdbcUrl)
+  execFileSync(
+    'docker',
+    [
+      'exec',
+      '-e',
+      `PGPASSWORD=${process.env.jdbc_database_password ?? ''}`,
+      dockerContainerId,
+      'psql',
+      '-U',
+      jdbcUser,
+      '-d',
+      databaseName(jdbcUrl),
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-c',
+      sql,
+    ],
+    {
+      stdio: 'ignore',
+    },
+  )
+}
+
+function commandAvailable(command: string) {
+  try {
+    execFileSync(command, ['--version'], { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+function databaseName(jdbcUrl: string) {
+  const withoutPrefix = jdbcUrl.replace(/^jdbc:postgresql:\/\//, '')
+  const slashIndex = withoutPrefix.indexOf('/')
+  if (slashIndex < 0) {
+    throw new Error(`Unsupported jdbc_database_url for native E2E: ${jdbcUrl}`)
+  }
+  return withoutPrefix.slice(slashIndex + 1).split('?')[0]
+}
+
+function postgresPort(jdbcUrl: string) {
+  const withoutPrefix = jdbcUrl.replace(/^jdbc:postgresql:\/\//, '')
+  const hostPort = withoutPrefix.split('/')[0]
+  const colonIndex = hostPort.lastIndexOf(':')
+  if (colonIndex < 0) {
+    return '5432'
+  }
+  return hostPort.slice(colonIndex + 1)
+}
+
+function findPostgresContainerId(jdbcUrl: string) {
+  const containerId = execFileSync(
+    'docker',
+    ['ps', '--filter', `publish=${postgresPort(jdbcUrl)}`, '--format', '{{.ID}}'],
+    { encoding: 'utf8' },
+  )
+    .trim()
+    .split('\n')[0]
+
+  if (!containerId) {
+    throw new Error(`Unable to find a running Postgres container for ${jdbcUrl}`)
+  }
+  return containerId
+}
+
+function escapeSql(value: string) {
+  return value.replaceAll("'", "''")
+}

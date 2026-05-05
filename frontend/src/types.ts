@@ -37,6 +37,7 @@ export type ProjectDetailsResponse = {
 export type SessionUser = {
   displayName: string
   email: string
+  emailVerified: boolean
 }
 
 export type UserProfile = {
@@ -44,6 +45,7 @@ export type UserProfile = {
   bio: string
   email: string
   emailPublic: boolean
+  emailVerified: boolean
 }
 
 export type PublicUserProfile = Pick<UserProfile, 'displayName' | 'bio' | 'email'>
@@ -63,6 +65,15 @@ export type PublicUserProfileResponse = {
 
 export type InviteValidationResponse = {
   valid: boolean
+}
+
+export type VerificationEmailRequestResponse = {
+  sent: boolean
+  alreadyVerified: boolean
+}
+
+export type VerificationConfirmResponse = {
+  verified: boolean
 }
 
 export type RegisterPayload = {

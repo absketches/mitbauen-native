@@ -89,23 +89,18 @@ public class MigrationRunner {
     }
 
     private void applyMigration(final Connection connection, final MigrationResource migration) throws SQLException {
-        final boolean autoCommit = connection.getAutoCommit();
-        connection.setAutoCommit(false);
-        try (Statement statement = connection.createStatement();
-             PreparedStatement recordMigration = connection.prepareStatement(
-                 "insert into schema_migrations (version, filename) values (?, ?)"
-             )) {
-            statement.execute(migration.sql());
-            recordMigration.setString(1, migration.version());
-            recordMigration.setString(2, migration.filename());
-            recordMigration.executeUpdate();
-            connection.commit();
-        } catch (SQLException exception) {
-            connection.rollback();
-            throw exception;
-        } finally {
-            connection.setAutoCommit(autoCommit);
-        }
+        SqlTransactions.execute(connection, transaction -> {
+            try (Statement statement = transaction.createStatement();
+                 PreparedStatement recordMigration = transaction.prepareStatement(
+                     "insert into schema_migrations (version, filename) values (?, ?)"
+                 )) {
+                statement.execute(migration.sql());
+                recordMigration.setString(1, migration.version());
+                recordMigration.setString(2, migration.filename());
+                recordMigration.executeUpdate();
+                return null;
+            }
+        });
     }
 
     private String readResource(final String resourcePath) {

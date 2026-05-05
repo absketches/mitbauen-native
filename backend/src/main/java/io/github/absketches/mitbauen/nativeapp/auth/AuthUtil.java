@@ -11,6 +11,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
+import java.net.URLEncoder;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -20,6 +21,7 @@ public class AuthUtil {
 
     public static final String AUTH_SESSION_COOKIE = "mitbauen_session";
     public static final Duration SESSION_TTL = Duration.ofDays(14);
+    public static final Duration EMAIL_VERIFICATION_TTL = Duration.ofHours(24);
     public static final String PASSWORD_REQUIREMENTS_MESSAGE =
         "Password must be at least 8 characters and include an uppercase letter, a lowercase letter, and a digit.";
     public static final String INVITE_VALIDATE_PATH = "/api/invites/validate";
@@ -27,6 +29,8 @@ public class AuthUtil {
     public static final String AUTH_LOGIN_PATH = "/api/auth/login";
     public static final String AUTH_LOGOUT_PATH = "/api/auth/logout";
     public static final String AUTH_SESSION_PATH = "/api/auth/session";
+    public static final String AUTH_VERIFY_EMAIL_REQUEST_PATH = "/api/auth/verify-email/request";
+    public static final String AUTH_VERIFY_EMAIL_CONFIRM_PATH = "/api/auth/verify-email/confirm";
     public static final String AUTH_PROFILE_PATH = "/api/profile";
     public static final String PUBLIC_PROFILE_BASE_PATH = "/api/users";
     public static final int DISPLAY_NAME_MIN_LENGTH = 2;
@@ -41,6 +45,8 @@ public class AuthUtil {
         LOGIN,
         LOGOUT,
         SESSION,
+        VERIFY_EMAIL_REQUEST,
+        VERIFY_EMAIL_CONFIRM,
         PROFILE,
         PUBLIC_PROFILE,
         NO_MATCH
@@ -64,6 +70,12 @@ public class AuthUtil {
         }
         if (request.pathMatch(AUTH_SESSION_PATH)) {
             return Route.SESSION;
+        }
+        if (request.pathMatch(AUTH_VERIFY_EMAIL_REQUEST_PATH)) {
+            return Route.VERIFY_EMAIL_REQUEST;
+        }
+        if (request.pathMatch(AUTH_VERIFY_EMAIL_CONFIRM_PATH)) {
+            return Route.VERIFY_EMAIL_CONFIRM;
         }
         if (request.pathMatch(AUTH_PROFILE_PATH)) {
             return Route.PROFILE;
@@ -113,6 +125,10 @@ public class AuthUtil {
 
     public static String newSessionToken() {
         return "sess_" + randomToken(24);
+    }
+
+    public static String newEmailVerificationToken() {
+        return "verify_" + randomToken(24);
     }
 
     public static String hashToken(final String token) {
@@ -226,6 +242,24 @@ public class AuthUtil {
             .respond(event);
     }
 
+    public static void respondVerificationEmailRequest(
+        final Event<HttpObject, HttpObject> event,
+        final boolean sent,
+        final boolean alreadyVerified
+    ) {
+        event.payload().createCorsResponse()
+            .statusCode(200)
+            .body(Map.of("sent", sent, "alreadyVerified", alreadyVerified))
+            .respond(event);
+    }
+
+    public static void respondVerificationConfirmed(final Event<HttpObject, HttpObject> event) {
+        event.payload().createCorsResponse()
+            .statusCode(200)
+            .body(Map.of("verified", true))
+            .respond(event);
+    }
+
     public static void respondBadRequest(final Event<HttpObject, HttpObject> event, final String message) {
         event.payload().createCorsResponse()
             .statusCode(400)
@@ -247,9 +281,23 @@ public class AuthUtil {
             .respond(event);
     }
 
+    public static void respondTooManyRequests(final Event<HttpObject, HttpObject> event, final String message) {
+        event.payload().createCorsResponse()
+            .statusCode(429)
+            .body(Map.of("error", message))
+            .respond(event);
+    }
+
     public static void respondNotFound(final Event<HttpObject, HttpObject> event, final String message) {
         event.payload().createCorsResponse()
             .statusCode(404)
+            .body(Map.of("error", message))
+            .respond(event);
+    }
+
+    public static void respondServerError(final Event<HttpObject, HttpObject> event, final String message) {
+        event.payload().createCorsResponse()
+            .statusCode(500)
             .body(Map.of("error", message))
             .respond(event);
     }
@@ -272,6 +320,7 @@ public class AuthUtil {
             final Map<String, Object> user = new LinkedHashMap<>();
             user.put("displayName", sessionUser.displayName());
             user.put("email", sessionUser.email());
+            user.put("emailVerified", sessionUser.emailVerified());
             payload.put("user", user);
         }
         return payload;
@@ -283,6 +332,7 @@ public class AuthUtil {
         payload.put("bio", profile.bio());
         payload.put("email", profile.email());
         payload.put("emailPublic", profile.emailPublic());
+        payload.put("emailVerified", profile.emailVerified());
         return payload;
     }
 
@@ -312,5 +362,10 @@ public class AuthUtil {
         final byte[] bytes = new byte[byteCount];
         SECURE_RANDOM.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    public static String emailVerificationUrl(final String publicBaseUrl, final String token) {
+        final String normalizedBaseUrl = publicBaseUrl.endsWith("/") ? publicBaseUrl.substring(0, publicBaseUrl.length() - 1) : publicBaseUrl;
+        return normalizedBaseUrl + "/verify-email?token=" + URLEncoder.encode(token, StandardCharsets.UTF_8);
     }
 }

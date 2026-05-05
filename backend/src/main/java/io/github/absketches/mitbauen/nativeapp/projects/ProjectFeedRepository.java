@@ -1,5 +1,7 @@
 package io.github.absketches.mitbauen.nativeapp.projects;
 
+import io.github.absketches.mitbauen.nativeapp.db.SqlTransactions;
+
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -147,44 +149,31 @@ public class ProjectFeedRepository {
     }
 
     public static String createProject(final DataSource dataSource, final long ownerUserId, final ProjectInput input) {
-        try (Connection connection = dataSource.getConnection()) {
-            connection.setAutoCommit(false);
-            try {
+        return SqlTransactions.execute(
+            dataSource,
+            "Unable to create project",
+            connection -> {
                 final Instant now = Instant.now();
                 final String slug = nextSlug(connection, input.title());
                 final long projectId = insertProject(connection, ownerUserId, slug, input, now);
                 insertFounderRole(connection, projectId, input);
                 insertOpenRoles(connection, projectId, input.openRoles());
-                connection.commit();
                 return slug;
-            } catch (Exception exception) {
-                connection.rollback();
-                throw exception;
-            } finally {
-                connection.setAutoCommit(true);
             }
-        } catch (SQLException exception) {
-            throw new IllegalStateException("Unable to create project", exception);
-        }
+        );
     }
 
     public static void updateProject(final DataSource dataSource, final long projectId, final ProjectInput input) {
-        try (Connection connection = dataSource.getConnection()) {
-            connection.setAutoCommit(false);
-            try {
+        SqlTransactions.execute(
+            dataSource,
+            "Unable to update project",
+            connection -> {
                 updateProjectRow(connection, projectId, input);
                 updateFounderRole(connection, projectId, input);
                 replaceOpenRoles(connection, projectId, input.openRoles());
-                connection.commit();
-            } catch (Exception exception) {
-                connection.rollback();
-                throw exception;
-            } finally {
-                connection.setAutoCommit(true);
+                return null;
             }
-        } catch (SQLException exception) {
-            throw new IllegalStateException("Unable to update project", exception);
-        }
+        );
     }
 
     public static void deleteProject(final DataSource dataSource, final long projectId) {

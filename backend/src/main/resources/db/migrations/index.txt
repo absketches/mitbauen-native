@@ -3,3 +3,4 @@ V2__create_auth_and_invites.sql
 V3__seed_bootstrap_invite.sql
 V4__add_user_profiles.sql
 V5__replace_user_handle_with_public_id.sql
+V6__add_email_verification_and_account_cleanup.sql

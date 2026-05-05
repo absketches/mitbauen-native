@@ -82,6 +82,7 @@ export function ProjectDetailView({
       await onDelete(currentProject.slug)
     } catch (nextError) {
       setDeleteError(nextError instanceof Error ? nextError.message : copy.deleteError)
+    } finally {
       setDeleting(false)
     }
   }

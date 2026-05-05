@@ -164,11 +164,9 @@ export function ProjectFormView({
       })
     } catch (error) {
       setFormError(error instanceof Error ? error.message : copy.saveError)
+    } finally {
       setSubmitting(false)
-      return
     }
-
-    setSubmitting(false)
   }
 
   if (loadingProject) {

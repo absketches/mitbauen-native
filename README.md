@@ -60,6 +60,8 @@ If you only want to run the browser suite, use:
 docker compose up --build browser-tests
 ```
 
+Backend integration tests run against a real PostgreSQL Docker container. `mvn verify` in `backend/` therefore expects a working local Docker daemon in addition to Java 25.
+
 CI behavior:
 
 - `Native E2E` runs on pushes to every branch and on pull requests
@@ -110,6 +112,12 @@ The deployed shape is:
 - PostgreSQL data in its normal host-managed data directory or volume
 
 If the remote env file does not exist yet, `deploy.sh` will create it from the example template and stop, so you can fill in the real database credentials before rerunning the deployment. On a normal deploy, the installed `systemd` unit starts the app directly, and the app runs any pending embedded SQL migrations before opening the HTTP server.
+
+For email verification, add these runtime variables to `/etc/mitbauen/mitbauen.env`:
+
+- `app_public_base_url=https://www.mitbauen.space`
+- `app_email_from=Mitbauen <no-reply@mail.mitbauen.space>`
+- `resend_api_key=...`
 
 The production database volume is not meant to be cleaned up between releases. Forward-only migrations are tracked in `schema_migrations`, so new app versions only apply the SQL files that have not already been recorded.
 

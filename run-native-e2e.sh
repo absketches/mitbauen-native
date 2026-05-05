@@ -148,7 +148,11 @@ fi
 mkdir -p "$TMP_DIR"
 rm -rf "$TMP_DIR"/*
 
-app_service_http_port="$APP_PORT" "$BACKEND_BINARY" >"$TMP_DIR/backend.log" 2>&1 &
+app_service_http_port="$APP_PORT" \
+app_public_base_url="${app_public_base_url:-$PLAYWRIGHT_BASE_URL}" \
+app_email_from="${app_email_from:-Mitbauen <verify@mail.mitbauen.test>}" \
+resend_api_key="${resend_api_key:-test-key}" \
+"$BACKEND_BINARY" >"$TMP_DIR/backend.log" 2>&1 &
 BACKEND_PID=$!
 
 wait_for_http "http://127.0.0.1:${APP_PORT}/api/projects" "project feed API"

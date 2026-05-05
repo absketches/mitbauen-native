@@ -1,8 +1,10 @@
 import type { FormEvent } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { COPY, persistLanguage, readStoredLanguage, type Dictionary, type Language } from './i18n'
 import {
+  confirmEmailVerification,
   createProject,
+  deleteAccount,
   deleteProject,
   loadProfile,
   loadPublicProfile,
@@ -11,6 +13,7 @@ import {
   loadSession,
   loginUser,
   logoutUser,
+  requestEmailVerification,
   registerUser,
   updateProfile,
   updateProject,
@@ -33,10 +36,25 @@ import type {
   SessionResponse,
   UserProfile,
   UserProfilePayload,
+  VerificationConfirmResponse,
+  VerificationEmailRequestResponse,
 } from './types'
 
 type FeedNotice = 'created' | 'updated' | 'deleted' | null
 type DetailNotice = 'created' | 'updated' | null
+type VerificationNotice =
+  | { tone: 'success'; message: string }
+  | { tone: 'error'; message: string }
+  | null
+
+const VERIFICATION_DAILY_LIMIT_ERROR = 'A verification email can be sent only once in a day.'
+
+function isVerificationDailyLimitError(message: string): boolean {
+  const normalized = message.trim().toLowerCase()
+  return normalized === VERIFICATION_DAILY_LIMIT_ERROR.toLowerCase()
+    || normalized.includes('once in a day')
+    || normalized.includes('once per day')
+}
 
 type AppApi = {
   loadProjects: () => Promise<Project[]>
@@ -48,7 +66,10 @@ type AppApi = {
   registerUser: (payload: RegisterPayload) => Promise<SessionResponse>
   loginUser: (payload: LoginPayload) => Promise<SessionResponse>
   logoutUser: () => Promise<void>
+  requestEmailVerification: () => Promise<VerificationEmailRequestResponse>
+  confirmEmailVerification: (token: string) => Promise<VerificationConfirmResponse>
   updateProfile: (payload: UserProfilePayload) => Promise<UserProfile>
+  deleteAccount: () => Promise<SessionResponse>
   createProject: (payload: ProjectPayload) => Promise<ProjectMutationResponse>
   updateProject: (slug: string, payload: ProjectPayload) => Promise<ProjectMutationResponse>
   deleteProject: (slug: string) => Promise<void>
@@ -62,6 +83,7 @@ type RouteState =
   | { name: 'feed'; highlightSlug: string | null; notice: FeedNotice }
   | { name: 'login' }
   | { name: 'register'; inviteToken: string }
+  | { name: 'verifyEmail'; token: string }
   | { name: 'profile' }
   | { name: 'publicProfile'; publicId: string }
   | { name: 'projectCreate' }
@@ -78,7 +100,10 @@ const defaultApi: AppApi = {
   registerUser,
   loginUser,
   logoutUser,
+  requestEmailVerification,
+  confirmEmailVerification,
   updateProfile,
+  deleteAccount,
   createProject,
   updateProject,
   deleteProject,
@@ -95,7 +120,10 @@ export default function App({ api }: AppProps) {
     registerUser: register,
     loginUser: login,
     logoutUser: logout,
+    requestEmailVerification: resendVerification,
+    confirmEmailVerification: verifyEmail,
     updateProfile: saveProfile,
+    deleteAccount: destroyAccount,
     createProject: saveProject,
     updateProject: saveProjectEdits,
     deleteProject: destroyProject,
@@ -106,9 +134,12 @@ export default function App({ api }: AppProps) {
   const [route, setRoute] = useState<RouteState>(() => routeFromLocation(window.location))
   const [session, setSession] = useState<SessionResponse>({ authenticated: false })
   const [sessionLoading, setSessionLoading] = useState(true)
+  const [verificationSending, setVerificationSending] = useState(false)
+  const [verificationNotice, setVerificationNotice] = useState<VerificationNotice>(null)
   const [projects, setProjects] = useState<Project[]>([])
   const [projectsLoading, setProjectsLoading] = useState(true)
   const [projectsError, setProjectsError] = useState<string | null>(null)
+  const emailVerificationRequired = session.authenticated && !!session.user && !session.user.emailVerified
 
   useEffect(() => {
     document.documentElement.lang = language
@@ -181,6 +212,12 @@ export default function App({ api }: AppProps) {
     }
   }, [route, session, sessionLoading])
 
+  useEffect(() => {
+    if (session.user?.emailVerified) {
+      setVerificationNotice(null)
+    }
+  }, [session.user?.emailVerified])
+
   function handleAuthenticated(nextSession: SessionResponse) {
     setSession(nextSession)
     navigateTo('/', setRoute)
@@ -189,6 +226,7 @@ export default function App({ api }: AppProps) {
   async function handleLogout() {
     await logout()
     setSession({ authenticated: false })
+    setVerificationNotice(null)
     navigateTo('/', setRoute)
   }
 
@@ -208,6 +246,35 @@ export default function App({ api }: AppProps) {
       setSession(await fetchSession())
     } catch (nextError) {
       console.error(nextError)
+    }
+  }
+
+  async function handleRequestEmailVerification() {
+    setVerificationSending(true)
+    setVerificationNotice(null)
+    try {
+      const result = await resendVerification()
+      if (result.alreadyVerified) {
+        await refreshSessionState()
+        setVerificationNotice({ tone: 'success', message: copy.verification.alreadyVerified })
+      } else if (result.sent) {
+        setVerificationNotice({ tone: 'success', message: copy.verification.sent })
+      } else {
+        setVerificationNotice({ tone: 'error', message: copy.verification.dailyLimit })
+      }
+    } catch (nextError) {
+      const message =
+        nextError instanceof Error && isVerificationDailyLimitError(nextError.message)
+          ? copy.verification.dailyLimit
+          : nextError instanceof Error
+            ? nextError.message
+            : copy.verification.sendError
+      setVerificationNotice({
+        tone: 'error',
+        message,
+      })
+    } finally {
+      setVerificationSending(false)
     }
   }
 
@@ -233,6 +300,14 @@ export default function App({ api }: AppProps) {
     await saveProfile(payload)
     await refreshSessionState()
     void refreshProjectsAfterMutation()
+  }
+
+  async function handleDeleteAccount() {
+    const nextSession = await destroyAccount()
+    setSession(nextSession)
+    setVerificationNotice(null)
+    await refreshProjectsAfterMutation()
+    navigateTo('/', setRoute)
   }
 
   return (
@@ -271,9 +346,11 @@ export default function App({ api }: AppProps) {
           {sessionLoading ? <span className="page-header__status">{copy.header.loading}</span> : null}
           {!sessionLoading && session.authenticated && session.user ? (
             <>
-              <button className="ghost-button" type="button" onClick={() => navigateTo('/projects/new', setRoute)}>
-                {copy.header.createProject}
-              </button>
+              {session.user.emailVerified ? (
+                <button className="ghost-button" type="button" onClick={() => navigateTo('/projects/new', setRoute)}>
+                  {copy.header.createProject}
+                </button>
+              ) : null}
               <button className="ghost-button" type="button" onClick={() => navigateTo('/profile', setRoute)}>
                 {copy.header.profile}
               </button>
@@ -290,6 +367,24 @@ export default function App({ api }: AppProps) {
           ) : null}
         </div>
       </header>
+
+      {emailVerificationRequired ? (
+        <section className="auth-banner" aria-live="polite">
+          <div>
+            <strong>{copy.verification.bannerTitle}</strong>
+            <p>{copy.verification.bannerCopy}</p>
+            {verificationNotice ? (
+              <p className={verificationNotice.tone === 'error' ? 'auth-error' : undefined}>
+                {verificationNotice.message}
+              </p>
+            ) : null}
+          </div>
+
+          <button className="ghost-button" type="button" onClick={() => void handleRequestEmailVerification()} disabled={verificationSending}>
+            {verificationSending ? copy.verification.sending : copy.verification.resend}
+          </button>
+        </section>
+      ) : null}
 
       {route.name === 'feed' ? (
         <FeedView
@@ -324,6 +419,18 @@ export default function App({ api }: AppProps) {
         />
       ) : null}
 
+      {route.name === 'verifyEmail' ? (
+        <VerificationConfirmView
+          copy={copy.verification}
+          token={route.token}
+          authenticated={session.authenticated}
+          onConfirm={verifyEmail}
+          onRefreshSession={refreshSessionState}
+          onBack={() => navigateTo('/', setRoute)}
+          onSignIn={() => navigateTo('/login', setRoute)}
+        />
+      ) : null}
+
       {route.name === 'profile' ? (
         sessionLoading ? (
           <p className="state-card">{copy.profile.loading}</p>
@@ -332,6 +439,7 @@ export default function App({ api }: AppProps) {
             copy={copy.profile}
             onLoadProfile={fetchProfile}
             onSubmit={handleUpdateProfile}
+            onDeleteAccount={handleDeleteAccount}
             onBack={() => navigateTo('/', setRoute)}
           />
         ) : null
@@ -347,12 +455,18 @@ export default function App({ api }: AppProps) {
       ) : null}
 
       {route.name === 'projectCreate' ? (
-        <ProjectFormView
-          copy={copy.projectForm}
-          mode="create"
-          onSubmit={handleCreateProject}
-          onCancel={() => navigateTo('/', setRoute)}
-        />
+        sessionLoading ? (
+          <p className="state-card">{copy.header.loading}</p>
+        ) : emailVerificationRequired ? (
+          <VerificationRequiredView copy={copy.verification} onBack={() => navigateTo('/', setRoute)} />
+        ) : (
+          <ProjectFormView
+            copy={copy.projectForm}
+            mode="create"
+            onSubmit={handleCreateProject}
+            onCancel={() => navigateTo('/', setRoute)}
+          />
+        )
       ) : null}
 
       {route.name === 'projectDetail' ? (
@@ -369,14 +483,20 @@ export default function App({ api }: AppProps) {
       ) : null}
 
       {route.name === 'projectEdit' ? (
-        <ProjectFormView
-          copy={copy.projectForm}
-          mode="edit"
-          slug={route.slug}
-          loadProject={fetchProject}
-          onSubmit={(payload) => handleUpdateProject(route.slug, payload)}
-          onCancel={() => navigateTo(`/projects/${route.slug}`, setRoute)}
-        />
+        sessionLoading ? (
+          <p className="state-card">{copy.header.loading}</p>
+        ) : emailVerificationRequired ? (
+          <VerificationRequiredView copy={copy.verification} onBack={() => navigateTo(`/projects/${route.slug}`, setRoute)} />
+        ) : (
+          <ProjectFormView
+            copy={copy.projectForm}
+            mode="edit"
+            slug={route.slug}
+            loadProject={fetchProject}
+            onSubmit={(payload) => handleUpdateProject(route.slug, payload)}
+            onCancel={() => navigateTo(`/projects/${route.slug}`, setRoute)}
+          />
+        )
       ) : null}
     </main>
   )
@@ -677,6 +797,113 @@ function RegisterView({ copy, inviteToken, onAuthenticate, onNavigate, onRegiste
   )
 }
 
+type VerificationRequiredViewProps = {
+  copy: Dictionary['verification']
+  onBack: () => void
+}
+
+function VerificationRequiredView({ copy, onBack }: VerificationRequiredViewProps) {
+  return (
+    <section className="state-shell">
+      <article className="state-card">
+        <strong>{copy.requiredTitle}</strong>
+        <p className="state-card__copy">{copy.requiredCopy}</p>
+      </article>
+      <button className="ghost-button" type="button" onClick={onBack}>
+        {copy.back}
+      </button>
+    </section>
+  )
+}
+
+type VerificationConfirmViewProps = {
+  copy: Dictionary['verification']
+  token: string
+  authenticated: boolean
+  onConfirm: (token: string) => Promise<VerificationConfirmResponse>
+  onRefreshSession: () => Promise<void>
+  onBack: () => void
+  onSignIn: () => void
+}
+
+function VerificationConfirmView({
+  copy,
+  token,
+  authenticated,
+  onConfirm,
+  onRefreshSession,
+  onBack,
+  onSignIn,
+}: VerificationConfirmViewProps) {
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>(token ? 'loading' : 'error')
+  const [error, setError] = useState<string | null>(token ? null : copy.invalid)
+  const confirmedTokenRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (!token || confirmedTokenRef.current === token) {
+      return
+    }
+    confirmedTokenRef.current = token
+
+    onConfirm(token)
+      .then(() => {
+        if (!cancelled) {
+          setStatus('success')
+        }
+        void onRefreshSession().catch(() => undefined)
+      })
+      .catch((nextError) => {
+        if (!cancelled) {
+          setStatus('error')
+          setError(nextError instanceof Error ? nextError.message : copy.invalid)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [copy.invalid, onConfirm, onRefreshSession, token])
+
+  if (status === 'loading') {
+    return (
+      <section className="state-shell">
+        <article className="state-card">
+          <strong>{copy.loadingTitle}</strong>
+          <p className="state-card__copy">{copy.loadingCopy}</p>
+        </article>
+      </section>
+    )
+  }
+
+  if (status === 'success') {
+    return (
+      <section className="state-shell">
+        <article className="state-card state-card--success">
+          <strong>{copy.successTitle}</strong>
+          <p className="state-card__copy">{authenticated ? copy.successCopyRefresh : copy.successCopySignIn}</p>
+        </article>
+        <button className="ghost-button" type="button" onClick={authenticated ? onBack : onSignIn}>
+          {authenticated ? copy.refresh : copy.signIn}
+        </button>
+      </section>
+    )
+  }
+
+  return (
+    <section className="state-shell">
+      <article className="state-card state-card--error">
+        <strong>{copy.errorTitle}</strong>
+        <p className="state-card__copy">{error ?? copy.invalid}</p>
+      </article>
+      <button className="ghost-button" type="button" onClick={authenticated ? onBack : onSignIn}>
+        {authenticated ? copy.back : copy.signIn}
+      </button>
+    </section>
+  )
+}
+
 function navigateTo(path: string, onNavigate: (route: RouteState) => void) {
   window.history.pushState({}, '', path)
   onNavigate(routeFromLocation(window.location))
@@ -692,6 +919,9 @@ function routeFromLocation(location: Location): RouteState {
   }
   if (location.pathname === '/register') {
     return { name: 'register', inviteToken: search.get('invite') ?? '' }
+  }
+  if (location.pathname === '/verify-email') {
+    return { name: 'verifyEmail', token: search.get('token') ?? '' }
   }
   if (location.pathname === '/profile') {
     return { name: 'profile' }

@@ -1,6 +1,9 @@
 package io.github.absketches.mitbauen.nativeapp;
 
 import io.github.absketches.mitbauen.nativeapp.auth.AuthService;
+import io.github.absketches.mitbauen.nativeapp.auth.EmailVerificationSettings;
+import io.github.absketches.mitbauen.nativeapp.auth.ResendVerificationEmailSender;
+import io.github.absketches.mitbauen.nativeapp.auth.VerificationEmailSender;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseConfig;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
 import io.github.absketches.mitbauen.nativeapp.db.MigrationRunner;
@@ -15,12 +18,17 @@ public class MitbauenApplication {
 
     public static void main(final String[] ignoredArgs) {
         final DatabaseRuntime databaseRuntime = dbStartup();
+        final EmailVerificationSettings emailVerificationSettings = EmailVerificationSettings.fromEnvironment();
+        final VerificationEmailSender verificationEmailSender = new ResendVerificationEmailSender(
+            emailVerificationSettings.resendApiKey(),
+            emailVerificationSettings.emailFrom()
+        );
         final Nano nano = new Nano(
                 new HttpServer(),
                 new HttpClient(),
                 new AppShellService(),
                 new ProjectFeedService(databaseRuntime),
-                new AuthService(databaseRuntime)
+                new AuthService(databaseRuntime, emailVerificationSettings, verificationEmailSender)
         );
         nano.subscribeEvent(Context.EVENT_APP_SHUTDOWN, event -> databaseRuntime.stop());
     }

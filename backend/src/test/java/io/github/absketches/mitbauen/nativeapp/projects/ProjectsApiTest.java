@@ -4,7 +4,10 @@ import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeList;
 import io.github.absketches.mitbauen.nativeapp.auth.AuthService;
 import io.github.absketches.mitbauen.nativeapp.auth.AuthUtil;
+import io.github.absketches.mitbauen.nativeapp.auth.EmailVerificationSettings;
+import io.github.absketches.mitbauen.nativeapp.auth.VerificationEmailSender;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
+import io.github.absketches.mitbauen.nativeapp.db.PostgresTestDatabase;
 import io.github.absketches.mitbauen.nativeapp.db.TestDatabaseMigrations;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -15,21 +18,26 @@ import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ProjectsApiTest {
 
     private static final String OPEN_INVITE = "test-open-invite";
     private static final String PRIMARY_PASSWORD = "SuperSafe1";
+    private static final EmailVerificationSettings EMAIL_VERIFICATION_SETTINGS =
+        new EmailVerificationSettings("https://www.mitbauen.space", "Mitbauen <no-reply@mail.mitbauen.space>", "");
+    private static final VerificationEmailSender NOOP_VERIFICATION_EMAIL_SENDER =
+        (recipientEmail, recipientName, verificationUrl) -> { };
 
     private Nano nano;
     private DatabaseRuntime databaseRuntime;
 
     @AfterEach
     void tearDown() {
-        nano.stop(ProjectsApiTest.class).waitForStop();
+        if (nano != null) {
+            nano.stop(ProjectsApiTest.class).waitForStop();
+            nano = null;
+        }
         if (databaseRuntime != null) {
             databaseRuntime.stop();
             databaseRuntime = null;
@@ -98,6 +106,23 @@ class ProjectsApiTest {
     }
 
     @Test
+    void blocksProjectCreationUntilTheEmailIsVerified() {
+        nano = newTestNano();
+        final String sessionCookie = registerAndReturnSessionCookie("owner.unverified@example.test", "Una Verified", false);
+
+        final HttpObject response = sendJson("/api/projects", "POST", Map.of(
+            "title", "Shared Workshop Hours",
+            "description", "A lightweight scheduling and handoff tool for neighborhood workshop nights so volunteer hosts can coordinate setup, cleanup, and tool access without relying on private chat threads.",
+            "founderRole", "Founder + Host",
+            "founderCommitment", "I am already running the sessions, opening the space, and coordinating the volunteer hosts every week.",
+            "openRoles", List.of(Map.of("title", "Operations Support", "commitment", "Help coordinate setup and handoff windows."))
+        ), sessionCookie);
+
+        assertThat(response.statusCode()).isEqualTo(403);
+        assertThat(response.bodyAsMap().asString("error")).isEqualTo("Verify your email before creating a project.");
+    }
+
+    @Test
     void rejectsProjectWithoutOpenRoles() {
         nano = newTestNano();
         final String sessionCookie = registerAndReturnSessionCookie("owner.two@example.test", "Nora Builder");
@@ -163,6 +188,34 @@ class ProjectsApiTest {
     }
 
     @Test
+    void blocksProjectEditingUntilTheEmailIsVerified() {
+        nano = newTestNano();
+        final String ownerEmail = "owner.edit.unverified@example.test";
+        final String ownerCookie = registerAndReturnSessionCookie(ownerEmail, "Edit Unverified");
+
+        final String slug = sendJson("/api/projects", "POST", Map.of(
+            "title", "Neighborhood Heat Watch",
+            "description", "A small coordination project for mapping heat risk and volunteer check-ins so local support teams can reach vulnerable residents faster.",
+            "founderRole", "Founder + Coordinator",
+            "founderCommitment", "I am organizing the first volunteer routes, resident outreach, and weekly coordination sessions myself.",
+            "openRoles", List.of(Map.of("title", "Data Volunteer", "commitment", "Help update the first block-by-block conditions."))
+        ), ownerCookie).bodyAsMap().asString("slug");
+
+        markEmailUnverified(ownerEmail);
+
+        final HttpObject response = sendJson("/api/projects/" + slug, "PUT", Map.of(
+            "title", "Neighborhood Heat Watch",
+            "description", "Updated description should be blocked.",
+            "founderRole", "Founder + Coordinator",
+            "founderCommitment", "Updated commitment should be blocked too.",
+            "openRoles", List.of(Map.of("title", "Data Volunteer", "commitment", "Still helping.")) 
+        ), ownerCookie);
+
+        assertThat(response.statusCode()).isEqualTo(403);
+        assertThat(response.bodyAsMap().asString("error")).isEqualTo("Verify your email before editing a project.");
+    }
+
+    @Test
     void onlyProjectOwnerCanDelete() {
         nano = newTestNano();
         final String ownerCookie = registerAndReturnSessionCookie("owner.delete@example.test", "Owner Delete");
@@ -193,23 +246,90 @@ class ProjectsApiTest {
             .doesNotContain(slug);
     }
 
+    @Test
+    void blocksProjectDeletionUntilTheEmailIsVerified() {
+        nano = newTestNano();
+        final String ownerEmail = "owner.delete.unverified@example.test";
+        final String ownerCookie = registerAndReturnSessionCookie(ownerEmail, "Delete Unverified");
+
+        final String slug = sendJson("/api/projects", "POST", Map.of(
+            "title", "Shared Pantry Routes",
+            "description", "A route-planning effort for volunteer pantry pickups and deliveries so neighborhoods can coordinate stock and drop-offs more reliably.",
+            "founderRole", "Founder + Route Lead",
+            "founderCommitment", "I am already running the first pickup routes, scheduling volunteers, and coordinating pantry partners each week.",
+            "openRoles", List.of(Map.of("title", "Volunteer Dispatcher", "commitment", "Help update delivery shifts and route changes."))
+        ), ownerCookie).bodyAsMap().asString("slug");
+
+        markEmailUnverified(ownerEmail);
+
+        final HttpObject response = sendRequest("/api/projects/" + slug, "DELETE", null, ownerCookie);
+        assertThat(response.statusCode()).isEqualTo(403);
+        assertThat(response.bodyAsMap().asString("error")).isEqualTo("Verify your email before deleting a project.");
+
+        final HttpObject stillExists = sendGet("/api/projects/" + slug, null);
+        assertThat(stillExists.statusCode()).isEqualTo(200);
+    }
+
+    @Test
+    void deletingAnAccountRemovesOwnedProjects() {
+        nano = newTestNano();
+        final String ownerCookie = registerAndReturnSessionCookie("owner.account.delete@example.test", "Owner Account Delete");
+
+        final String slug = sendJson("/api/projects", "POST", Map.of(
+            "title", "Mutual Aid Logistics",
+            "description", "A coordination project for neighborhood mutual aid teams so delivery runs, supplies, and volunteer handoffs can be managed from one shared operational view.",
+            "founderRole", "Founder + Operations Lead",
+            "founderCommitment", "I am already coordinating routes, volunteers, and supply pickups every week while running the first delivery shifts myself.",
+            "openRoles", List.of(Map.of("title", "Logistics Support", "commitment", "Coordinate route and pickup changes."))
+        ), ownerCookie).bodyAsMap().asString("slug");
+
+        final HttpObject deleteAccount = sendRequest("/api/profile", "DELETE", null, ownerCookie);
+        assertThat(deleteAccount.statusCode()).isEqualTo(200);
+        assertThat(deleteAccount.bodyAsMap().asBoolean("authenticated")).isFalse();
+
+        final HttpObject missingDetail = sendGet("/api/projects/" + slug, null);
+        assertThat(missingDetail.statusCode()).isEqualTo(404);
+
+        final TypeList feedProjects = sendGet("/api/projects", null).bodyAsMap().asList("projects");
+        assertThat(feedProjects.stream()
+            .map(project -> new LinkedTypeMap((Map<?, ?>) project).asString("slug"))
+            .toList())
+            .doesNotContain(slug);
+    }
+
     private Nano newTestNano() {
-        final String jdbcUrl = "jdbc:h2:mem:mitbauen_projects_" + UUID.randomUUID() + ";MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1";
-        TestDatabaseMigrations.migrate(jdbcUrl, "sa", "");
-        TestDatabaseMigrations.seedInvite(jdbcUrl, "sa", "", OPEN_INVITE);
-        databaseRuntime = new DatabaseRuntime(jdbcUrl, "sa", "", "mitbauen-test-projects");
+        return newTestNano(EMAIL_VERIFICATION_SETTINGS, NOOP_VERIFICATION_EMAIL_SENDER);
+    }
+
+    private Nano newTestNano(
+        final EmailVerificationSettings emailVerificationSettings,
+        final VerificationEmailSender verificationEmailSender
+    ) {
+        final PostgresTestDatabase.DatabaseConfig databaseConfig = PostgresTestDatabase.createDatabase("projects");
+        TestDatabaseMigrations.migrate(databaseConfig.jdbcUrl(), databaseConfig.jdbcUser(), databaseConfig.jdbcPassword());
+        TestDatabaseMigrations.seedInvite(databaseConfig.jdbcUrl(), databaseConfig.jdbcUser(), databaseConfig.jdbcPassword(), OPEN_INVITE);
+        databaseRuntime = new DatabaseRuntime(
+            databaseConfig.jdbcUrl(),
+            databaseConfig.jdbcUser(),
+            databaseConfig.jdbcPassword(),
+            "mitbauen-test-projects"
+        );
         return new Nano(
             Map.of(
                 HttpServer.CONFIG_SERVICE_HTTP_PORT, 0
             ),
             new HttpServer(),
             new HttpClient(),
-            new AuthService(databaseRuntime),
+            new AuthService(databaseRuntime, emailVerificationSettings, verificationEmailSender),
             new ProjectFeedService(databaseRuntime)
         );
     }
 
     private String registerAndReturnSessionCookie(final String email, final String displayName) {
+        return registerAndReturnSessionCookie(email, displayName, true);
+    }
+
+    private String registerAndReturnSessionCookie(final String email, final String displayName, final boolean markEmailVerified) {
         final HttpObject response = sendJson("/api/auth/register", "POST", Map.of(
             "inviteToken", OPEN_INVITE,
             "email", email,
@@ -217,6 +337,9 @@ class ProjectsApiTest {
             "password", PRIMARY_PASSWORD
         ), null);
         assertThat(response.statusCode()).isEqualTo(201);
+        if (markEmailVerified) {
+            markEmailVerified(email);
+        }
         return cookieValue(response, AuthUtil.AUTH_SESSION_COOKIE);
     }
 
@@ -266,5 +389,35 @@ class ProjectsApiTest {
         final int valueStart = start + prefix.length();
         final int valueEnd = setCookie.indexOf(';', valueStart);
         return valueEnd >= 0 ? setCookie.substring(valueStart, valueEnd) : setCookie.substring(valueStart);
+    }
+
+    private void markEmailVerified(final String email) {
+        final String sql = """
+            update users
+            set email_verified_at = current_timestamp
+            where email = ?
+            """;
+        try (var connection = databaseRuntime.dataSource().getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, email);
+            assertThat(statement.executeUpdate()).isEqualTo(1);
+        } catch (Exception exception) {
+            throw new IllegalStateException("Unable to mark email verified for " + email, exception);
+        }
+    }
+
+    private void markEmailUnverified(final String email) {
+        final String sql = """
+            update users
+            set email_verified_at = null
+            where email = ?
+            """;
+        try (var connection = databaseRuntime.dataSource().getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, email);
+            assertThat(statement.executeUpdate()).isEqualTo(1);
+        } catch (Exception exception) {
+            throw new IllegalStateException("Unable to mark email unverified for " + email, exception);
+        }
     }
 }
