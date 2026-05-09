@@ -1,11 +1,15 @@
 package io.github.absketches.mitbauen.nativeapp.auth;
 
+import berlin.yuna.typemap.logic.JsonEncoder;
+import berlin.yuna.typemap.model.LinkedTypeMap;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.List;
 
 public class ResendVerificationEmailSender implements VerificationEmailSender {
 
@@ -25,20 +29,7 @@ public class ResendVerificationEmailSender implements VerificationEmailSender {
 
     @Override
     public void sendVerificationEmail(final String recipientEmail, final String recipientName, final String verificationUrl) {
-        final String payload = """
-            {
-              "from": "%s",
-              "to": ["%s"],
-              "subject": "Verify your email address",
-              "html": "%s",
-              "text": "%s"
-            }
-            """.formatted(
-            jsonEscape(emailFrom),
-            jsonEscape(recipientEmail),
-            jsonEscape(htmlBody(recipientName, verificationUrl)),
-            jsonEscape(textBody(recipientName, verificationUrl))
-        );
+        final String payload = verificationEmailPayload(emailFrom, recipientEmail, recipientName, verificationUrl);
 
         final HttpRequest request = HttpRequest.newBuilder(RESEND_EMAILS_ENDPOINT)
             .timeout(Duration.ofSeconds(15))
@@ -58,6 +49,21 @@ public class ResendVerificationEmailSender implements VerificationEmailSender {
         } catch (IOException exception) {
             throw new IllegalStateException("Unable to send verification email", exception);
         }
+    }
+
+    public static String verificationEmailPayload(
+        final String emailFrom,
+        final String recipientEmail,
+        final String recipientName,
+        final String verificationUrl
+    ) {
+        return JsonEncoder.toJson(LinkedTypeMap.linkedMapOf(
+            "from", emailFrom,
+            "to", List.of(recipientEmail),
+            "subject", "Verify your email address",
+            "html", htmlBody(recipientName, verificationUrl),
+            "text", textBody(recipientName, verificationUrl)
+        ));
     }
 
     private static String htmlBody(final String recipientName, final String verificationUrl) {
@@ -99,14 +105,6 @@ public class ResendVerificationEmailSender implements VerificationEmailSender {
             bitte bestätige deine E-Mail-Adresse, um dein Mitbauen-Konto zu aktivieren:
             %s
             """.formatted(recipientName, verificationUrl, recipientName, verificationUrl);
-    }
-
-    private static String jsonEscape(final String value) {
-        return value
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r");
     }
 
     private static String htmlEscape(final String value) {

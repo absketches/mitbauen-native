@@ -498,6 +498,10 @@ export default function App({ api }: AppProps) {
           />
         )
       ) : null}
+
+      <footer className="page-footer">
+        <p>{copy.footer.dataProtection}</p>
+      </footer>
     </main>
   )
 }

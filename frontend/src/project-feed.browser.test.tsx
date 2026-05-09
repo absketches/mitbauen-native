@@ -72,6 +72,7 @@ test('renders the public project feed in browser mode', async () => {
   await expect.element(screen.getByText('Finde Projekte mit konkretem Bedarf.')).toBeVisible()
   await expect.element(screen.getByText('Noch keine Projekte.')).toBeVisible()
   await expect.element(screen.getByText('Hier erscheinen Projekte, sobald das erste veröffentlicht ist.')).toBeVisible()
+  await expect.element(screen.getByText('Alle Plattformdaten werden in Deutschland gespeichert und gemäß EU-Datenschutzstandards behandelt.')).toBeVisible()
   await expect.element(screen.getByRole('button', { name: 'Anmelden' })).toBeVisible()
   expect(document.body.textContent).not.toContain('Join Mitbauen.')
 })

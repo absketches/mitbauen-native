@@ -138,6 +138,19 @@ textarea {
   font-size: 0.95rem;
 }
 
+.page-footer {
+  margin-top: clamp(2.5rem, 6vw, 4.5rem);
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+  color: rgba(15, 15, 15, 0.56);
+  font-size: 0.9rem;
+}
+
+.page-footer p {
+  max-width: 42rem;
+  margin: 0;
+}
+
 .language-switch {
   display: inline-flex;
   align-items: center;

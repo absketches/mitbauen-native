@@ -21,6 +21,9 @@ export const COPY = {
       englishLong: 'English',
       germanLong: 'Deutsch',
     },
+    footer: {
+      dataProtection: 'All platform data is stored in Germany and handled in accordance with EU data protection standards.',
+    },
     feed: {
       eyebrow: 'Mitbauen Projects',
       title: 'Find projects that need contributors.',
@@ -234,6 +237,9 @@ export const COPY = {
       germanShort: 'DE',
       englishLong: 'English',
       germanLong: 'Deutsch',
+    },
+    footer: {
+      dataProtection: 'Alle Plattformdaten werden in Deutschland gespeichert und gemäß EU-Datenschutzstandards behandelt.',
     },
     feed: {
       eyebrow: 'Mitbauen Projekte',
