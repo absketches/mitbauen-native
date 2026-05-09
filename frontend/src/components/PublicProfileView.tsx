@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ApiError } from '../api'
 import type { Dictionary } from '../i18n'
 import type { PublicUserProfile } from '../types'
 
@@ -31,7 +32,13 @@ export function PublicProfileView({ copy, publicId, onLoadProfile, onBack }: Pub
         if (cancelled) {
           return
         }
-        setError(nextError instanceof Error ? nextError.message : copy.error)
+        if (nextError instanceof ApiError && nextError.code === 'USER_DELETED') {
+          setError(copy.deleted)
+        } else if (nextError instanceof ApiError) {
+          setError(copy.error)
+        } else {
+          setError(nextError instanceof Error ? nextError.message : copy.error)
+        }
         setLoading(false)
       })
 

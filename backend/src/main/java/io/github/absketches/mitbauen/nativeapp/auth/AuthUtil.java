@@ -1,6 +1,7 @@
 package io.github.absketches.mitbauen.nativeapp.auth;
 
 import berlin.yuna.typemap.model.LinkedTypeMap;
+import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
 import org.mindrot.jbcrypt.BCrypt;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.HttpObject;
@@ -22,8 +23,32 @@ public class AuthUtil {
     public static final String AUTH_SESSION_COOKIE = "mitbauen_session";
     public static final Duration SESSION_TTL = Duration.ofDays(14);
     public static final Duration EMAIL_VERIFICATION_TTL = Duration.ofHours(24);
-    public static final String PASSWORD_REQUIREMENTS_MESSAGE =
-        "Password must be at least 8 characters and include an uppercase letter, a lowercase letter, and a digit.";
+    public static final Duration PASSWORD_RESET_TTL = Duration.ofHours(1);
+    public static final String REGISTRATION_REQUIRED_CODE = "AUTH_REGISTRATION_REQUIRED";
+    public static final String PASSWORD_REQUIREMENTS_CODE = "AUTH_PASSWORD_REQUIREMENTS";
+    public static final String INVITE_INVALID_CODE = "AUTH_INVITE_INVALID";
+    public static final String EMAIL_EXISTS_CODE = "AUTH_EMAIL_EXISTS";
+    public static final String LOGIN_REQUIRED_CODE = "AUTH_LOGIN_REQUIRED";
+    public static final String LOGIN_INVALID_CODE = "AUTH_LOGIN_INVALID";
+    public static final String PROFILE_AUTH_REQUIRED_CODE = "AUTH_PROFILE_AUTH_REQUIRED";
+    public static final String PROFILE_NOT_FOUND_CODE = "AUTH_PROFILE_NOT_FOUND";
+    public static final String PROFILE_UPDATE_AUTH_REQUIRED_CODE = "AUTH_PROFILE_UPDATE_AUTH_REQUIRED";
+    public static final String ACCOUNT_DELETE_AUTH_REQUIRED_CODE = "AUTH_ACCOUNT_DELETE_AUTH_REQUIRED";
+    public static final String VERIFICATION_AUTH_REQUIRED_CODE = "AUTH_VERIFICATION_AUTH_REQUIRED";
+    public static final String VERIFICATION_DAILY_LIMIT_CODE = "AUTH_VERIFICATION_DAILY_LIMIT";
+    public static final String VERIFICATION_SEND_FAILED_CODE = "AUTH_VERIFICATION_SEND_FAILED";
+    public static final String VERIFICATION_TOKEN_REQUIRED_CODE = "AUTH_VERIFICATION_TOKEN_REQUIRED";
+    public static final String VERIFICATION_TOKEN_INVALID_CODE = "AUTH_VERIFICATION_TOKEN_INVALID";
+    public static final String PASSWORD_RESET_EMAIL_REQUIRED_CODE = "AUTH_PASSWORD_RESET_EMAIL_REQUIRED";
+    public static final String PASSWORD_RESET_SEND_FAILED_CODE = "AUTH_PASSWORD_RESET_SEND_FAILED";
+    public static final String PASSWORD_RESET_TOKEN_REQUIRED_CODE = "AUTH_PASSWORD_RESET_TOKEN_REQUIRED";
+    public static final String PASSWORD_RESET_TOKEN_INVALID_CODE = "AUTH_PASSWORD_RESET_TOKEN_INVALID";
+    public static final String EMAIL_REQUIRED_CODE = "AUTH_EMAIL_REQUIRED";
+    public static final String EMAIL_TOO_LONG_CODE = "AUTH_EMAIL_TOO_LONG";
+    public static final String EMAIL_INVALID_CODE = "AUTH_EMAIL_INVALID";
+    public static final String DISPLAY_NAME_INVALID_CODE = "AUTH_DISPLAY_NAME_INVALID";
+    public static final String BIO_TOO_LONG_CODE = "AUTH_BIO_TOO_LONG";
+    public static final String METHOD_NOT_ALLOWED_CODE = "METHOD_NOT_ALLOWED";
     public static final String INVITE_VALIDATE_PATH = "/api/invites/validate";
     public static final String AUTH_REGISTER_PATH = "/api/auth/register";
     public static final String AUTH_LOGIN_PATH = "/api/auth/login";
@@ -31,6 +56,8 @@ public class AuthUtil {
     public static final String AUTH_SESSION_PATH = "/api/auth/session";
     public static final String AUTH_VERIFY_EMAIL_REQUEST_PATH = "/api/auth/verify-email/request";
     public static final String AUTH_VERIFY_EMAIL_CONFIRM_PATH = "/api/auth/verify-email/confirm";
+    public static final String AUTH_PASSWORD_RESET_REQUEST_PATH = "/api/auth/password-reset/request";
+    public static final String AUTH_PASSWORD_RESET_CONFIRM_PATH = "/api/auth/password-reset/confirm";
     public static final String AUTH_PROFILE_PATH = "/api/profile";
     public static final String PUBLIC_PROFILE_BASE_PATH = "/api/users";
     public static final int DISPLAY_NAME_MIN_LENGTH = 2;
@@ -47,6 +74,8 @@ public class AuthUtil {
         SESSION,
         VERIFY_EMAIL_REQUEST,
         VERIFY_EMAIL_CONFIRM,
+        PASSWORD_RESET_REQUEST,
+        PASSWORD_RESET_CONFIRM,
         PROFILE,
         PUBLIC_PROFILE,
         NO_MATCH
@@ -76,6 +105,12 @@ public class AuthUtil {
         }
         if (request.pathMatch(AUTH_VERIFY_EMAIL_CONFIRM_PATH)) {
             return Route.VERIFY_EMAIL_CONFIRM;
+        }
+        if (request.pathMatch(AUTH_PASSWORD_RESET_REQUEST_PATH)) {
+            return Route.PASSWORD_RESET_REQUEST;
+        }
+        if (request.pathMatch(AUTH_PASSWORD_RESET_CONFIRM_PATH)) {
+            return Route.PASSWORD_RESET_CONFIRM;
         }
         if (request.pathMatch(AUTH_PROFILE_PATH)) {
             return Route.PROFILE;
@@ -131,6 +166,10 @@ public class AuthUtil {
         return "verify_" + randomToken(24);
     }
 
+    public static String newPasswordResetToken() {
+        return "reset_" + randomToken(24);
+    }
+
     public static String hashToken(final String token) {
         try {
             final MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -180,17 +219,11 @@ public class AuthUtil {
     public static void respondInviteValidation(final Event<HttpObject, HttpObject> event) {
         final Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("valid", true);
-        event.payload().createCorsResponse()
-            .statusCode(200)
-            .body(payload)
-            .respond(event);
+        ResponseUtil.respondOk(event, payload);
     }
 
     public static void respondInvalidInvite(final Event<HttpObject, HttpObject> event) {
-        event.payload().createCorsResponse()
-            .statusCode(200)
-            .body(Map.of("valid", false))
-            .respond(event);
+        ResponseUtil.respondOk(event, Map.of("valid", false));
     }
 
     public static void respondAuthSuccess(
@@ -199,7 +232,7 @@ public class AuthUtil {
         final String sessionCookie,
         final int statusCode
     ) {
-        final HttpObject response = event.payload().createCorsResponse()
+        final HttpObject response = ResponseUtil.create(event)
             .statusCode(statusCode)
             .header("Set-Cookie", sessionCookie)
             .body(sessionPayload(true, sessionUser));
@@ -207,35 +240,23 @@ public class AuthUtil {
     }
 
     public static void respondSession(final Event<HttpObject, HttpObject> event, final SessionUser sessionUser) {
-        event.payload().createCorsResponse()
-            .statusCode(200)
-            .body(sessionPayload(true, sessionUser))
-            .respond(event);
+        ResponseUtil.respondOk(event, sessionPayload(true, sessionUser));
     }
 
     public static void respondAnonymousSession(final Event<HttpObject, HttpObject> event) {
-        event.payload().createCorsResponse()
-            .statusCode(200)
-            .body(Map.of("authenticated", false))
-            .respond(event);
+        ResponseUtil.respondOk(event, Map.of("authenticated", false));
     }
 
     public static void respondProfile(final Event<HttpObject, HttpObject> event, final UserProfile profile) {
-        event.payload().createCorsResponse()
-            .statusCode(200)
-            .body(Map.of("profile", profilePayload(profile)))
-            .respond(event);
+        ResponseUtil.respondOk(event, Map.of("profile", profilePayload(profile)));
     }
 
     public static void respondPublicProfile(final Event<HttpObject, HttpObject> event, final UserProfile profile) {
-        event.payload().createCorsResponse()
-            .statusCode(200)
-            .body(Map.of("profile", publicProfilePayload(profile)))
-            .respond(event);
+        ResponseUtil.respondOk(event, Map.of("profile", publicProfilePayload(profile)));
     }
 
     public static void respondLogout(final Event<HttpObject, HttpObject> event, final String clearedCookie) {
-        event.payload().createCorsResponse()
+        ResponseUtil.create(event)
             .statusCode(200)
             .header("Set-Cookie", clearedCookie)
             .body(Map.of("authenticated", false))
@@ -247,70 +268,55 @@ public class AuthUtil {
         final boolean sent,
         final boolean alreadyVerified
     ) {
-        event.payload().createCorsResponse()
-            .statusCode(200)
-            .body(Map.of("sent", sent, "alreadyVerified", alreadyVerified))
-            .respond(event);
+        ResponseUtil.respondOk(event, Map.of("sent", sent, "alreadyVerified", alreadyVerified));
     }
 
     public static void respondVerificationConfirmed(final Event<HttpObject, HttpObject> event) {
-        event.payload().createCorsResponse()
-            .statusCode(200)
-            .body(Map.of("verified", true))
-            .respond(event);
+        ResponseUtil.respondOk(event, Map.of("verified", true));
     }
 
-    public static void respondBadRequest(final Event<HttpObject, HttpObject> event, final String message) {
-        event.payload().createCorsResponse()
-            .statusCode(400)
-            .body(Map.of("error", message))
-            .respond(event);
+    public static void respondPasswordResetRequest(final Event<HttpObject, HttpObject> event) {
+        ResponseUtil.respondOk(event, Map.of("requested", true));
     }
 
-    public static void respondUnauthorized(final Event<HttpObject, HttpObject> event, final String message) {
-        event.payload().createCorsResponse()
-            .statusCode(401)
-            .body(Map.of("error", message))
-            .respond(event);
+    public static void respondPasswordResetConfirmed(final Event<HttpObject, HttpObject> event) {
+        ResponseUtil.respondOk(event, Map.of("reset", true));
     }
 
-    public static void respondConflict(final Event<HttpObject, HttpObject> event, final String message) {
-        event.payload().createCorsResponse()
-            .statusCode(409)
-            .body(Map.of("error", message))
-            .respond(event);
+    public static void respondBadRequest(final Event<HttpObject, HttpObject> event, final String code) {
+        ResponseUtil.respondBadRequest(event, code);
     }
 
-    public static void respondTooManyRequests(final Event<HttpObject, HttpObject> event, final String message) {
-        event.payload().createCorsResponse()
-            .statusCode(429)
-            .body(Map.of("error", message))
-            .respond(event);
+    public static void respondUnauthorized(final Event<HttpObject, HttpObject> event, final String code) {
+        ResponseUtil.respondUnauthorized(event, code);
     }
 
-    public static void respondNotFound(final Event<HttpObject, HttpObject> event, final String message) {
-        event.payload().createCorsResponse()
-            .statusCode(404)
-            .body(Map.of("error", message))
-            .respond(event);
+    public static void respondConflict(final Event<HttpObject, HttpObject> event, final String code) {
+        ResponseUtil.respondConflict(event, code);
     }
 
-    public static void respondServerError(final Event<HttpObject, HttpObject> event, final String message) {
-        event.payload().createCorsResponse()
-            .statusCode(500)
-            .body(Map.of("error", message))
-            .respond(event);
+    public static void respondTooManyRequests(final Event<HttpObject, HttpObject> event, final String code) {
+        ResponseUtil.respondTooManyRequests(event, code);
+    }
+
+    public static void respondNotFound(final Event<HttpObject, HttpObject> event, final String code) {
+        ResponseUtil.respondNotFound(event, code);
+    }
+
+    public static void respondDeletedUser(final Event<HttpObject, HttpObject> event) {
+        ResponseUtil.respondJson(event, 410, Map.of("code", "USER_DELETED"));
+    }
+
+    public static void respondServerError(final Event<HttpObject, HttpObject> event, final String code) {
+        ResponseUtil.respondServerError(event, code);
     }
 
     public static void respondOptions(final Event<HttpObject, HttpObject> event) {
-        event.payload().createCorsResponse().respond(event);
+        ResponseUtil.respondOptions(event);
     }
 
     public static void respondMethodNotAllowed(final Event<HttpObject, HttpObject> event) {
-        event.payload().createCorsResponse()
-            .statusCode(405)
-            .body(Map.of("error", "Method Not Allowed", "path", event.payload().path()))
-            .respond(event);
+        ResponseUtil.respondMethodNotAllowed(event, METHOD_NOT_ALLOWED_CODE);
     }
 
     private static Map<String, Object> sessionPayload(final boolean authenticated, final SessionUser sessionUser) {
@@ -367,5 +373,10 @@ public class AuthUtil {
     public static String emailVerificationUrl(final String publicBaseUrl, final String token) {
         final String normalizedBaseUrl = publicBaseUrl.endsWith("/") ? publicBaseUrl.substring(0, publicBaseUrl.length() - 1) : publicBaseUrl;
         return normalizedBaseUrl + "/verify-email?token=" + URLEncoder.encode(token, StandardCharsets.UTF_8);
+    }
+
+    public static String passwordResetUrl(final String publicBaseUrl, final String token) {
+        final String normalizedBaseUrl = publicBaseUrl.endsWith("/") ? publicBaseUrl.substring(0, publicBaseUrl.length() - 1) : publicBaseUrl;
+        return normalizedBaseUrl + "/reset-password?token=" + URLEncoder.encode(token, StandardCharsets.UTF_8);
     }
 }

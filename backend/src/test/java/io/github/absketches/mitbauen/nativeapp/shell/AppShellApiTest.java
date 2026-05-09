@@ -72,7 +72,7 @@ class AppShellApiTest {
         assertThat(optionsResponse.body()).isEmpty();
 
         assertThat(postResponse.statusCode()).isEqualTo(405);
-        assertThat(postResponse.bodyAsMap().asString("error")).isEqualTo("Method Not Allowed");
+        assertThat(postResponse.bodyAsMap().asString("code")).isEqualTo("METHOD_NOT_ALLOWED");
         assertThat(postResponse.bodyAsMap().asString("path")).isEqualTo("/");
     }
 

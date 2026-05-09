@@ -2,6 +2,7 @@ package io.github.absketches.mitbauen.nativeapp.projects;
 
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeList;
+import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.HttpObject;
 
@@ -26,6 +27,24 @@ public class ProjectFeedUtil {
     public static final int OPEN_ROLE_COMMITMENT_MAX_LENGTH = 80;
     public static final int OPEN_ROLES_MIN_COUNT = 1;
     public static final int OPEN_ROLES_MAX_COUNT = 6;
+    public static final String PROJECT_NOT_FOUND_CODE = "PROJECT_NOT_FOUND";
+    public static final String PROJECT_CREATE_AUTH_REQUIRED_CODE = "PROJECT_CREATE_AUTH_REQUIRED";
+    public static final String PROJECT_CREATE_EMAIL_UNVERIFIED_CODE = "PROJECT_CREATE_EMAIL_UNVERIFIED";
+    public static final String PROJECT_EDIT_AUTH_REQUIRED_CODE = "PROJECT_EDIT_AUTH_REQUIRED";
+    public static final String PROJECT_EDIT_EMAIL_UNVERIFIED_CODE = "PROJECT_EDIT_EMAIL_UNVERIFIED";
+    public static final String PROJECT_EDIT_OWNER_REQUIRED_CODE = "PROJECT_EDIT_OWNER_REQUIRED";
+    public static final String PROJECT_DELETE_AUTH_REQUIRED_CODE = "PROJECT_DELETE_AUTH_REQUIRED";
+    public static final String PROJECT_DELETE_EMAIL_UNVERIFIED_CODE = "PROJECT_DELETE_EMAIL_UNVERIFIED";
+    public static final String PROJECT_DELETE_OWNER_REQUIRED_CODE = "PROJECT_DELETE_OWNER_REQUIRED";
+    public static final String PROJECT_TITLE_INVALID_CODE = "PROJECT_TITLE_INVALID";
+    public static final String PROJECT_DESCRIPTION_INVALID_CODE = "PROJECT_DESCRIPTION_INVALID";
+    public static final String PROJECT_FOUNDER_ROLE_INVALID_CODE = "PROJECT_FOUNDER_ROLE_INVALID";
+    public static final String PROJECT_FOUNDER_COMMITMENT_INVALID_CODE = "PROJECT_FOUNDER_COMMITMENT_INVALID";
+    public static final String PROJECT_OPEN_ROLES_MIN_CODE = "PROJECT_OPEN_ROLES_MIN";
+    public static final String PROJECT_OPEN_ROLES_MAX_CODE = "PROJECT_OPEN_ROLES_MAX";
+    public static final String PROJECT_OPEN_ROLE_TITLE_INVALID_CODE = "PROJECT_OPEN_ROLE_TITLE_INVALID";
+    public static final String PROJECT_OPEN_ROLE_COMMITMENT_INVALID_CODE = "PROJECT_OPEN_ROLE_COMMITMENT_INVALID";
+    public static final String METHOD_NOT_ALLOWED_CODE = "METHOD_NOT_ALLOWED";
 
     public sealed interface RoutesMatch permits ProjectFeedRoute, ProjectDetailsRoute, NoMatch {
     }
@@ -79,96 +98,70 @@ public class ProjectFeedUtil {
 
     public static Optional<String> validateProjectInput(final ProjectInput input) {
         if (outside(input.title(), TITLE_MIN_LENGTH, TITLE_MAX_LENGTH)) {
-            return Optional.of("Project title must be between 5 and 120 characters.");
+            return Optional.of(PROJECT_TITLE_INVALID_CODE);
         }
         if (outside(input.description(), DESCRIPTION_MIN_LENGTH, DESCRIPTION_MAX_LENGTH)) {
-            return Optional.of("Project description must be between 40 and 1024 characters.");
+            return Optional.of(PROJECT_DESCRIPTION_INVALID_CODE);
         }
         if (outside(input.founderRole(), FOUNDER_ROLE_MIN_LENGTH, FOUNDER_ROLE_MAX_LENGTH)) {
-            return Optional.of("Founder role must be between 3 and 80 characters.");
+            return Optional.of(PROJECT_FOUNDER_ROLE_INVALID_CODE);
         }
         if (outside(input.founderCommitment(), FOUNDER_COMMITMENT_MIN_LENGTH, FOUNDER_COMMITMENT_MAX_LENGTH)) {
-            return Optional.of("Founder commitment must be between 10 and 280 characters.");
+            return Optional.of(PROJECT_FOUNDER_COMMITMENT_INVALID_CODE);
         }
         if (input.openRoles().size() < OPEN_ROLES_MIN_COUNT) {
-            return Optional.of("Add at least one open role.");
+            return Optional.of(PROJECT_OPEN_ROLES_MIN_CODE);
         }
         if (input.openRoles().size() > OPEN_ROLES_MAX_COUNT) {
-            return Optional.of("You can add up to 6 open roles.");
+            return Optional.of(PROJECT_OPEN_ROLES_MAX_CODE);
         }
         if (input.openRoles().stream().anyMatch(role -> outside(role.title(), OPEN_ROLE_TITLE_MIN_LENGTH, OPEN_ROLE_TITLE_MAX_LENGTH))) {
-            return Optional.of("Each open role title must be between 3 and 80 characters.");
+            return Optional.of(PROJECT_OPEN_ROLE_TITLE_INVALID_CODE);
         }
         if (input.openRoles().stream().anyMatch(role -> outside(role.commitment(), OPEN_ROLE_COMMITMENT_MIN_LENGTH, OPEN_ROLE_COMMITMENT_MAX_LENGTH))) {
-            return Optional.of("Each open role commitment must be between 3 and 80 characters.");
+            return Optional.of(PROJECT_OPEN_ROLE_COMMITMENT_INVALID_CODE);
         }
         return Optional.empty();
     }
 
     public static void respondProjects(final Event<HttpObject, HttpObject> event, final List<ProjectCard> projects) {
-        event.payload().createCorsResponse()
-            .statusCode(200)
-            .body(Map.of("projects", projects.stream().map(ProjectFeedUtil::projectToMap).toList()))
-            .respond(event);
+        ResponseUtil.respondOk(event, Map.of("projects", projects.stream().map(ProjectFeedUtil::projectToMap).toList()));
     }
 
     public static void respondProjectDetails(final Event<HttpObject, HttpObject> event, final ProjectDetails project, final boolean canManage) {
-        event.payload().createCorsResponse()
-            .statusCode(200)
-            .body(Map.of("project", projectDetailsToMap(project, canManage)))
-            .respond(event);
+        ResponseUtil.respondOk(event, Map.of("project", projectDetailsToMap(project, canManage)));
     }
 
     public static void respondProjectSaved(final Event<HttpObject, HttpObject> event, final String slug, final int statusCode) {
-        event.payload().createCorsResponse()
-            .statusCode(statusCode)
-            .body(Map.of("slug", slug))
-            .respond(event);
+        ResponseUtil.respondJson(event, statusCode, Map.of("slug", slug));
     }
 
     public static void respondDeleted(final Event<HttpObject, HttpObject> event) {
-        event.payload().createCorsResponse()
-            .statusCode(204)
-            .respond(event);
+        ResponseUtil.respondEmpty(event, 204);
     }
 
-    public static void respondBadRequest(final Event<HttpObject, HttpObject> event, final String message) {
-        event.payload().createCorsResponse()
-            .statusCode(400)
-            .body(Map.of("error", message))
-            .respond(event);
+    public static void respondBadRequest(final Event<HttpObject, HttpObject> event, final String code) {
+        ResponseUtil.respondBadRequest(event, code);
     }
 
-    public static void respondUnauthorized(final Event<HttpObject, HttpObject> event, final String message) {
-        event.payload().createCorsResponse()
-            .statusCode(401)
-            .body(Map.of("error", message))
-            .respond(event);
+    public static void respondUnauthorized(final Event<HttpObject, HttpObject> event, final String code) {
+        ResponseUtil.respondUnauthorized(event, code);
     }
 
-    public static void respondForbidden(final Event<HttpObject, HttpObject> event, final String message) {
-        event.payload().createCorsResponse()
-            .statusCode(403)
-            .body(Map.of("error", message))
-            .respond(event);
+    public static void respondForbidden(final Event<HttpObject, HttpObject> event, final String code) {
+        ResponseUtil.respondForbidden(event, code);
     }
 
-    public static void respondNotFound(final Event<HttpObject, HttpObject> event, final String message) {
-        event.payload().createCorsResponse()
-            .statusCode(404)
-            .body(Map.of("error", message))
-            .respond(event);
+    public static void respondNotFound(final Event<HttpObject, HttpObject> event, final String code) {
+        ResponseUtil.respondNotFound(event, code);
     }
 
     public static void respondOptions(final Event<HttpObject, HttpObject> event) {
-        event.payload().createCorsResponse().respond(event);
+        ResponseUtil.respondOptions(event);
     }
 
     public static void respondMethodNotAllowed(final Event<HttpObject, HttpObject> event) {
-        event.payload().createCorsResponse()
-            .statusCode(405)
-            .body(Map.of("error", "Method Not Allowed", "path", event.payload().path()))
-            .respond(event);
+        ResponseUtil.respondMethodNotAllowed(event, METHOD_NOT_ALLOWED_CODE);
     }
 
     private static Map<String, Object> projectToMap(final ProjectCard project) {

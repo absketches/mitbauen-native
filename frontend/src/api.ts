@@ -1,9 +1,20 @@
 import type {
   InviteValidationResponse,
   LoginPayload,
+  NotificationItem,
+  NotificationsResponse,
+  PasswordResetConfirmPayload,
+  PasswordResetConfirmResponse,
+  PasswordResetRequestPayload,
+  PasswordResetRequestResponse,
   PublicUserProfile,
   PublicUserProfileResponse,
   Project,
+  ProjectComment,
+  ProjectCommentPayload,
+  ProjectCommentResponse,
+  ProjectCommentsReadResponse,
+  ProjectCommentsResponse,
   ProjectDetails,
   ProjectDetailsResponse,
   ProjectFeedResponse,
@@ -19,6 +30,17 @@ import type {
 } from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
 
 export async function loadProjects(): Promise<Project[]> {
   const payload = await requestJson<ProjectFeedResponse>(`${API_BASE_URL}/projects`)
@@ -81,6 +103,20 @@ export async function confirmEmailVerification(token: string): Promise<Verificat
   })
 }
 
+export async function requestPasswordReset(payload: PasswordResetRequestPayload): Promise<PasswordResetRequestResponse> {
+  return requestJson<PasswordResetRequestResponse>(`${API_BASE_URL}/auth/password-reset/request`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function confirmPasswordReset(payload: PasswordResetConfirmPayload): Promise<PasswordResetConfirmResponse> {
+  return requestJson<PasswordResetConfirmResponse>(`${API_BASE_URL}/auth/password-reset/confirm`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 export async function updateProfile(payload: UserProfilePayload): Promise<UserProfile> {
   const response = await requestJson<UserProfileResponse>(`${API_BASE_URL}/profile`, {
     method: 'PUT',
@@ -115,6 +151,30 @@ export async function deleteProject(slug: string): Promise<void> {
   })
 }
 
+export async function loadProjectComments(slug: string): Promise<ProjectComment[]> {
+  const payload = await requestJson<ProjectCommentsResponse>(`${API_BASE_URL}/projects/${encodeURIComponent(slug)}/comments`)
+  return payload.comments
+}
+
+export async function createProjectComment(slug: string, payload: ProjectCommentPayload): Promise<ProjectComment> {
+  const response = await requestJson<ProjectCommentResponse>(`${API_BASE_URL}/projects/${encodeURIComponent(slug)}/comments`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return response.comment
+}
+
+export async function markProjectCommentsRead(slug: string): Promise<ProjectCommentsReadResponse> {
+  return requestJson<ProjectCommentsReadResponse>(`${API_BASE_URL}/projects/${encodeURIComponent(slug)}/comments/read`, {
+    method: 'POST',
+  })
+}
+
+export async function loadNotifications(): Promise<NotificationItem[]> {
+  const payload = await requestJson<NotificationsResponse>(`${API_BASE_URL}/notifications`)
+  return payload.notifications
+}
+
 async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
   const headers = init?.body
     ? {
@@ -123,9 +183,9 @@ async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
       }
     : init?.headers
   const response = await fetch(input, {
-    credentials: 'same-origin',
     headers,
     ...init,
+    credentials: 'include',
   })
 
   let payload: unknown = null
@@ -134,11 +194,15 @@ async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
+    const code =
+      typeof payload === 'object' && payload !== null && 'code' in payload && typeof payload.code === 'string'
+        ? payload.code
+        : undefined
     const message =
       typeof payload === 'object' && payload !== null && 'error' in payload && typeof payload.error === 'string'
         ? payload.error
-        : `Request failed (${response.status})`
-    throw new Error(message)
+        : code ?? `Request failed (${response.status})`
+    throw new ApiError(message, response.status, code)
   }
 
   return payload as T

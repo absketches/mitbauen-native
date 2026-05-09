@@ -4,9 +4,11 @@ import io.github.absketches.mitbauen.nativeapp.auth.AuthService;
 import io.github.absketches.mitbauen.nativeapp.auth.EmailVerificationSettings;
 import io.github.absketches.mitbauen.nativeapp.auth.ResendVerificationEmailSender;
 import io.github.absketches.mitbauen.nativeapp.auth.VerificationEmailSender;
+import io.github.absketches.mitbauen.nativeapp.comments.ProjectCommentsService;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseConfig;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
 import io.github.absketches.mitbauen.nativeapp.db.MigrationRunner;
+import io.github.absketches.mitbauen.nativeapp.notifications.NotificationsService;
 import io.github.absketches.mitbauen.nativeapp.projects.ProjectFeedService;
 import io.github.absketches.mitbauen.nativeapp.shell.AppShellService;
 import org.nanonative.nano.core.Nano;
@@ -28,6 +30,8 @@ public class MitbauenApplication {
                 new HttpClient(),
                 new AppShellService(),
                 new ProjectFeedService(databaseRuntime),
+                new ProjectCommentsService(databaseRuntime),
+                new NotificationsService(databaseRuntime),
                 new AuthService(databaseRuntime, emailVerificationSettings, verificationEmailSender)
         );
         nano.subscribeEvent(Context.EVENT_APP_SHUTDOWN, event -> databaseRuntime.stop());

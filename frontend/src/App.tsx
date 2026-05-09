@@ -2,18 +2,25 @@ import type { FormEvent } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { COPY, persistLanguage, readStoredLanguage, type Dictionary, type Language } from './i18n'
 import {
+  ApiError,
+  confirmPasswordReset,
   confirmEmailVerification,
+  createProjectComment,
   createProject,
   deleteAccount,
   deleteProject,
+  loadNotifications,
   loadProfile,
   loadPublicProfile,
+  loadProjectComments,
   loadProject,
   loadProjects,
   loadSession,
   loginUser,
   logoutUser,
+  markProjectCommentsRead,
   requestEmailVerification,
+  requestPasswordReset,
   registerUser,
   updateProfile,
   updateProject,
@@ -27,8 +34,15 @@ import { PublicProfileView } from './components/PublicProfileView'
 import type {
   InviteValidationResponse,
   LoginPayload,
+  NotificationItem,
+  PasswordResetConfirmPayload,
+  PasswordResetConfirmResponse,
+  PasswordResetRequestPayload,
+  PasswordResetRequestResponse,
   PublicUserProfile,
   Project,
+  ProjectComment,
+  ProjectCommentPayload,
   ProjectDetails,
   ProjectMutationResponse,
   ProjectPayload,
@@ -47,32 +61,29 @@ type VerificationNotice =
   | { tone: 'error'; message: string }
   | null
 
-const VERIFICATION_DAILY_LIMIT_ERROR = 'A verification email can be sent only once in a day.'
-
-function isVerificationDailyLimitError(message: string): boolean {
-  const normalized = message.trim().toLowerCase()
-  return normalized === VERIFICATION_DAILY_LIMIT_ERROR.toLowerCase()
-    || normalized.includes('once in a day')
-    || normalized.includes('once per day')
-}
-
 type AppApi = {
   loadProjects: () => Promise<Project[]>
   loadProject: (slug: string) => Promise<ProjectDetails>
+  loadProjectComments: (slug: string) => Promise<ProjectComment[]>
   loadProfile: () => Promise<UserProfile>
   loadPublicProfile: (publicId: string) => Promise<PublicUserProfile>
   loadSession: () => Promise<SessionResponse>
+  loadNotifications: () => Promise<NotificationItem[]>
   validateInvite: (token: string) => Promise<InviteValidationResponse>
   registerUser: (payload: RegisterPayload) => Promise<SessionResponse>
   loginUser: (payload: LoginPayload) => Promise<SessionResponse>
   logoutUser: () => Promise<void>
   requestEmailVerification: () => Promise<VerificationEmailRequestResponse>
   confirmEmailVerification: (token: string) => Promise<VerificationConfirmResponse>
+  requestPasswordReset: (payload: PasswordResetRequestPayload) => Promise<PasswordResetRequestResponse>
+  confirmPasswordReset: (payload: PasswordResetConfirmPayload) => Promise<PasswordResetConfirmResponse>
   updateProfile: (payload: UserProfilePayload) => Promise<UserProfile>
   deleteAccount: () => Promise<SessionResponse>
   createProject: (payload: ProjectPayload) => Promise<ProjectMutationResponse>
   updateProject: (slug: string, payload: ProjectPayload) => Promise<ProjectMutationResponse>
   deleteProject: (slug: string) => Promise<void>
+  createProjectComment: (slug: string, payload: ProjectCommentPayload) => Promise<ProjectComment>
+  markProjectCommentsRead: (slug: string) => Promise<{ read: boolean }>
 }
 
 type AppProps = {
@@ -82,6 +93,8 @@ type AppProps = {
 type RouteState =
   | { name: 'feed'; highlightSlug: string | null; notice: FeedNotice }
   | { name: 'login' }
+  | { name: 'forgotPassword' }
+  | { name: 'resetPassword'; token: string }
   | { name: 'register'; inviteToken: string }
   | { name: 'verifyEmail'; token: string }
   | { name: 'profile' }
@@ -93,40 +106,52 @@ type RouteState =
 const defaultApi: AppApi = {
   loadProjects,
   loadProject,
+  loadProjectComments,
   loadProfile,
   loadPublicProfile,
   loadSession,
+  loadNotifications,
   validateInvite,
   registerUser,
   loginUser,
   logoutUser,
   requestEmailVerification,
   confirmEmailVerification,
+  requestPasswordReset,
+  confirmPasswordReset,
   updateProfile,
   deleteAccount,
   createProject,
   updateProject,
   deleteProject,
+  createProjectComment,
+  markProjectCommentsRead,
 }
 
 export default function App({ api }: AppProps) {
   const {
     loadProjects: fetchProjects,
     loadProject: fetchProject,
+    loadProjectComments: fetchProjectComments,
     loadProfile: fetchProfile,
     loadPublicProfile: fetchPublicProfile,
     loadSession: fetchSession,
+    loadNotifications: fetchNotifications,
     validateInvite: checkInvite,
     registerUser: register,
     loginUser: login,
     logoutUser: logout,
     requestEmailVerification: resendVerification,
     confirmEmailVerification: verifyEmail,
+    requestPasswordReset: sendPasswordReset,
+    confirmPasswordReset: resetPassword,
     updateProfile: saveProfile,
     deleteAccount: destroyAccount,
     createProject: saveProject,
     updateProject: saveProjectEdits,
     deleteProject: destroyProject,
+    createProjectComment: saveProjectComment,
+    markProjectCommentsRead: saveProjectCommentsRead,
   } = { ...defaultApi, ...api }
   const [language, setLanguage] = useState<Language>(readStoredLanguage)
   const copy = COPY[language]
@@ -140,6 +165,9 @@ export default function App({ api }: AppProps) {
   const [projectsLoading, setProjectsLoading] = useState(true)
   const [projectsError, setProjectsError] = useState<string | null>(null)
   const emailVerificationRequired = session.authenticated && !!session.user && !session.user.emailVerified
+  const notificationsEnabled = session.authenticated && !!session.user?.emailVerified
+  const [notifications, setNotifications] = useState<NotificationItem[]>([])
+  const [projectDetailRefreshKey, setProjectDetailRefreshKey] = useState(0)
 
   useEffect(() => {
     document.documentElement.lang = language
@@ -218,6 +246,45 @@ export default function App({ api }: AppProps) {
     }
   }, [session.user?.emailVerified])
 
+  useEffect(() => {
+    if (!notificationsEnabled) {
+      setNotifications([])
+      return
+    }
+
+    let cancelled = false
+    let intervalId: number | null = null
+
+    const refreshIfVisible = () => {
+      if (document.hidden) {
+        return
+      }
+      refreshNotifications().catch((nextError) => {
+        if (!cancelled) {
+          console.error(nextError)
+        }
+      })
+    }
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        refreshIfVisible()
+      }
+    }
+
+    refreshIfVisible()
+    intervalId = window.setInterval(refreshIfVisible, 5000)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      cancelled = true
+      if (intervalId !== null) {
+        window.clearInterval(intervalId)
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [notificationsEnabled, fetchNotifications])
+
   function handleAuthenticated(nextSession: SessionResponse) {
     setSession(nextSession)
     navigateTo('/', setRoute)
@@ -227,6 +294,7 @@ export default function App({ api }: AppProps) {
     await logout()
     setSession({ authenticated: false })
     setVerificationNotice(null)
+    setNotifications([])
     navigateTo('/', setRoute)
   }
 
@@ -249,6 +317,22 @@ export default function App({ api }: AppProps) {
     }
   }
 
+  async function refreshNotifications() {
+    if (!notificationsEnabled) {
+      setNotifications([])
+      return
+    }
+    setNotifications(await fetchNotifications())
+  }
+
+  function handleOpenNotificationProject(slug: string) {
+    if (route.name === 'projectDetail' && route.slug === slug) {
+      setProjectDetailRefreshKey((current) => current + 1)
+      return
+    }
+    navigateTo(`/projects/${slug}`, setRoute)
+  }
+
   async function handleRequestEmailVerification() {
     setVerificationSending(true)
     setVerificationNotice(null)
@@ -264,11 +348,9 @@ export default function App({ api }: AppProps) {
       }
     } catch (nextError) {
       const message =
-        nextError instanceof Error && isVerificationDailyLimitError(nextError.message)
+        nextError instanceof ApiError && nextError.code === 'AUTH_VERIFICATION_DAILY_LIMIT'
           ? copy.verification.dailyLimit
-          : nextError instanceof Error
-            ? nextError.message
-            : copy.verification.sendError
+          : copy.verification.sendError
       setVerificationNotice({
         tone: 'error',
         message,
@@ -306,6 +388,7 @@ export default function App({ api }: AppProps) {
     const nextSession = await destroyAccount()
     setSession(nextSession)
     setVerificationNotice(null)
+    setNotifications([])
     await refreshProjectsAfterMutation()
     navigateTo('/', setRoute)
   }
@@ -317,7 +400,7 @@ export default function App({ api }: AppProps) {
           <img className="brand-lockup__mark" src="/mitbauen-mark.svg" alt="" />
           <span className="brand-lockup__text">
             <span className="hero__eyebrow">{copy.brand.eyebrow}</span>
-            <strong>Mitbauen Native</strong>
+            <strong>Mitbauen Lokal</strong>
           </span>
         </button>
 
@@ -346,6 +429,14 @@ export default function App({ api }: AppProps) {
           {sessionLoading ? <span className="page-header__status">{copy.header.loading}</span> : null}
           {!sessionLoading && session.authenticated && session.user ? (
             <>
+              {notificationsEnabled ? (
+                <NotificationBell
+                  copy={copy.notifications}
+                  notifications={notifications}
+                  onOpenProject={handleOpenNotificationProject}
+                  onRefresh={() => void refreshNotifications()}
+                />
+              ) : null}
               {session.user.emailVerified ? (
                 <button className="ghost-button" type="button" onClick={() => navigateTo('/projects/new', setRoute)}>
                   {copy.header.createProject}
@@ -404,6 +495,28 @@ export default function App({ api }: AppProps) {
           copy={copy.login}
           onAuthenticate={handleAuthenticated}
           onLogin={login}
+          onNavigate={setRoute}
+        />
+      ) : null}
+
+      {route.name === 'forgotPassword' ? (
+        <ForgotPasswordView
+          copy={copy.passwordReset}
+          onRequestPasswordReset={sendPasswordReset}
+          onNavigate={setRoute}
+        />
+      ) : null}
+
+      {route.name === 'resetPassword' ? (
+        <ResetPasswordView
+          copy={copy.passwordReset}
+          token={route.token}
+          onConfirmPasswordReset={resetPassword}
+          onResetComplete={() => {
+            setSession({ authenticated: false })
+            setVerificationNotice(null)
+            setNotifications([])
+          }}
           onNavigate={setRoute}
         />
       ) : null}
@@ -474,7 +587,13 @@ export default function App({ api }: AppProps) {
           copy={copy.projectDetail}
           slug={route.slug}
           notice={route.notice}
+          refreshKey={projectDetailRefreshKey}
+          canViewComments={notificationsEnabled}
           onLoadProject={fetchProject}
+          onLoadComments={fetchProjectComments}
+          onCreateComment={saveProjectComment}
+          onMarkCommentsRead={saveProjectCommentsRead}
+          onCommentsChanged={() => void refreshNotifications()}
           onOpenFounderProfile={(publicId) => navigateTo(`/users/${encodeURIComponent(publicId)}`, setRoute)}
           onEdit={(slug) => navigateTo(`/projects/${slug}/edit`, setRoute)}
           onDelete={handleDeleteProject}
@@ -515,6 +634,97 @@ type FeedViewProps = {
   notice: FeedNotice
   onOpenProject: (slug: string) => void
   onOpenFounderProfile: (publicId: string) => void
+}
+
+type NotificationBellProps = {
+  copy: Dictionary['notifications']
+  notifications: NotificationItem[]
+  onOpenProject: (slug: string) => void
+  onRefresh: () => void
+}
+
+function NotificationBell({ copy, notifications, onOpenProject, onRefresh }: NotificationBellProps) {
+  const [open, setOpen] = useState(false)
+  const bellRef = useRef<HTMLDivElement>(null)
+  const count = notifications.length
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (bellRef.current && !bellRef.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [])
+
+  function handleToggle() {
+    setOpen((current) => !current)
+    onRefresh()
+  }
+
+  return (
+    <div className="notification-bell" ref={bellRef}>
+      <button
+        className="notification-bell__button"
+        type="button"
+        aria-label={count > 0 ? copy.ariaLabelWithCount(count) : copy.ariaLabel}
+        aria-expanded={open}
+        onClick={handleToggle}
+      >
+        <svg
+          className="notification-bell__icon"
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.9"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+          <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+        </svg>
+        {count > 0 ? <span className="notification-bell__badge">{count > 9 ? '9+' : count}</span> : null}
+      </button>
+
+      {open ? (
+        <div className="notification-bell__panel">
+          <div className="notification-bell__header">
+            <p className="hero__eyebrow">{copy.eyebrow}</p>
+            <strong>{copy.title}</strong>
+          </div>
+
+          {notifications.length === 0 ? (
+            <p className="notification-bell__empty">{copy.empty}</p>
+          ) : (
+            <ul className="notification-bell__list">
+              {notifications.map((notification) => (
+                <li key={notification.id}>
+                  <button
+                    type="button"
+                    className="notification-bell__item"
+                    onClick={() => {
+                      setOpen(false)
+                      onOpenProject(notification.projectSlug)
+                    }}
+                  >
+                    <span className="notification-bell__item-title">
+                      {copy.commentLabel(notification.actorName, notification.projectTitle)}
+                    </span>
+                    <span className="notification-bell__item-body">{notification.latestBody}</span>
+                    {notification.unreadCount > 1 ? (
+                      <span className="notification-bell__item-count">{copy.unreadCount(notification.unreadCount)}</span>
+                    ) : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 function FeedView({ copy, projects, loading, error, highlightSlug, notice, onOpenProject, onOpenFounderProfile }: FeedViewProps) {
@@ -642,8 +852,144 @@ function LoginView({ copy, onAuthenticate, onLogin, onNavigate }: LoginViewProps
           </button>
         </form>
 
+        <button className="text-button auth-card__secondary" type="button" onClick={() => navigateTo('/forgot-password', onNavigate)}>
+          {copy.forgotPassword}
+        </button>
+
         <button className="ghost-button auth-card__secondary" type="button" onClick={() => navigateTo('/', onNavigate)}>
           {copy.back}
+        </button>
+      </article>
+    </section>
+  )
+}
+
+type ForgotPasswordViewProps = {
+  copy: Dictionary['passwordReset']
+  onRequestPasswordReset: (payload: PasswordResetRequestPayload) => Promise<PasswordResetRequestResponse>
+  onNavigate: (route: RouteState) => void
+}
+
+function ForgotPasswordView({ copy, onRequestPasswordReset, onNavigate }: ForgotPasswordViewProps) {
+  const [email, setEmail] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSubmitting(true)
+    setSuccess(null)
+    setError(null)
+    try {
+      await onRequestPasswordReset({ email })
+      setSuccess(copy.requestSuccess)
+    } catch {
+      setError(copy.requestError)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <section className="auth-shell">
+      <article className="auth-card">
+        <p className="hero__eyebrow">{copy.requestEyebrow}</p>
+        <h1>{copy.requestTitle}</h1>
+        <p className="auth-card__copy">{copy.requestCopy}</p>
+
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <label>
+            {copy.email}
+            <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
+          </label>
+
+          {success ? <p className="auth-note">{success}</p> : null}
+          {error ? <p className="auth-error">{error}</p> : null}
+
+          <button className="primary-button" type="submit" disabled={submitting}>
+            {submitting ? copy.requestSubmitting : copy.requestSubmit}
+          </button>
+        </form>
+
+        <button className="ghost-button auth-card__secondary" type="button" onClick={() => navigateTo('/login', onNavigate)}>
+          {copy.backToLogin}
+        </button>
+      </article>
+    </section>
+  )
+}
+
+type ResetPasswordViewProps = {
+  copy: Dictionary['passwordReset']
+  token: string
+  onConfirmPasswordReset: (payload: PasswordResetConfirmPayload) => Promise<PasswordResetConfirmResponse>
+  onResetComplete: () => void
+  onNavigate: (route: RouteState) => void
+}
+
+function ResetPasswordView({ copy, token, onConfirmPasswordReset, onResetComplete, onNavigate }: ResetPasswordViewProps) {
+  const [password, setPassword] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [completed, setCompleted] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSubmitting(true)
+    setError(null)
+    try {
+      await onConfirmPasswordReset({ token, password })
+      onResetComplete()
+      setCompleted(true)
+    } catch (nextError) {
+      if (nextError instanceof ApiError && nextError.code === 'AUTH_PASSWORD_REQUIREMENTS') {
+        setError(copy.weakPassword)
+      } else {
+        setError(copy.confirmError)
+      }
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (completed) {
+    return (
+      <section className="state-shell">
+        <article className="state-card state-card--success">
+          <strong>{copy.confirmSuccessTitle}</strong>
+          <p className="state-card__copy">{copy.confirmSuccessCopy}</p>
+        </article>
+        <button className="ghost-button" type="button" onClick={() => navigateTo('/login', onNavigate)}>
+          {copy.signIn}
+        </button>
+      </section>
+    )
+  }
+
+  return (
+    <section className="auth-shell">
+      <article className="auth-card">
+        <p className="hero__eyebrow">{copy.confirmEyebrow}</p>
+        <h1>{copy.confirmTitle}</h1>
+        <p className="auth-card__copy">{copy.confirmCopy}</p>
+
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <label>
+            {copy.password}
+            <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" minLength={8} required />
+          </label>
+
+          <p className="auth-note">{copy.passwordHint}</p>
+          {error ? <p className="auth-error">{error}</p> : null}
+
+          <button className="primary-button" type="submit" disabled={submitting || !token}>
+            {submitting ? copy.confirmSubmitting : copy.confirmSubmit}
+          </button>
+        </form>
+
+        <button className="ghost-button auth-card__secondary" type="button" onClick={() => navigateTo('/login', onNavigate)}>
+          {copy.backToLogin}
         </button>
       </article>
     </section>
@@ -861,7 +1207,7 @@ function VerificationConfirmView({
       .catch((nextError) => {
         if (!cancelled) {
           setStatus('error')
-          setError(nextError instanceof Error ? nextError.message : copy.invalid)
+          setError(copy.invalid)
         }
       })
 
@@ -920,6 +1266,12 @@ function routeFromLocation(location: Location): RouteState {
 
   if (location.pathname === '/login') {
     return { name: 'login' }
+  }
+  if (location.pathname === '/forgot-password') {
+    return { name: 'forgotPassword' }
+  }
+  if (location.pathname === '/reset-password') {
+    return { name: 'resetPassword', token: search.get('token') ?? '' }
   }
   if (location.pathname === '/register') {
     return { name: 'register', inviteToken: search.get('invite') ?? '' }

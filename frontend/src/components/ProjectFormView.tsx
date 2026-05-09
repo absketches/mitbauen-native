@@ -1,5 +1,6 @@
 import type { FormEvent } from 'react'
 import { useEffect, useState } from 'react'
+import { ApiError } from '../api'
 import type { Dictionary } from '../i18n'
 import type { OpenRole, ProjectDetails, ProjectPayload } from '../types'
 
@@ -163,7 +164,7 @@ export function ProjectFormView({
         })),
       })
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : copy.saveError)
+      setFormError(error instanceof ApiError ? copy.saveError : error instanceof Error ? error.message : copy.saveError)
     } finally {
       setSubmitting(false)
     }
