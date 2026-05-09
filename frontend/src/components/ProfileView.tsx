@@ -204,6 +204,8 @@ export function ProfileView({ copy, onLoadProfile, onSubmit, onDeleteAccount, on
           </label>
         </section>
 
+        {/*
+        Delete-account UI is intentionally hidden for now.
         <section className="project-form__section danger-zone">
           <div className="project-form__section-header">
             <p className="hero__eyebrow">{copy.deleteEyebrow}</p>
@@ -255,6 +257,7 @@ export function ProfileView({ copy, onLoadProfile, onSubmit, onDeleteAccount, on
             </div>
           )}
         </section>
+        */}
 
         <div className="project-form__actions">
           <button className="ghost-button" type="button" onClick={onBack}>
