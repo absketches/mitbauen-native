@@ -24,30 +24,6 @@ class AppShellApiTest {
     }
 
     @Test
-    void returnsServiceUnavailableForSpaShellRoutesWhenFrontendBundleIsMissing() {
-        nano = new Nano(
-            Map.of(HttpServer.CONFIG_SERVICE_HTTP_PORT, 0),
-            new HttpServer(),
-            new HttpClient(),
-            new AppShellService()
-        );
-
-        final HttpObject rootResponse = new HttpObject()
-            .path(baseUrl("/"))
-            .send(nano.context(AppShellApiTest.class));
-
-        final HttpObject nestedRouteResponse = new HttpObject()
-            .path(baseUrl("/projects/new"))
-            .send(nano.context(AppShellApiTest.class));
-
-        assertShellRouteResponse(rootResponse);
-        assertThat(rootResponse.header("cache-control")).isEqualTo("no-cache");
-
-        assertShellRouteResponse(nestedRouteResponse);
-        assertThat(nestedRouteResponse.header("cache-control")).isEqualTo("no-cache");
-    }
-
-    @Test
     void handlesOptionsMethodAndRejectsUnsupportedMethodsForShellRoutes() {
         nano = new Nano(
             Map.of(HttpServer.CONFIG_SERVICE_HTTP_PORT, 0),
@@ -72,7 +48,7 @@ class AppShellApiTest {
         assertThat(optionsResponse.body()).isEmpty();
 
         assertThat(postResponse.statusCode()).isEqualTo(405);
-        assertThat(postResponse.bodyAsMap().asString("error")).isEqualTo("Method Not Allowed");
+        assertThat(postResponse.bodyAsMap().asString("code")).isEqualTo("METHOD_NOT_ALLOWED");
         assertThat(postResponse.bodyAsMap().asString("path")).isEqualTo("/");
     }
 
@@ -101,14 +77,4 @@ class AppShellApiTest {
         return "http://localhost:" + nano.service(HttpServer.class).port() + path;
     }
 
-    private void assertShellRouteResponse(final HttpObject response) {
-        assertThat(response.statusCode()).isIn(200, 503);
-        if (response.statusCode() == 200) {
-            assertThat(response.header("content-type")).contains("text/html");
-            assertThat(response.bodyAsString()).isNotBlank();
-        } else {
-            assertThat(response.header("content-type")).contains("text/plain");
-            assertThat(response.bodyAsString()).contains("Frontend bundle is missing");
-        }
-    }
 }

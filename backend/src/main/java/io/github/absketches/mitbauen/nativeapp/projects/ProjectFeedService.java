@@ -87,7 +87,7 @@ public class ProjectFeedService extends Service {
                                 .map(sessionUser -> sessionUser.id() == project.ownerUserId() && sessionUser.emailVerified())
                                 .orElse(false)
                         ),
-                        () -> ProjectFeedUtil.respondNotFound(event, "Project not found.")
+                        () -> ProjectFeedUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_NOT_FOUND_CODE)
                     );
             case ProjectFeedUtil.NoMatch __ -> {
             }
@@ -102,11 +102,11 @@ public class ProjectFeedService extends Service {
 
         final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
         if (sessionUser.isEmpty()) {
-            ProjectFeedUtil.respondUnauthorized(event, "You must be signed in to create a project.");
+            ProjectFeedUtil.respondUnauthorized(event, ProjectFeedUtil.PROJECT_CREATE_AUTH_REQUIRED_CODE);
             return;
         }
         if (!sessionUser.get().emailVerified()) {
-            ProjectFeedUtil.respondForbidden(event, "Verify your email before creating a project.");
+            ProjectFeedUtil.respondForbidden(event, ProjectFeedUtil.PROJECT_CREATE_EMAIL_UNVERIFIED_CODE);
             return;
         }
 
@@ -130,21 +130,21 @@ public class ProjectFeedService extends Service {
 
         final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
         if (sessionUser.isEmpty()) {
-            ProjectFeedUtil.respondUnauthorized(event, "You must be signed in to edit a project.");
+            ProjectFeedUtil.respondUnauthorized(event, ProjectFeedUtil.PROJECT_EDIT_AUTH_REQUIRED_CODE);
             return;
         }
         if (!sessionUser.get().emailVerified()) {
-            ProjectFeedUtil.respondForbidden(event, "Verify your email before editing a project.");
+            ProjectFeedUtil.respondForbidden(event, ProjectFeedUtil.PROJECT_EDIT_EMAIL_UNVERIFIED_CODE);
             return;
         }
 
         final Optional<ProjectDetails> existingProject = ProjectFeedRepository.findProjectBySlug(databaseRuntime.dataSource(), slug);
         if (existingProject.isEmpty()) {
-            ProjectFeedUtil.respondNotFound(event, "Project not found.");
+            ProjectFeedUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_NOT_FOUND_CODE);
             return;
         }
         if (existingProject.get().ownerUserId() != sessionUser.get().id()) {
-            ProjectFeedUtil.respondForbidden(event, "Only the project owner can edit this project.");
+            ProjectFeedUtil.respondForbidden(event, ProjectFeedUtil.PROJECT_EDIT_OWNER_REQUIRED_CODE);
             return;
         }
 
@@ -168,21 +168,21 @@ public class ProjectFeedService extends Service {
 
         final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
         if (sessionUser.isEmpty()) {
-            ProjectFeedUtil.respondUnauthorized(event, "You must be signed in to delete a project.");
+            ProjectFeedUtil.respondUnauthorized(event, ProjectFeedUtil.PROJECT_DELETE_AUTH_REQUIRED_CODE);
             return;
         }
         if (!sessionUser.get().emailVerified()) {
-            ProjectFeedUtil.respondForbidden(event, "Verify your email before deleting a project.");
+            ProjectFeedUtil.respondForbidden(event, ProjectFeedUtil.PROJECT_DELETE_EMAIL_UNVERIFIED_CODE);
             return;
         }
 
         final Optional<ProjectDetails> existingProject = ProjectFeedRepository.findProjectBySlug(databaseRuntime.dataSource(), slug);
         if (existingProject.isEmpty()) {
-            ProjectFeedUtil.respondNotFound(event, "Project not found.");
+            ProjectFeedUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_NOT_FOUND_CODE);
             return;
         }
         if (existingProject.get().ownerUserId() != sessionUser.get().id()) {
-            ProjectFeedUtil.respondForbidden(event, "Only the project owner can delete this project.");
+            ProjectFeedUtil.respondForbidden(event, ProjectFeedUtil.PROJECT_DELETE_OWNER_REQUIRED_CODE);
             return;
         }
 

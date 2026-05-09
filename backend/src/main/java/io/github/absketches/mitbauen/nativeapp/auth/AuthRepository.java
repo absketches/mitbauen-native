@@ -29,7 +29,13 @@ public class AuthRepository {
             pc.password_hash
         from users u
         join password_credentials pc on pc.user_id = u.id
-        where u.email = ?
+        where u.email = ? and u.is_deleted = false
+        """;
+
+    private static final String PASSWORD_RESET_RECIPIENT_LOOKUP_SQL = """
+        select id, display_name, email
+        from users
+        where email = ? and is_deleted = false
         """;
 
     private static final String SESSION_LOOKUP_SQL = """
@@ -41,7 +47,7 @@ public class AuthRepository {
             u.email_verified_at is not null as email_verified
         from sessions s
         join users u on u.id = s.user_id
-        where s.token_hash = ? and s.expires_at > ?
+        where s.token_hash = ? and s.expires_at > ? and u.is_deleted = false
         """;
 
     private static final String PROFILE_LOOKUP_SQL = """
@@ -53,7 +59,7 @@ public class AuthRepository {
             is_email_public,
             email_verified_at is not null as email_verified
         from users
-        where id = ?
+        where id = ? and is_deleted = false
         """;
 
     private static final String PUBLIC_PROFILE_LOOKUP_SQL = """
@@ -62,7 +68,7 @@ public class AuthRepository {
             bio,
             case when is_email_public then email end as email
         from users
-        where public_id = ?
+        where public_id = ? and is_deleted = false
         """;
 
     private AuthRepository() {
@@ -193,19 +199,86 @@ public class AuthRepository {
     }
 
     public static void deleteAccount(final DataSource dataSource, final long userId) {
-        final String sql = """
-            delete from users
-            where id = ?
-            """;
+        SqlTransactions.execute(
+            dataSource,
+            "Unable to delete account",
+            connection -> {
+                deleteSessionsForUser(connection, userId);
+                deletePasswordCredential(connection, userId);
+                deleteEmailVerificationTokens(connection, userId);
+                deleteEmailVerificationSends(connection, userId);
+                deletePasswordResetTokens(connection, userId);
+                softDeleteUser(connection, userId);
+                return null;
+            }
+        );
+    }
+
+    public static Optional<SessionUser> findPasswordResetRecipientByEmail(final DataSource dataSource, final String normalizedEmail) {
         try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, userId);
-            if (statement.executeUpdate() != 1) {
-                throw new IllegalStateException("User not found for account deletion " + userId);
+             PreparedStatement statement = connection.prepareStatement(PASSWORD_RESET_RECIPIENT_LOOKUP_SQL)) {
+            statement.setString(1, normalizedEmail);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    return Optional.of(new SessionUser(
+                        resultSet.getLong("id"),
+                        resultSet.getString("display_name"),
+                        resultSet.getString("email"),
+                        false
+                    ));
+                }
+                return Optional.empty();
             }
         } catch (SQLException exception) {
-            throw new IllegalStateException("Unable to delete account", exception);
+            throw new IllegalStateException("Unable to load password reset recipient", exception);
         }
+    }
+
+    public static void createPasswordResetToken(
+        final DataSource dataSource,
+        final long userId,
+        final String tokenHash,
+        final Instant expiresAt
+    ) {
+        SqlTransactions.execute(
+            dataSource,
+            "Unable to create password reset token",
+            connection -> {
+                lockUser(connection, userId);
+                deletePasswordResetTokens(connection, userId);
+                insertPasswordResetToken(connection, userId, tokenHash, expiresAt);
+                return null;
+            }
+        );
+    }
+
+    public static boolean resetPassword(final DataSource dataSource, final String tokenHash, final String passwordHash) {
+        final String sql = """
+            select user_id
+            from password_reset_tokens
+            where token_hash = ? and expires_at > ?
+            """;
+        return SqlTransactions.execute(
+            dataSource,
+            "Unable to reset password",
+            connection -> {
+                try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                    statement.setString(1, tokenHash);
+                    statement.setTimestamp(2, Timestamp.from(Instant.now()));
+                    try (ResultSet resultSet = statement.executeQuery()) {
+                        if (!resultSet.next()) {
+                            return false;
+                        }
+                        final long userId = resultSet.getLong("user_id");
+                        lockUser(connection, userId);
+                        updatePasswordCredential(connection, userId, passwordHash);
+                        deletePasswordResetTokens(connection, userId);
+                        deleteSessionsForUser(connection, userId);
+                        return true;
+                    }
+                }
+            }
+        );
     }
 
     public static Optional<UserProfile> findProfileByUserId(final DataSource dataSource, final long userId) {
@@ -247,6 +320,23 @@ public class AuthRepository {
             }
         } catch (SQLException exception) {
             throw new IllegalStateException("Unable to load public user profile", exception);
+        }
+    }
+
+    public static boolean isDeletedPublicProfile(final DataSource dataSource, final String publicId) {
+        final String sql = """
+            select is_deleted
+            from users
+            where public_id = ?
+            """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, publicId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() && resultSet.getBoolean("is_deleted");
+            }
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Unable to load deleted public profile state", exception);
         }
     }
 
@@ -358,6 +448,108 @@ public class AuthRepository {
             statement.setTimestamp(1, Timestamp.from(Instant.now()));
             statement.setLong(2, sessionId);
             statement.executeUpdate();
+        }
+    }
+
+    private static void deleteSessionsForUser(final Connection connection, final long userId) throws SQLException {
+        final String sql = """
+            delete from sessions
+            where user_id = ?
+            """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, userId);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void deletePasswordCredential(final Connection connection, final long userId) throws SQLException {
+        final String sql = """
+            delete from password_credentials
+            where user_id = ?
+            """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, userId);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void deleteEmailVerificationSends(final Connection connection, final long userId) throws SQLException {
+        final String sql = """
+            delete from email_verification_sends
+            where user_id = ?
+            """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, userId);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void insertPasswordResetToken(
+        final Connection connection,
+        final long userId,
+        final String tokenHash,
+        final Instant expiresAt
+    ) throws SQLException {
+        final String sql = """
+            insert into password_reset_tokens (user_id, token_hash, expires_at)
+            values (?, ?, ?)
+            """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, userId);
+            statement.setString(2, tokenHash);
+            statement.setTimestamp(3, Timestamp.from(expiresAt));
+            statement.executeUpdate();
+        }
+    }
+
+    private static void updatePasswordCredential(
+        final Connection connection,
+        final long userId,
+        final String passwordHash
+    ) throws SQLException {
+        final String sql = """
+            update password_credentials
+            set password_hash = ?, updated_at = current_timestamp
+            where user_id = ?
+            """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, passwordHash);
+            statement.setLong(2, userId);
+            if (statement.executeUpdate() != 1) {
+                throw new IllegalStateException("Password credential not found for reset " + userId);
+            }
+        }
+    }
+
+    private static void deletePasswordResetTokens(final Connection connection, final long userId) throws SQLException {
+        final String sql = """
+            delete from password_reset_tokens
+            where user_id = ?
+            """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, userId);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void softDeleteUser(final Connection connection, final long userId) throws SQLException {
+        final String sql = """
+            update users
+            set
+                email = ?,
+                bio = '',
+                is_email_public = false,
+                email_verified_at = null,
+                is_deleted = true,
+                deleted_at = current_timestamp
+            where id = ? and is_deleted = false
+            """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, "deleted-user-" + userId + "@deleted.mitbauen.local");
+            statement.setLong(2, userId);
+            if (statement.executeUpdate() != 1) {
+                throw new IllegalStateException("User not found for account deletion " + userId);
+            }
         }
     }
 
@@ -592,7 +784,7 @@ public class AuthRepository {
             statement.setLong(1, userId);
             try (ResultSet resultSet = statement.executeQuery()) {
                 if (!resultSet.next()) {
-                    throw new IllegalStateException("User not found for verification resend " + userId);
+                    throw new IllegalStateException("User not found for locked auth operation " + userId);
                 }
             }
         }

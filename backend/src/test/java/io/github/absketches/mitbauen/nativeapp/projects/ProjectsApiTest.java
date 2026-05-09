@@ -102,7 +102,7 @@ class ProjectsApiTest {
         ), null);
 
         assertThat(response.statusCode()).isEqualTo(401);
-        assertThat(response.bodyAsMap().asString("error")).isEqualTo("You must be signed in to create a project.");
+        assertThat(response.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_CREATE_AUTH_REQUIRED_CODE);
     }
 
     @Test
@@ -119,7 +119,7 @@ class ProjectsApiTest {
         ), sessionCookie);
 
         assertThat(response.statusCode()).isEqualTo(403);
-        assertThat(response.bodyAsMap().asString("error")).isEqualTo("Verify your email before creating a project.");
+        assertThat(response.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_CREATE_EMAIL_UNVERIFIED_CODE);
     }
 
     @Test
@@ -136,7 +136,7 @@ class ProjectsApiTest {
         ), sessionCookie);
 
         assertThat(response.statusCode()).isEqualTo(400);
-        assertThat(response.bodyAsMap().asString("error")).isEqualTo("Add at least one open role.");
+        assertThat(response.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_OPEN_ROLES_MIN_CODE);
     }
 
     @Test
@@ -162,7 +162,7 @@ class ProjectsApiTest {
         ), intruderCookie);
 
         assertThat(forbiddenEdit.statusCode()).isEqualTo(403);
-        assertThat(forbiddenEdit.bodyAsMap().asString("error")).isEqualTo("Only the project owner can edit this project.");
+        assertThat(forbiddenEdit.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_EDIT_OWNER_REQUIRED_CODE);
 
         final HttpObject ownerEdit = sendJson("/api/projects/" + slug, "PUT", Map.of(
             "title", "Block Heat Map",
@@ -212,7 +212,7 @@ class ProjectsApiTest {
         ), ownerCookie);
 
         assertThat(response.statusCode()).isEqualTo(403);
-        assertThat(response.bodyAsMap().asString("error")).isEqualTo("Verify your email before editing a project.");
+        assertThat(response.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_EDIT_EMAIL_UNVERIFIED_CODE);
     }
 
     @Test
@@ -231,7 +231,7 @@ class ProjectsApiTest {
 
         final HttpObject forbiddenDelete = sendRequest("/api/projects/" + slug, "DELETE", null, intruderCookie);
         assertThat(forbiddenDelete.statusCode()).isEqualTo(403);
-        assertThat(forbiddenDelete.bodyAsMap().asString("error")).isEqualTo("Only the project owner can delete this project.");
+        assertThat(forbiddenDelete.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_DELETE_OWNER_REQUIRED_CODE);
 
         final HttpObject ownerDelete = sendRequest("/api/projects/" + slug, "DELETE", null, ownerCookie);
         assertThat(ownerDelete.statusCode()).isEqualTo(204);
@@ -264,14 +264,14 @@ class ProjectsApiTest {
 
         final HttpObject response = sendRequest("/api/projects/" + slug, "DELETE", null, ownerCookie);
         assertThat(response.statusCode()).isEqualTo(403);
-        assertThat(response.bodyAsMap().asString("error")).isEqualTo("Verify your email before deleting a project.");
+        assertThat(response.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_DELETE_EMAIL_UNVERIFIED_CODE);
 
         final HttpObject stillExists = sendGet("/api/projects/" + slug, null);
         assertThat(stillExists.statusCode()).isEqualTo(200);
     }
 
     @Test
-    void deletingAnAccountRemovesOwnedProjects() {
+    void deletingAnAccountKeepsOwnedProjectsVisible() {
         nano = newTestNano();
         final String ownerCookie = registerAndReturnSessionCookie("owner.account.delete@example.test", "Owner Account Delete");
 
@@ -287,14 +287,15 @@ class ProjectsApiTest {
         assertThat(deleteAccount.statusCode()).isEqualTo(200);
         assertThat(deleteAccount.bodyAsMap().asBoolean("authenticated")).isFalse();
 
-        final HttpObject missingDetail = sendGet("/api/projects/" + slug, null);
-        assertThat(missingDetail.statusCode()).isEqualTo(404);
+        final HttpObject preservedDetail = sendGet("/api/projects/" + slug, null);
+        assertThat(preservedDetail.statusCode()).isEqualTo(200);
+        assertThat(preservedDetail.bodyAsMap().asMap("project").asString("slug")).isEqualTo(slug);
 
         final TypeList feedProjects = sendGet("/api/projects", null).bodyAsMap().asList("projects");
         assertThat(feedProjects.stream()
             .map(project -> new LinkedTypeMap((Map<?, ?>) project).asString("slug"))
             .toList())
-            .doesNotContain(slug);
+            .contains(slug);
     }
 
     private Nano newTestNano() {

@@ -76,6 +76,14 @@ export type VerificationConfirmResponse = {
   verified: boolean
 }
 
+export type PasswordResetRequestResponse = {
+  requested: boolean
+}
+
+export type PasswordResetConfirmResponse = {
+  reset: boolean
+}
+
 export type RegisterPayload = {
   inviteToken: string
   email: string
@@ -87,6 +95,15 @@ export type RegisterPayload = {
 
 export type LoginPayload = {
   email: string
+  password: string
+}
+
+export type PasswordResetRequestPayload = {
+  email: string
+}
+
+export type PasswordResetConfirmPayload = {
+  token: string
   password: string
 }
 
@@ -106,4 +123,43 @@ export type UserProfilePayload = {
   displayName: string
   bio: string
   emailPublic: boolean
+}
+
+export type ProjectComment = {
+  id: number
+  body: string
+  authorPublicId: string
+  authorDisplayName: string
+  createdAt: string
+}
+
+export type ProjectCommentsResponse = {
+  comments: ProjectComment[]
+}
+
+export type ProjectCommentResponse = {
+  comment: ProjectComment
+}
+
+export type ProjectCommentPayload = {
+  body: string
+}
+
+export type ProjectCommentsReadResponse = {
+  read: boolean
+}
+
+export type NotificationItem = {
+  id: string
+  type: 'project_comment'
+  projectSlug: string
+  projectTitle: string
+  actorName: string
+  latestBody: string
+  latestAt: string
+  unreadCount: number
+}
+
+export type NotificationsResponse = {
+  notifications: NotificationItem[]
 }

@@ -1,5 +1,6 @@
 import type { FormEvent } from 'react'
 import { useEffect, useState } from 'react'
+import { ApiError } from '../api'
 import type { Dictionary } from '../i18n'
 import type { UserProfile, UserProfilePayload } from '../types'
 
@@ -51,7 +52,7 @@ export function ProfileView({ copy, onLoadProfile, onSubmit, onDeleteAccount, on
         if (cancelled) {
           return
         }
-        setLoadError(error instanceof Error ? error.message : copy.loadError)
+        setLoadError(error instanceof ApiError ? copy.loadError : error instanceof Error ? error.message : copy.loadError)
         setLoading(false)
       })
 
@@ -96,7 +97,7 @@ export function ProfileView({ copy, onLoadProfile, onSubmit, onDeleteAccount, on
       })
       setSuccess(copy.success)
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : copy.saveError)
+      setFormError(error instanceof ApiError ? copy.saveError : error instanceof Error ? error.message : copy.saveError)
     } finally {
       setSubmitting(false)
     }
@@ -109,7 +110,7 @@ export function ProfileView({ copy, onLoadProfile, onSubmit, onDeleteAccount, on
     try {
       await onDeleteAccount()
     } catch (error) {
-      setDeleteError(error instanceof Error ? error.message : copy.deleteError)
+      setDeleteError(error instanceof ApiError ? copy.deleteError : error instanceof Error ? error.message : copy.deleteError)
       setDeleteSubmitting(false)
       return
     }

@@ -94,6 +94,8 @@ public class AuthService extends Service {
             case LOGOUT -> handleLogout(event);
             case VERIFY_EMAIL_REQUEST -> handleVerifyEmailRequest(event);
             case VERIFY_EMAIL_CONFIRM -> handleVerifyEmailConfirm(event);
+            case PASSWORD_RESET_REQUEST -> handlePasswordResetRequest(event);
+            case PASSWORD_RESET_CONFIRM -> handlePasswordResetConfirm(event);
             default -> AuthUtil.respondMethodNotAllowed(event);
         }
     }
@@ -136,7 +138,7 @@ public class AuthService extends Service {
         final boolean emailPublic = safeBoolean(body.get("emailPublic"));
 
         if (inviteToken == null || inviteToken.isBlank() || email.isBlank() || displayName.isBlank() || password == null || password.isBlank()) {
-            AuthUtil.respondBadRequest(event, "Invite token, email, display name, and password are required.");
+            AuthUtil.respondBadRequest(event, AuthUtil.REGISTRATION_REQUIRED_CODE);
             return;
         }
         final Optional<String> registrationValidation = validateRegistrationProfileInput(displayName, bio, email);
@@ -145,13 +147,13 @@ public class AuthService extends Service {
             return;
         }
         if (!AuthUtil.meetsPasswordRequirements(password)) {
-            AuthUtil.respondBadRequest(event, AuthUtil.PASSWORD_REQUIREMENTS_MESSAGE);
+            AuthUtil.respondBadRequest(event, AuthUtil.PASSWORD_REQUIREMENTS_CODE);
             return;
         }
 
         final Optional<InviteLink> invite = AuthRepository.findInviteByToken(databaseRuntime.dataSource(), inviteToken).filter(InviteLink::active);
         if (invite.isEmpty()) {
-            AuthUtil.respondBadRequest(event, "Invite link is invalid.");
+            AuthUtil.respondBadRequest(event, AuthUtil.INVITE_INVALID_CODE);
             return;
         }
         final String passwordHash = AuthUtil.hashPassword(password);
@@ -166,7 +168,7 @@ public class AuthService extends Service {
             false
         );
         if (createdUser.isEmpty()) {
-            AuthUtil.respondConflict(event, "An account already exists for that email.");
+            AuthUtil.respondConflict(event, AuthUtil.EMAIL_EXISTS_CODE);
             return;
         }
         final SessionUser sessionUser = createdUser.get();
@@ -192,13 +194,13 @@ public class AuthService extends Service {
         final String email = AuthUtil.normalizeEmail(body.asString("email"));
         final String password = body.asString("password");
         if (email.isBlank() || password == null || password.isBlank()) {
-            AuthUtil.respondBadRequest(event, "Email and password are required.");
+            AuthUtil.respondBadRequest(event, AuthUtil.LOGIN_REQUIRED_CODE);
             return;
         }
 
         final Optional<LoginIdentity> loginIdentity = AuthRepository.findLoginIdentityByEmail(databaseRuntime.dataSource(), email);
         if (loginIdentity.isEmpty() || !AuthUtil.verifyPassword(password, loginIdentity.get().passwordHash())) {
-            AuthUtil.respondUnauthorized(event, "Email or password is incorrect.");
+            AuthUtil.respondUnauthorized(event, AuthUtil.LOGIN_INVALID_CODE);
             return;
         }
 
@@ -228,35 +230,41 @@ public class AuthService extends Service {
     protected void handleProfileLookup(final Event<HttpObject, HttpObject> event) {
         final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
         if (sessionUser.isEmpty()) {
-            AuthUtil.respondUnauthorized(event, "You must be signed in to view your profile.");
+            AuthUtil.respondUnauthorized(event, AuthUtil.PROFILE_AUTH_REQUIRED_CODE);
             return;
         }
 
         AuthRepository.findProfileByUserId(databaseRuntime.dataSource(), sessionUser.get().id())
             .ifPresentOrElse(
                 profile -> AuthUtil.respondProfile(event, profile),
-                () -> AuthUtil.respondNotFound(event, "Profile not found.")
+                () -> AuthUtil.respondNotFound(event, AuthUtil.PROFILE_NOT_FOUND_CODE)
             );
     }
 
     protected void handlePublicProfileLookup(final Event<HttpObject, HttpObject> event) {
         final Optional<String> publicId = AuthUtil.publicProfileId(event.payload());
         if (publicId.isEmpty()) {
-            AuthUtil.respondNotFound(event, "Profile not found.");
+            AuthUtil.respondNotFound(event, AuthUtil.PROFILE_NOT_FOUND_CODE);
             return;
         }
 
         AuthRepository.findPublicProfileByPublicId(databaseRuntime.dataSource(), publicId.get())
             .ifPresentOrElse(
                 profile -> AuthUtil.respondPublicProfile(event, profile),
-                () -> AuthUtil.respondNotFound(event, "Profile not found.")
+                () -> {
+                    if (AuthRepository.isDeletedPublicProfile(databaseRuntime.dataSource(), publicId.get())) {
+                        AuthUtil.respondDeletedUser(event);
+                        return;
+                    }
+                    AuthUtil.respondNotFound(event, AuthUtil.PROFILE_NOT_FOUND_CODE);
+                }
             );
     }
 
     protected void handleProfileUpdate(final Event<HttpObject, HttpObject> event) {
         final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
         if (sessionUser.isEmpty()) {
-            AuthUtil.respondUnauthorized(event, "You must be signed in to update your profile.");
+            AuthUtil.respondUnauthorized(event, AuthUtil.PROFILE_UPDATE_AUTH_REQUIRED_CODE);
             return;
         }
 
@@ -290,7 +298,7 @@ public class AuthService extends Service {
     protected void handleAccountDelete(final Event<HttpObject, HttpObject> event) {
         final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
         if (sessionUser.isEmpty()) {
-            AuthUtil.respondUnauthorized(event, "You must be signed in to delete your account.");
+            AuthUtil.respondUnauthorized(event, AuthUtil.ACCOUNT_DELETE_AUTH_REQUIRED_CODE);
             return;
         }
         AuthRepository.deleteAccount(databaseRuntime.dataSource(), sessionUser.get().id());
@@ -300,7 +308,7 @@ public class AuthService extends Service {
     protected void handleVerifyEmailRequest(final Event<HttpObject, HttpObject> event) {
         final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
         if (sessionUser.isEmpty()) {
-            AuthUtil.respondUnauthorized(event, "You must be signed in to request a verification email.");
+            AuthUtil.respondUnauthorized(event, AuthUtil.VERIFICATION_AUTH_REQUIRED_CODE);
             return;
         }
         if (sessionUser.get().emailVerified()) {
@@ -309,13 +317,13 @@ public class AuthService extends Service {
         }
         try {
             if (!resendVerificationEmail(sessionUser.get())) {
-                AuthUtil.respondTooManyRequests(event, "A verification email can be sent only once in a day.");
+                AuthUtil.respondTooManyRequests(event, AuthUtil.VERIFICATION_DAILY_LIMIT_CODE);
                 return;
             }
             AuthUtil.respondVerificationEmailRequest(event, true, false);
         } catch (RuntimeException exception) {
             context.warn(() -> "Unable to resend verification email for {}", sessionUser.get().email());
-            AuthUtil.respondServerError(event, "We could not send the verification email right now.");
+            AuthUtil.respondServerError(event, AuthUtil.VERIFICATION_SEND_FAILED_CODE);
         }
     }
 
@@ -323,15 +331,57 @@ public class AuthService extends Service {
         final LinkedTypeMap body = AuthUtil.bodyAsMap(event.payload());
         final String token = safeTrim(body.asString("token"));
         if (token.isBlank()) {
-            AuthUtil.respondBadRequest(event, "Verification token is required.");
+            AuthUtil.respondBadRequest(event, AuthUtil.VERIFICATION_TOKEN_REQUIRED_CODE);
             return;
         }
         final boolean confirmed = confirmVerificationEmail(token);
         if (!confirmed) {
-            AuthUtil.respondBadRequest(event, "Verification link is invalid or has expired.");
+            AuthUtil.respondBadRequest(event, AuthUtil.VERIFICATION_TOKEN_INVALID_CODE);
             return;
         }
         AuthUtil.respondVerificationConfirmed(event);
+    }
+
+    protected void handlePasswordResetRequest(final Event<HttpObject, HttpObject> event) {
+        final LinkedTypeMap body = AuthUtil.bodyAsMap(event.payload());
+        final String email = AuthUtil.normalizeEmail(body.asString("email"));
+        if (email.isBlank()) {
+            AuthUtil.respondBadRequest(event, AuthUtil.PASSWORD_RESET_EMAIL_REQUIRED_CODE);
+            return;
+        }
+
+        final Optional<SessionUser> recipient = AuthRepository.findPasswordResetRecipientByEmail(databaseRuntime.dataSource(), email);
+        if (recipient.isEmpty()) {
+            AuthUtil.respondPasswordResetRequest(event);
+            return;
+        }
+
+        try {
+            issuePasswordResetEmail(recipient.get());
+            AuthUtil.respondPasswordResetRequest(event);
+        } catch (RuntimeException exception) {
+            context.warn(() -> "Unable to send password reset email for {}", email);
+            AuthUtil.respondServerError(event, AuthUtil.PASSWORD_RESET_SEND_FAILED_CODE);
+        }
+    }
+
+    protected void handlePasswordResetConfirm(final Event<HttpObject, HttpObject> event) {
+        final LinkedTypeMap body = AuthUtil.bodyAsMap(event.payload());
+        final String token = safeTrim(body.asString("token"));
+        final String password = body.asString("password");
+        if (token.isBlank()) {
+            AuthUtil.respondBadRequest(event, AuthUtil.PASSWORD_RESET_TOKEN_REQUIRED_CODE);
+            return;
+        }
+        if (!AuthUtil.meetsPasswordRequirements(password)) {
+            AuthUtil.respondBadRequest(event, AuthUtil.PASSWORD_REQUIREMENTS_CODE);
+            return;
+        }
+        if (!resetPassword(token, password)) {
+            AuthUtil.respondBadRequest(event, AuthUtil.PASSWORD_RESET_TOKEN_INVALID_CODE);
+            return;
+        }
+        AuthUtil.respondPasswordResetConfirmed(event);
     }
 
     private void issueInitialVerificationEmail(final SessionUser sessionUser) {
@@ -344,6 +394,29 @@ public class AuthService extends Service {
 
     private boolean confirmVerificationEmail(final String token) {
         return AuthRepository.confirmEmailVerification(databaseRuntime.dataSource(), AuthUtil.hashToken(token));
+    }
+
+    private void issuePasswordResetEmail(final SessionUser recipient) {
+        final String token = AuthUtil.newPasswordResetToken();
+        AuthRepository.createPasswordResetToken(
+            databaseRuntime.dataSource(),
+            recipient.id(),
+            AuthUtil.hashToken(token),
+            Instant.now().plus(AuthUtil.PASSWORD_RESET_TTL)
+        );
+        verificationEmailSender.sendPasswordResetEmail(
+            recipient.email(),
+            recipient.displayName(),
+            AuthUtil.passwordResetUrl(emailVerificationSettings.publicBaseUrl(), token)
+        );
+    }
+
+    private boolean resetPassword(final String token, final String password) {
+        return AuthRepository.resetPassword(
+            databaseRuntime.dataSource(),
+            AuthUtil.hashToken(token),
+            AuthUtil.hashPassword(password)
+        );
     }
 
     private boolean issueVerificationEmail(final SessionUser sessionUser) {
@@ -390,23 +463,23 @@ public class AuthService extends Service {
             return editableValidation;
         }
         if (email.isBlank()) {
-            return Optional.of("Email is required.");
+            return Optional.of(AuthUtil.EMAIL_REQUIRED_CODE);
         }
         if (email.length() > AuthUtil.EMAIL_MAX_LENGTH) {
-            return Optional.of("Email must be 320 characters or fewer.");
+            return Optional.of(AuthUtil.EMAIL_TOO_LONG_CODE);
         }
         if (!email.contains("@")) {
-            return Optional.of("Email must be a valid address.");
+            return Optional.of(AuthUtil.EMAIL_INVALID_CODE);
         }
         return Optional.empty();
     }
 
     private static Optional<String> validateEditableProfileInput(final String displayName, final String bio) {
         if (displayName.length() < AuthUtil.DISPLAY_NAME_MIN_LENGTH || displayName.length() > AuthUtil.DISPLAY_NAME_MAX_LENGTH) {
-            return Optional.of("Display name must be between 2 and 120 characters.");
+            return Optional.of(AuthUtil.DISPLAY_NAME_INVALID_CODE);
         }
         if (bio.length() > AuthUtil.BIO_MAX_LENGTH) {
-            return Optional.of("Bio must be 560 characters or fewer.");
+            return Optional.of(AuthUtil.BIO_TOO_LONG_CODE);
         }
         return Optional.empty();
     }

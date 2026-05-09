@@ -1,6 +1,8 @@
 import type { Dictionary } from '../i18n'
+import type { FormEvent } from 'react'
 import { useEffect, useState } from 'react'
-import type { ProjectDetails } from '../types'
+import { ApiError } from '../api'
+import type { ProjectComment, ProjectCommentPayload, ProjectDetails } from '../types'
 
 type DetailNotice = 'created' | 'updated' | null
 
@@ -8,7 +10,13 @@ type ProjectDetailViewProps = {
   copy: Dictionary['projectDetail']
   slug: string
   notice: DetailNotice
+  refreshKey: number
+  canViewComments: boolean
   onLoadProject: (slug: string) => Promise<ProjectDetails>
+  onLoadComments: (slug: string) => Promise<ProjectComment[]>
+  onCreateComment: (slug: string, payload: ProjectCommentPayload) => Promise<ProjectComment>
+  onMarkCommentsRead: (slug: string) => Promise<{ read: boolean }>
+  onCommentsChanged: () => void
   onOpenFounderProfile: (publicId: string) => void
   onEdit: (slug: string) => void
   onDelete: (slug: string) => Promise<void>
@@ -19,7 +27,13 @@ export function ProjectDetailView({
   copy,
   slug,
   notice,
+  refreshKey,
+  canViewComments,
   onLoadProject,
+  onLoadComments,
+  onCreateComment,
+  onMarkCommentsRead,
+  onCommentsChanged,
   onOpenFounderProfile,
   onEdit,
   onDelete,
@@ -30,6 +44,12 @@ export function ProjectDetailView({
   const [error, setError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [comments, setComments] = useState<ProjectComment[]>([])
+  const [commentsLoading, setCommentsLoading] = useState(false)
+  const [commentsError, setCommentsError] = useState<string | null>(null)
+  const [commentBody, setCommentBody] = useState('')
+  const [commentSubmitting, setCommentSubmitting] = useState(false)
+  const [commentError, setCommentError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -49,14 +69,51 @@ export function ProjectDetailView({
         if (cancelled) {
           return
         }
-        setError(nextError instanceof Error ? nextError.message : copy.loadError)
+        setError(nextError instanceof ApiError ? copy.loadError : nextError instanceof Error ? nextError.message : copy.loadError)
         setLoading(false)
       })
 
     return () => {
       cancelled = true
     }
-  }, [copy.loadError, onLoadProject, slug])
+  }, [copy.loadError, onLoadProject, refreshKey, slug])
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (!canViewComments) {
+      setComments([])
+      setCommentsLoading(false)
+      setCommentsError(null)
+      return
+    }
+
+    setCommentsLoading(true)
+    setCommentsError(null)
+
+    onLoadComments(slug)
+      .then((nextComments) => {
+        if (cancelled) {
+          return
+        }
+        setComments(nextComments)
+        setCommentsLoading(false)
+        void onMarkCommentsRead(slug)
+          .then(onCommentsChanged)
+          .catch((nextError) => console.error(nextError))
+      })
+      .catch((nextError) => {
+        if (cancelled) {
+          return
+        }
+        setCommentsError(commentErrorMessage(nextError, copy, copy.commentsLoadError))
+        setCommentsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [canViewComments, copy.commentsLoadError, onLoadComments, onMarkCommentsRead, refreshKey, slug])
 
   if (loading) {
     return <p className="state-card">{copy.loading}</p>
@@ -81,9 +138,31 @@ export function ProjectDetailView({
     try {
       await onDelete(currentProject.slug)
     } catch (nextError) {
-      setDeleteError(nextError instanceof Error ? nextError.message : copy.deleteError)
+      setDeleteError(nextError instanceof ApiError ? copy.deleteError : nextError instanceof Error ? nextError.message : copy.deleteError)
     } finally {
       setDeleting(false)
+    }
+  }
+
+  async function handleCommentSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const nextBody = commentBody.trim()
+    if (!nextBody) {
+      setCommentError(copy.commentEmptyError)
+      return
+    }
+    setCommentSubmitting(true)
+    setCommentError(null)
+    try {
+      const nextComment = await onCreateComment(currentProject.slug, { body: nextBody })
+      setComments((current) => [...current, nextComment])
+      setCommentBody('')
+      await onMarkCommentsRead(currentProject.slug)
+      onCommentsChanged()
+    } catch (nextError) {
+      setCommentError(commentErrorMessage(nextError, copy, copy.commentError))
+    } finally {
+      setCommentSubmitting(false)
     }
   }
 
@@ -155,6 +234,86 @@ export function ProjectDetailView({
           </article>
         </aside>
       </div>
+
+      <section className="project-detail__comments">
+        <div className="project-detail__comments-header">
+          <div>
+            <p className="hero__eyebrow">{copy.commentsEyebrow}</p>
+            <h2>
+              {copy.commentsTitle}
+              {canViewComments && comments.length > 0 ? <span> ({comments.length})</span> : null}
+            </h2>
+          </div>
+        </div>
+
+        {!canViewComments ? (
+          <p className="state-card">{copy.commentsMembersOnly}</p>
+        ) : commentsLoading ? (
+          <p className="state-card">{copy.commentsLoading}</p>
+        ) : commentsError ? (
+          <p className="state-card state-card--error">{commentsError}</p>
+        ) : (
+          <>
+            {comments.length === 0 ? (
+              <p className="state-card">{copy.commentsEmpty}</p>
+            ) : (
+              <div className="project-detail__comment-list">
+                {comments.map((comment) => (
+                  <article className="project-detail__comment" key={comment.id}>
+                    <div className="project-detail__comment-avatar" aria-hidden="true">
+                      {comment.authorDisplayName.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="project-detail__comment-meta">
+                        <button className="founder-link" type="button" onClick={() => onOpenFounderProfile(comment.authorPublicId)}>
+                          {comment.authorDisplayName}
+                        </button>
+                        <span>{new Date(comment.createdAt).toLocaleDateString()}</span>
+                      </div>
+                      <p>{comment.body}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+
+            <form className="project-detail__comment-form" onSubmit={handleCommentSubmit}>
+              <textarea
+                aria-label={copy.commentPlaceholder}
+                value={commentBody}
+                onChange={(event) => setCommentBody(event.target.value)}
+                placeholder={copy.commentPlaceholder}
+                maxLength={1000}
+                rows={4}
+                required
+              />
+              {commentError ? <p className="auth-error">{commentError}</p> : null}
+              <div className="project-detail__comment-actions">
+                <button className="primary-button" type="submit" disabled={commentSubmitting}>
+                  {commentSubmitting ? copy.postingComment : copy.postComment}
+                </button>
+              </div>
+            </form>
+          </>
+        )}
+      </section>
     </section>
   )
+}
+
+function commentErrorMessage(error: unknown, copy: Dictionary['projectDetail'], fallback: string) {
+  if (error instanceof ApiError) {
+    switch (error.code) {
+      case 'PROJECT_COMMENTS_AUTH_REQUIRED':
+      case 'PROJECT_COMMENTS_EMAIL_UNVERIFIED':
+        return copy.commentsMembersOnly
+      case 'PROJECT_COMMENT_EMPTY':
+        return copy.commentEmptyError
+      case 'PROJECT_COMMENT_TOO_LONG':
+        return copy.commentTooLongError
+      default:
+        return fallback
+    }
+  }
+  return error instanceof Error ? error.message : fallback
 }

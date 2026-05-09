@@ -273,8 +273,8 @@ class AuthApiTest {
         ));
 
         assertThat(registerResponse.statusCode()).isEqualTo(400);
-        assertThat(registerResponse.bodyAsMap().asString("error"))
-            .isEqualTo(AuthUtil.PASSWORD_REQUIREMENTS_MESSAGE);
+        assertThat(registerResponse.bodyAsMap().asString("code"))
+            .isEqualTo(AuthUtil.PASSWORD_REQUIREMENTS_CODE);
     }
 
     @Test
@@ -297,8 +297,8 @@ class AuthApiTest {
         ));
 
         assertThat(duplicateRegister.statusCode()).isEqualTo(409);
-        assertThat(duplicateRegister.bodyAsMap().asString("error"))
-            .isEqualTo("An account already exists for that email.");
+        assertThat(duplicateRegister.bodyAsMap().asString("code"))
+            .isEqualTo(AuthUtil.EMAIL_EXISTS_CODE);
     }
 
     @Test
@@ -339,8 +339,8 @@ class AuthApiTest {
         final HttpObject resendResponse = post("/api/auth/verify-email/request", Map.of());
 
         assertThat(resendResponse.statusCode()).isEqualTo(401);
-        assertThat(resendResponse.bodyAsMap().asString("error"))
-            .isEqualTo("You must be signed in to request a verification email.");
+        assertThat(resendResponse.bodyAsMap().asString("code"))
+            .isEqualTo(AuthUtil.VERIFICATION_AUTH_REQUIRED_CODE);
     }
 
     @Test
@@ -374,8 +374,127 @@ class AuthApiTest {
         ));
 
         assertThat(confirmResponse.statusCode()).isEqualTo(400);
-        assertThat(confirmResponse.bodyAsMap().asString("error"))
-            .isEqualTo("Verification link is invalid or has expired.");
+        assertThat(confirmResponse.bodyAsMap().asString("code"))
+            .isEqualTo(AuthUtil.VERIFICATION_TOKEN_INVALID_CODE);
+    }
+
+    @Test
+    void resetsPasswordFromEmailLinkAndDeletesExistingSessions() {
+        final String[] sentPasswordResetUrl = new String[1];
+        nano = newTestNano(
+            EMAIL_VERIFICATION_SETTINGS,
+            new VerificationEmailSender() {
+                @Override
+                public void sendVerificationEmail(
+                    final String recipientEmail,
+                    final String recipientName,
+                    final String verificationUrl
+                ) {
+                }
+
+                @Override
+                public void sendPasswordResetEmail(
+                    final String recipientEmail,
+                    final String recipientName,
+                    final String passwordResetUrl
+                ) {
+                    sentPasswordResetUrl[0] = passwordResetUrl;
+                }
+            }
+        );
+
+        final HttpObject registerResponse = registerPrimaryUser();
+        final String registerSessionCookie = cookieValue(registerResponse, AuthUtil.AUTH_SESSION_COOKIE);
+        final HttpObject loginResponse = post("/api/auth/login", Map.of(
+            "email", PRIMARY_EMAIL,
+            "password", PRIMARY_PASSWORD
+        ));
+        final String loginSessionCookie = cookieValue(loginResponse, AuthUtil.AUTH_SESSION_COOKIE);
+
+        final HttpObject requestResponse = post("/api/auth/password-reset/request", Map.of(
+            "email", PRIMARY_EMAIL
+        ));
+        assertThat(requestResponse.statusCode()).isEqualTo(200);
+        assertThat(requestResponse.bodyAsMap().asBoolean("requested")).isTrue();
+        assertThat(sentPasswordResetUrl[0]).isNotBlank();
+
+        final String token = passwordResetTokenFromUrl(sentPasswordResetUrl[0]);
+        final HttpObject confirmResponse = post("/api/auth/password-reset/confirm", Map.of(
+            "token", token,
+            "password", "NewSecure1"
+        ));
+        assertThat(confirmResponse.statusCode()).isEqualTo(200);
+        assertThat(confirmResponse.bodyAsMap().asBoolean("reset")).isTrue();
+
+        assertThat(get("/api/auth/session", registerSessionCookie).bodyAsMap().asBoolean("authenticated")).isFalse();
+        assertThat(get("/api/auth/session", loginSessionCookie).bodyAsMap().asBoolean("authenticated")).isFalse();
+
+        final HttpObject oldPasswordLogin = post("/api/auth/login", Map.of(
+            "email", PRIMARY_EMAIL,
+            "password", PRIMARY_PASSWORD
+        ));
+        assertThat(oldPasswordLogin.statusCode()).isEqualTo(401);
+
+        final HttpObject newPasswordLogin = post("/api/auth/login", Map.of(
+            "email", PRIMARY_EMAIL,
+            "password", "NewSecure1"
+        ));
+        assertThat(newPasswordLogin.statusCode()).isEqualTo(200);
+    }
+
+    @Test
+    void passwordResetRequestDoesNotRevealUnknownEmails() {
+        final int[] resetEmailsSent = {0};
+        nano = newTestNano(
+            EMAIL_VERIFICATION_SETTINGS,
+            new VerificationEmailSender() {
+                @Override
+                public void sendVerificationEmail(
+                    final String recipientEmail,
+                    final String recipientName,
+                    final String verificationUrl
+                ) {
+                }
+
+                @Override
+                public void sendPasswordResetEmail(
+                    final String recipientEmail,
+                    final String recipientName,
+                    final String passwordResetUrl
+                ) {
+                    resetEmailsSent[0]++;
+                }
+            }
+        );
+
+        final HttpObject requestResponse = post("/api/auth/password-reset/request", Map.of(
+            "email", "unknown@example.test"
+        ));
+
+        assertThat(requestResponse.statusCode()).isEqualTo(200);
+        assertThat(requestResponse.bodyAsMap().asBoolean("requested")).isTrue();
+        assertThat(resetEmailsSent[0]).isZero();
+    }
+
+    @Test
+    void rejectsInvalidPasswordResetTokensAndWeakNewPasswords() {
+        nano = newTestNano();
+
+        final HttpObject invalidTokenResponse = post("/api/auth/password-reset/confirm", Map.of(
+            "token", "reset_invalid",
+            "password", "NewSecure1"
+        ));
+        assertThat(invalidTokenResponse.statusCode()).isEqualTo(400);
+        assertThat(invalidTokenResponse.bodyAsMap().asString("code"))
+            .isEqualTo(AuthUtil.PASSWORD_RESET_TOKEN_INVALID_CODE);
+
+        final HttpObject weakPasswordResponse = post("/api/auth/password-reset/confirm", Map.of(
+            "token", "reset_invalid",
+            "password", "password"
+        ));
+        assertThat(weakPasswordResponse.statusCode()).isEqualTo(400);
+        assertThat(weakPasswordResponse.bodyAsMap().asString("code"))
+            .isEqualTo(AuthUtil.PASSWORD_REQUIREMENTS_CODE);
     }
 
     @Test
@@ -395,8 +514,8 @@ class AuthApiTest {
         final HttpObject blockedResend = post("/api/auth/verify-email/request", Map.of(), sessionCookie);
 
         assertThat(blockedResend.statusCode()).isEqualTo(429);
-        assertThat(blockedResend.bodyAsMap().asString("error"))
-            .isEqualTo("A verification email can be sent only once in a day.");
+        assertThat(blockedResend.bodyAsMap().asString("code"))
+            .isEqualTo(AuthUtil.VERIFICATION_DAILY_LIMIT_CODE);
 
         ageVerificationSendHistory(PRIMARY_EMAIL, Instant.now().minusSeconds(25 * 60 * 60));
 
@@ -406,8 +525,8 @@ class AuthApiTest {
 
         final HttpObject blockedAgain = post("/api/auth/verify-email/request", Map.of(), sessionCookie);
         assertThat(blockedAgain.statusCode()).isEqualTo(429);
-        assertThat(blockedAgain.bodyAsMap().asString("error"))
-            .isEqualTo("A verification email can be sent only once in a day.");
+        assertThat(blockedAgain.bodyAsMap().asString("code"))
+            .isEqualTo(AuthUtil.VERIFICATION_DAILY_LIMIT_CODE);
     }
 
     @Test
@@ -512,7 +631,7 @@ class AuthApiTest {
     }
 
     @Test
-    void deletesTheAuthenticatedAccountAndClearsTheSession() {
+    void softDeletesTheAuthenticatedAccountAndClearsTheSession() {
         nano = newTestNano();
 
         final HttpObject registerResponse = post("/api/auth/register", Map.of(
@@ -523,6 +642,7 @@ class AuthApiTest {
         ));
         assertThat(registerResponse.statusCode()).isEqualTo(201);
         final String sessionCookie = cookieValue(registerResponse, AuthUtil.AUTH_SESSION_COOKIE);
+        final String publicId = userPublicIdByEmail(PRIMARY_EMAIL);
 
         final HttpObject deleteResponse = delete("/api/profile", sessionCookie);
         assertThat(deleteResponse.statusCode()).isEqualTo(200);
@@ -532,6 +652,17 @@ class AuthApiTest {
         assertThat(sessionResponse.statusCode()).isEqualTo(200);
         assertThat(sessionResponse.bodyAsMap().asBoolean("authenticated")).isFalse();
         assertThat(userCountByEmail(PRIMARY_EMAIL)).isZero();
+        assertThat(userSoftDeletedByPublicId(publicId)).isTrue();
+
+        final HttpObject loginResponse = post("/api/auth/login", Map.of(
+            "email", PRIMARY_EMAIL,
+            "password", PRIMARY_PASSWORD
+        ));
+        assertThat(loginResponse.statusCode()).isEqualTo(401);
+
+        final HttpObject publicProfileResponse = get("/api/users/" + publicId, null);
+        assertThat(publicProfileResponse.statusCode()).isEqualTo(410);
+        assertThat(publicProfileResponse.bodyAsMap().asString("code")).isEqualTo("USER_DELETED");
     }
 
     private Nano newTestNano() {
@@ -676,6 +807,24 @@ class AuthApiTest {
         }
     }
 
+    private boolean userSoftDeletedByPublicId(final String publicId) {
+        final String sql = """
+            select is_deleted
+            from users
+            where public_id = ?
+            """;
+        try (Connection connection = databaseRuntime.dataSource().getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, publicId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).isTrue();
+                return resultSet.getBoolean("is_deleted");
+            }
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Unable to load soft delete state", exception);
+        }
+    }
+
     private void markEmailVerified(final String email) {
         final String sql = """
             update users
@@ -720,6 +869,12 @@ class AuthApiTest {
 
     private String verificationTokenFromUrl(final String verificationUrl) {
         final String query = URI.create(verificationUrl).getQuery();
+        assertThat(query).startsWith("token=");
+        return URLDecoder.decode(query.substring("token=".length()), StandardCharsets.UTF_8);
+    }
+
+    private String passwordResetTokenFromUrl(final String passwordResetUrl) {
+        final String query = URI.create(passwordResetUrl).getQuery();
         assertThat(query).startsWith("token=");
         return URLDecoder.decode(query.substring("token=".length()), StandardCharsets.UTF_8);
     }
