@@ -155,7 +155,7 @@ resend_api_key="${resend_api_key:-test-key}" \
 "$BACKEND_BINARY" >"$TMP_DIR/backend.log" 2>&1 &
 BACKEND_PID=$!
 
-wait_for_http "http://127.0.0.1:${APP_PORT}/api/projects" "project feed API"
+wait_for_http "http://127.0.0.1:${APP_PORT}/api/auth/session" "auth session API"
 wait_for_http "$PLAYWRIGHT_BASE_URL/" "frontend shell"
 seed_e2e_invite
 
