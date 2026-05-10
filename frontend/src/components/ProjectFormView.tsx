@@ -14,6 +14,12 @@ type ProjectFormViewProps = {
 }
 
 const BLANK_ROLE: OpenRole = { title: '', commitment: '' }
+const PROJECT_TITLE_MAX_LENGTH = 120
+const PROJECT_DESCRIPTION_MAX_LENGTH = 3000
+const FOUNDER_ROLE_MAX_LENGTH = 120
+const FOUNDER_COMMITMENT_MAX_LENGTH = 500
+const OPEN_ROLE_TITLE_MAX_LENGTH = 120
+const OPEN_ROLE_COMMITMENT_MAX_LENGTH = 500
 
 export function ProjectFormView({
   copy,
@@ -108,16 +114,16 @@ export function ProjectFormView({
   function validate(nextForm: ProjectPayload) {
     const errors: Record<string, string> = {}
 
-    if (nextForm.title.trim().length < 5 || nextForm.title.trim().length > 120) {
+    if (nextForm.title.trim().length < 5 || nextForm.title.trim().length > PROJECT_TITLE_MAX_LENGTH) {
       errors.title = copy.validationTitle
     }
-    if (nextForm.description.trim().length < 40 || nextForm.description.trim().length > 1024) {
+    if (nextForm.description.trim().length < 40 || nextForm.description.trim().length > PROJECT_DESCRIPTION_MAX_LENGTH) {
       errors.description = copy.validationDescription
     }
-    if (nextForm.founderRole.trim().length < 3 || nextForm.founderRole.trim().length > 80) {
+    if (nextForm.founderRole.trim().length < 3 || nextForm.founderRole.trim().length > FOUNDER_ROLE_MAX_LENGTH) {
       errors.founderRole = copy.validationFounderRole
     }
-    if (nextForm.founderCommitment.trim().length < 10 || nextForm.founderCommitment.trim().length > 280) {
+    if (nextForm.founderCommitment.trim().length < 5 || nextForm.founderCommitment.trim().length > FOUNDER_COMMITMENT_MAX_LENGTH) {
       errors.founderCommitment = copy.validationFounderCommitment
     }
     if (nextForm.openRoles.length < 1) {
@@ -128,10 +134,10 @@ export function ProjectFormView({
     }
 
     nextForm.openRoles.forEach((role, index) => {
-      if (role.title.trim().length < 3 || role.title.trim().length > 80) {
+      if (role.title.trim().length < 3 || role.title.trim().length > OPEN_ROLE_TITLE_MAX_LENGTH) {
         errors[`openRoleTitle_${index}`] = copy.validationRoleTitle
       }
-      if (role.commitment.trim().length < 3 || role.commitment.trim().length > 80) {
+      if (role.commitment.trim().length < 3 || role.commitment.trim().length > OPEN_ROLE_COMMITMENT_MAX_LENGTH) {
         errors[`openRoleCommitment_${index}`] = copy.validationRoleCommitment
       }
     })
@@ -217,7 +223,7 @@ export function ProjectFormView({
               value={form.title}
               onChange={(event) => updateField('title', event.target.value)}
               type="text"
-              maxLength={120}
+              maxLength={PROJECT_TITLE_MAX_LENGTH}
               required
             />
             {fieldErrors.title ? <span className="project-form__error">{fieldErrors.title}</span> : null}
@@ -229,10 +235,15 @@ export function ProjectFormView({
               aria-label={copy.descriptionLabel}
               value={form.description}
               onChange={(event) => updateField('description', event.target.value)}
-              rows={7}
-              maxLength={1024}
+              rows={9}
+              maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
               required
             />
+            {form.description.length >= PROJECT_DESCRIPTION_MAX_LENGTH ? (
+              <span className="project-form__limit" aria-live="polite">
+                {copy.limitReached(PROJECT_DESCRIPTION_MAX_LENGTH)}
+              </span>
+            ) : null}
             {fieldErrors.description ? <span className="project-form__error">{fieldErrors.description}</span> : null}
           </label>
         </section>
@@ -250,9 +261,14 @@ export function ProjectFormView({
               value={form.founderRole}
               onChange={(event) => updateField('founderRole', event.target.value)}
               type="text"
-              maxLength={80}
+              maxLength={FOUNDER_ROLE_MAX_LENGTH}
               required
             />
+            {form.founderRole.length >= FOUNDER_ROLE_MAX_LENGTH ? (
+              <span className="project-form__limit" aria-live="polite">
+                {copy.limitReached(FOUNDER_ROLE_MAX_LENGTH)}
+              </span>
+            ) : null}
             {fieldErrors.founderRole ? <span className="project-form__error">{fieldErrors.founderRole}</span> : null}
           </label>
 
@@ -262,10 +278,15 @@ export function ProjectFormView({
               aria-label={copy.founderCommitmentLabel}
               value={form.founderCommitment}
               onChange={(event) => updateField('founderCommitment', event.target.value)}
-              rows={5}
-              maxLength={280}
+              rows={6}
+              maxLength={FOUNDER_COMMITMENT_MAX_LENGTH}
               required
             />
+            {form.founderCommitment.length >= FOUNDER_COMMITMENT_MAX_LENGTH ? (
+              <span className="project-form__limit" aria-live="polite">
+                {copy.limitReached(FOUNDER_COMMITMENT_MAX_LENGTH)}
+              </span>
+            ) : null}
             {fieldErrors.founderCommitment ? (
               <span className="project-form__error">{fieldErrors.founderCommitment}</span>
             ) : null}
@@ -299,9 +320,14 @@ export function ProjectFormView({
                     value={role.title}
                     onChange={(event) => updateRole(index, 'title', event.target.value)}
                     type="text"
-                    maxLength={80}
+                    maxLength={OPEN_ROLE_TITLE_MAX_LENGTH}
                     required
                   />
+                  {role.title.length >= OPEN_ROLE_TITLE_MAX_LENGTH ? (
+                    <span className="project-form__limit" aria-live="polite">
+                      {copy.limitReached(OPEN_ROLE_TITLE_MAX_LENGTH)}
+                    </span>
+                  ) : null}
                   {fieldErrors[`openRoleTitle_${index}`] ? (
                     <span className="project-form__error">{fieldErrors[`openRoleTitle_${index}`]}</span>
                   ) : null}
@@ -313,10 +339,15 @@ export function ProjectFormView({
                     aria-label={copy.roleCommitmentAriaLabel(index + 1)}
                     value={role.commitment}
                     onChange={(event) => updateRole(index, 'commitment', event.target.value)}
-                    rows={3}
-                    maxLength={80}
+                    rows={5}
+                    maxLength={OPEN_ROLE_COMMITMENT_MAX_LENGTH}
                     required
                   />
+                  {role.commitment.length >= OPEN_ROLE_COMMITMENT_MAX_LENGTH ? (
+                    <span className="project-form__limit" aria-live="polite">
+                      {copy.limitReached(OPEN_ROLE_COMMITMENT_MAX_LENGTH)}
+                    </span>
+                  ) : null}
                   {fieldErrors[`openRoleCommitment_${index}`] ? (
                     <span className="project-form__error">{fieldErrors[`openRoleCommitment_${index}`]}</span>
                   ) : null}
