@@ -203,6 +203,16 @@ export default function App({ api }: AppProps) {
   }, [])
 
   useEffect(() => {
+    if (sessionLoading) {
+      return
+    }
+    if (!session.authenticated) {
+      setProjects([])
+      setProjectsError(null)
+      setProjectsLoading(false)
+      return
+    }
+
     let cancelled = false
 
     setProjectsLoading(true)
@@ -225,7 +235,7 @@ export default function App({ api }: AppProps) {
     return () => {
       cancelled = true
     }
-  }, [copy.feed.error, fetchProjects])
+  }, [copy.feed.error, fetchProjects, session.authenticated, sessionLoading])
 
   useEffect(() => {
     if (sessionLoading) {
@@ -235,7 +245,10 @@ export default function App({ api }: AppProps) {
       navigateTo('/', setRoute)
       return
     }
-    if (!session.authenticated && (route.name === 'projectCreate' || route.name === 'projectEdit' || route.name === 'profile')) {
+    if (
+      !session.authenticated
+      && (route.name === 'projectCreate' || route.name === 'projectDetail' || route.name === 'projectEdit' || route.name === 'profile')
+    ) {
       navigateTo('/login', setRoute)
     }
   }, [route, session, sessionLoading])
@@ -295,6 +308,7 @@ export default function App({ api }: AppProps) {
     setSession({ authenticated: false })
     setVerificationNotice(null)
     setNotifications([])
+    setProjects([])
     navigateTo('/', setRoute)
   }
 
@@ -483,10 +497,12 @@ export default function App({ api }: AppProps) {
           projects={projects}
           loading={projectsLoading}
           error={projectsError}
+          canViewProjects={session.authenticated}
           highlightSlug={route.highlightSlug}
           notice={route.notice}
           onOpenProject={(slug) => navigateTo(`/projects/${slug}`, setRoute)}
           onOpenFounderProfile={(publicId) => navigateTo(`/users/${encodeURIComponent(publicId)}`, setRoute)}
+          onSignIn={() => navigateTo('/login', setRoute)}
         />
       ) : null}
 
@@ -583,22 +599,26 @@ export default function App({ api }: AppProps) {
       ) : null}
 
       {route.name === 'projectDetail' ? (
-        <ProjectDetailView
-          copy={copy.projectDetail}
-          slug={route.slug}
-          notice={route.notice}
-          refreshKey={projectDetailRefreshKey}
-          canViewComments={notificationsEnabled}
-          onLoadProject={fetchProject}
-          onLoadComments={fetchProjectComments}
-          onCreateComment={saveProjectComment}
-          onMarkCommentsRead={saveProjectCommentsRead}
-          onCommentsChanged={() => void refreshNotifications()}
-          onOpenFounderProfile={(publicId) => navigateTo(`/users/${encodeURIComponent(publicId)}`, setRoute)}
-          onEdit={(slug) => navigateTo(`/projects/${slug}/edit`, setRoute)}
-          onDelete={handleDeleteProject}
-          onBackToFeed={(slug, notice) => navigateTo(feedPathForProject(slug, notice), setRoute)}
-        />
+        sessionLoading ? (
+          <p className="state-card">{copy.header.loading}</p>
+        ) : session.authenticated ? (
+          <ProjectDetailView
+            copy={copy.projectDetail}
+            slug={route.slug}
+            notice={route.notice}
+            refreshKey={projectDetailRefreshKey}
+            canViewComments={notificationsEnabled}
+            onLoadProject={fetchProject}
+            onLoadComments={fetchProjectComments}
+            onCreateComment={saveProjectComment}
+            onMarkCommentsRead={saveProjectCommentsRead}
+            onCommentsChanged={() => void refreshNotifications()}
+            onOpenFounderProfile={(publicId) => navigateTo(`/users/${encodeURIComponent(publicId)}`, setRoute)}
+            onEdit={(slug) => navigateTo(`/projects/${slug}/edit`, setRoute)}
+            onDelete={handleDeleteProject}
+            onBackToFeed={(slug, notice) => navigateTo(feedPathForProject(slug, notice), setRoute)}
+          />
+        ) : null
       ) : null}
 
       {route.name === 'projectEdit' ? (
@@ -630,10 +650,12 @@ type FeedViewProps = {
   projects: Project[]
   loading: boolean
   error: string | null
+  canViewProjects: boolean
   highlightSlug: string | null
   notice: FeedNotice
   onOpenProject: (slug: string) => void
   onOpenFounderProfile: (publicId: string) => void
+  onSignIn: () => void
 }
 
 type NotificationBellProps = {
@@ -727,7 +749,18 @@ function NotificationBell({ copy, notifications, onOpenProject, onRefresh }: Not
   )
 }
 
-function FeedView({ copy, projects, loading, error, highlightSlug, notice, onOpenProject, onOpenFounderProfile }: FeedViewProps) {
+function FeedView({
+  copy,
+  projects,
+  loading,
+  error,
+  canViewProjects,
+  highlightSlug,
+  notice,
+  onOpenProject,
+  onOpenFounderProfile,
+  onSignIn,
+}: FeedViewProps) {
   useEffect(() => {
     if (!highlightSlug || loading || error) {
       return
@@ -774,7 +807,22 @@ function FeedView({ copy, projects, loading, error, highlightSlug, notice, onOpe
 
       {loading ? <p className="state-card">{copy.feed.loading}</p> : null}
       {error ? <p className="state-card state-card--error">{error}</p> : null}
-      {!loading && !error && projects.length === 0 ? (
+      {!loading && !error && !canViewProjects ? (
+        <section className="public-gate" aria-labelledby="public-gate-title">
+          <article className="public-gate__card">
+            <p className="public-gate__eyebrow">{copy.feed.membersOnlyEyebrow}</p>
+            <h2 id="public-gate-title">{copy.feed.membersOnlyTitle}</h2>
+            <p>{copy.feed.membersOnlyCopy}</p>
+            <div className="public-gate__actions">
+              <button className="primary-button" type="button" onClick={onSignIn}>
+                {copy.feed.membersOnlyAction}
+              </button>
+            </div>
+          </article>
+        </section>
+      ) : null}
+
+      {!loading && !error && canViewProjects && projects.length === 0 ? (
         <section className="state-shell">
           <article className="state-card">
             <strong>{copy.feed.emptyTitle}</strong>
@@ -783,7 +831,7 @@ function FeedView({ copy, projects, loading, error, highlightSlug, notice, onOpe
         </section>
       ) : null}
 
-      {!loading && !error && projects.length > 0 ? (
+      {!loading && !error && canViewProjects && projects.length > 0 ? (
         <section className="feed-grid" aria-label={copy.feed.ariaLabel}>
           {projects.map((project) => (
             <ProjectCard
@@ -1187,22 +1235,25 @@ function VerificationConfirmView({
 }: VerificationConfirmViewProps) {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>(token ? 'loading' : 'error')
   const [error, setError] = useState<string | null>(token ? null : copy.invalid)
-  const confirmedTokenRef = useRef<string | null>(null)
+  const confirmationRef = useRef<{ token: string; promise: Promise<VerificationConfirmResponse> } | null>(null)
 
   useEffect(() => {
     let cancelled = false
 
-    if (!token || confirmedTokenRef.current === token) {
+    if (!token) {
       return
     }
-    confirmedTokenRef.current = token
 
-    onConfirm(token)
+    if (confirmationRef.current?.token !== token) {
+      confirmationRef.current = { token, promise: onConfirm(token) }
+    }
+
+    confirmationRef.current.promise
       .then(() => {
         if (!cancelled) {
           setStatus('success')
+          void onRefreshSession().catch(() => undefined)
         }
-        void onRefreshSession().catch(() => undefined)
       })
       .catch((nextError) => {
         if (!cancelled) {

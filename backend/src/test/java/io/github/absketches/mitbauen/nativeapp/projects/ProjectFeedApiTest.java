@@ -1,7 +1,5 @@
 package io.github.absketches.mitbauen.nativeapp.projects;
 
-import berlin.yuna.typemap.model.LinkedTypeMap;
-import berlin.yuna.typemap.model.TypeList;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
 import io.github.absketches.mitbauen.nativeapp.db.PostgresTestDatabase;
 import io.github.absketches.mitbauen.nativeapp.db.TestDatabaseMigrations;
@@ -33,7 +31,7 @@ class ProjectFeedApiTest {
     }
 
     @Test
-    void returnsAnEmptyFeedWhenNoProjectsExist() {
+    void rejectsAnonymousProjectFeedAccess() {
         final PostgresTestDatabase.DatabaseConfig databaseConfig = PostgresTestDatabase.createDatabase("feed");
         TestDatabaseMigrations.migrate(databaseConfig.jdbcUrl(), databaseConfig.jdbcUser(), databaseConfig.jdbcPassword());
         databaseRuntime = new DatabaseRuntime(
@@ -55,9 +53,7 @@ class ProjectFeedApiTest {
             .path("http://localhost:" + nano.service(HttpServer.class).port() + "/api/projects")
             .send(nano.context(ProjectFeedApiTest.class));
 
-        assertThat(response.statusCode()).isEqualTo(200);
-        final LinkedTypeMap body = response.bodyAsMap();
-        final TypeList projects = body.asList("projects");
-        assertThat(projects).isEmpty();
+        assertThat(response.statusCode()).isEqualTo(401);
+        assertThat(response.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_VIEW_AUTH_REQUIRED_CODE);
     }
 }

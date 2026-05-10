@@ -602,6 +602,68 @@ textarea {
   justify-items: start;
 }
 
+.public-gate {
+  display: grid;
+  margin-top: 1.2rem;
+}
+
+.public-gate__card {
+  position: relative;
+  overflow: hidden;
+  width: min(100%, 46rem);
+  padding: clamp(1.4rem, 4vw, 2.2rem);
+  border: 1px solid rgba(17, 17, 17, 0.12);
+  border-radius: 2rem;
+  background: #111111;
+  color: #fafaf7;
+  box-shadow: var(--shadow-strong);
+}
+
+.public-gate__card::after {
+  content: "";
+  position: absolute;
+  inset: auto -4rem -5rem auto;
+  width: 14rem;
+  height: 14rem;
+  border: 1px solid rgba(250, 250, 247, 0.16);
+  border-radius: 50%;
+}
+
+.public-gate__eyebrow {
+  margin: 0 0 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-size: 0.76rem;
+  color: rgba(250, 250, 247, 0.62);
+}
+
+.public-gate__card h2 {
+  position: relative;
+  max-width: 12ch;
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 3.3rem);
+  line-height: 0.96;
+}
+
+.public-gate__card p:not(.public-gate__eyebrow) {
+  position: relative;
+  max-width: 38rem;
+  margin: 1rem 0 0;
+  color: rgba(250, 250, 247, 0.72);
+  line-height: 1.75;
+}
+
+.public-gate__actions {
+  position: relative;
+  margin-top: 1.3rem;
+}
+
+.public-gate .primary-button {
+  border-color: #fafaf7;
+  color: #111111;
+  background: #fafaf7;
+}
+
 .project-card__header {
   display: flex;
   flex-direction: column;

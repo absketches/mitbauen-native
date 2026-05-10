@@ -28,6 +28,7 @@ public class ProjectFeedUtil {
     public static final int OPEN_ROLES_MIN_COUNT = 1;
     public static final int OPEN_ROLES_MAX_COUNT = 6;
     public static final String PROJECT_NOT_FOUND_CODE = "PROJECT_NOT_FOUND";
+    public static final String PROJECT_VIEW_AUTH_REQUIRED_CODE = "PROJECT_VIEW_AUTH_REQUIRED";
     public static final String PROJECT_CREATE_AUTH_REQUIRED_CODE = "PROJECT_CREATE_AUTH_REQUIRED";
     public static final String PROJECT_CREATE_EMAIL_UNVERIFIED_CODE = "PROJECT_CREATE_EMAIL_UNVERIFIED";
     public static final String PROJECT_EDIT_AUTH_REQUIRED_CODE = "PROJECT_EDIT_AUTH_REQUIRED";
