@@ -3,6 +3,7 @@
 
 import { beforeEach, expect, test, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
+import { StrictMode } from 'react'
 import App from './App'
 import { ApiError } from './api'
 import type {
@@ -89,23 +90,26 @@ beforeEach(() => {
   window.localStorage.clear()
 })
 
-test('renders the public project feed in browser mode', async () => {
+test('keeps project feed private for anonymous visitors in browser mode', async () => {
   window.history.pushState({}, '', '/')
+  const loadProjects = vi.fn(async () => [])
 
   const screen = await render(
     <App
       api={{
-        loadProjects: async () => [],
+        loadProjects,
         loadSession: async (): Promise<SessionResponse> => ({ authenticated: false }),
       }}
     />,
   )
 
   await expect.element(screen.getByText('Finde Projekte mit konkretem Bedarf.')).toBeVisible()
-  await expect.element(screen.getByText('Noch keine Projekte.')).toBeVisible()
-  await expect.element(screen.getByText('Hier erscheinen Projekte, sobald das erste veröffentlicht ist.')).toBeVisible()
+  await expect.element(screen.getByText('Builders Inside')).toBeVisible()
+  await expect.element(screen.getByText('Lokale Projekte liegen hinter der Mitgliedertür.')).toBeVisible()
+  await expect.element(screen.getByText('Melde dich an oder erstelle ein Konto, um den aktiven Projektraum zu sehen. Die E-Mail-Bestätigung brauchst du erst, wenn du Projekte erstellen, bearbeiten, kommentieren oder Benachrichtigungen erhalten möchtest.')).toBeVisible()
   await expect.element(screen.getByText('Alle Plattformdaten werden in Deutschland gespeichert und gemäß EU-Datenschutzstandards behandelt.')).toBeVisible()
-  await expect.element(screen.getByRole('button', { name: 'Anmelden' })).toBeVisible()
+  await expect.element(screen.getByRole('button', { name: 'Anmelden' }).nth(0)).toBeVisible()
+  expect(loadProjects).not.toHaveBeenCalled()
   expect(document.documentElement.lang).toBe('de')
   expect(document.body.textContent).not.toContain('Join Mitbauen.')
 })
@@ -124,7 +128,9 @@ test('honors an explicit English language selection', async () => {
   )
 
   await expect.element(screen.getByText('Find projects that need contributors.')).toBeVisible()
-  await expect.element(screen.getByRole('button', { name: 'Sign in' })).toBeVisible()
+  await expect.element(screen.getByText('Builders Inside')).toBeVisible()
+  await expect.element(screen.getByText('Local projects live behind the member door.')).toBeVisible()
+  await expect.element(screen.getByRole('button', { name: 'Sign in' }).nth(0)).toBeVisible()
   expect(document.documentElement.lang).toBe('en')
 })
 
@@ -180,6 +186,29 @@ test('requests and confirms a password reset', async () => {
   expect(confirmPasswordReset).toHaveBeenCalledWith({ token: 'reset_browser', password: 'NewSecure1' })
 })
 
+test('confirms email verification and leaves the loading state in strict mode', async () => {
+  window.history.pushState({}, '', '/verify-email?token=verify_browser')
+  const confirmEmailVerification = vi.fn(async () => ({ verified: true }))
+
+  const screen = await render(
+    <StrictMode>
+      <App
+        api={{
+          loadProjects: async () => baseProjects,
+          loadSession: async (): Promise<SessionResponse> => ({ authenticated: false }),
+          confirmEmailVerification,
+        }}
+      />
+    </StrictMode>,
+  )
+
+  await expect.element(screen.getByText('E-Mail bestätigt.')).toBeVisible()
+  await expect.element(screen.getByText('Deine E-Mail-Adresse wurde bestätigt. Du kannst dich jetzt anmelden.')).toBeVisible()
+  expect(document.body.textContent).not.toContain('E-Mail-Adresse wird bestätigt...')
+  expect(confirmEmailVerification).toHaveBeenCalledOnce()
+  expect(confirmEmailVerification).toHaveBeenCalledWith('verify_browser')
+})
+
 test('clears stale unverified session state after password reset', async () => {
   window.history.pushState({}, '', '/reset-password?token=reset_browser')
   const confirmPasswordReset = vi.fn(async () => ({ reset: true }))
@@ -217,7 +246,10 @@ test('opens a founder profile from the public feed', async () => {
           bio: 'Helping neighbors move ideas into real, founder-led experiments.',
           email: null,
         }),
-        loadSession: async (): Promise<SessionResponse> => ({ authenticated: false }),
+        loadSession: async (): Promise<SessionResponse> => ({
+          authenticated: true,
+          user: { displayName: 'Alex Builder', email: 'alex@example.test', emailVerified: false },
+        }),
       }}
     />,
   )
@@ -229,12 +261,11 @@ test('opens a founder profile from the public feed', async () => {
 })
 
 test('shows localized copy for deleted public profiles', async () => {
-  window.history.pushState({}, '', '/')
+  window.history.pushState({}, '', '/users/usr_avery_bloom_01')
 
   const screen = await render(
     <App
       api={{
-        loadProjects: async () => baseProjects,
         loadPublicProfile: async () => {
           throw new ApiError('Request failed (410)', 410, 'USER_DELETED')
         },
@@ -242,8 +273,6 @@ test('shows localized copy for deleted public profiles', async () => {
       }}
     />,
   )
-
-  await screen.getByRole('button', { name: 'Avery Bloom' }).click()
 
   await expect.element(screen.getByText('Dieser Nutzer existiert nicht mehr.')).toBeVisible()
 })

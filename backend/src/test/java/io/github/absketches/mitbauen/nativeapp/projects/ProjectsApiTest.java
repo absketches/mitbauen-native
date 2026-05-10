@@ -64,12 +64,12 @@ class ProjectsApiTest {
         final String slug = createResponse.bodyAsMap().asString("slug");
         assertThat(slug).isEqualTo("circular-kitchen-atlas");
 
-        final HttpObject detailResponse = sendGet("/api/projects/" + slug, null);
+        final HttpObject detailResponse = sendGet("/api/projects/" + slug, sessionCookie);
         assertThat(detailResponse.statusCode()).isEqualTo(200);
         final LinkedTypeMap project = detailResponse.bodyAsMap().asMap("project");
         assertThat(project.asString("title")).isEqualTo("Circular Kitchen Atlas");
         assertThat(project.asString("description")).contains("surplus food");
-        assertThat(project.asBoolean("canManage")).isFalse();
+        assertThat(project.asBoolean("canManage")).isTrue();
         assertThat(project.asMap("founder").asString("publicId")).isNotBlank();
         assertThat(project.asMap("founder").asString("role")).isEqualTo("Founder + Community Ops");
         assertThat(project.asMap("founder").asString("commitment")).contains("pilot dinners every week");
@@ -81,12 +81,57 @@ class ProjectsApiTest {
             .toList())
             .containsExactly("Frontend Engineer", "Research Partner");
 
-        final HttpObject feedResponse = sendGet("/api/projects", null);
+        final HttpObject feedResponse = sendGet("/api/projects", sessionCookie);
         assertThat(feedResponse.statusCode()).isEqualTo(200);
         final TypeList feedProjects = feedResponse.bodyAsMap().asList("projects");
         final LinkedTypeMap firstProject = new LinkedTypeMap((Map<?, ?>) feedProjects.get(0));
         assertThat(firstProject.asString("slug")).isEqualTo(slug);
         assertThat(firstProject.asMap("founder").asString("publicId")).isNotBlank();
+    }
+
+    @Test
+    void projectFeedAndDetailsRequireRegistration() {
+        nano = newTestNano();
+        final String sessionCookie = registerAndReturnSessionCookie("owner.members.only@example.test", "Members Only");
+
+        final String slug = sendJson("/api/projects", "POST", Map.of(
+            "title", "Members Only Project",
+            "description", "A members-only project description with enough detail to satisfy validation and verify anonymous access is blocked.",
+            "founderRole", "Founder + Steward",
+            "founderCommitment", "I am coordinating the first member handoffs and keeping the project notes current.",
+            "openRoles", List.of(Map.of("title", "Project Helper", "commitment", "Help keep the member workflow moving."))
+        ), sessionCookie).bodyAsMap().asString("slug");
+
+        final HttpObject anonymousFeed = sendGet("/api/projects", null);
+        assertThat(anonymousFeed.statusCode()).isEqualTo(401);
+        assertThat(anonymousFeed.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_VIEW_AUTH_REQUIRED_CODE);
+
+        final HttpObject anonymousDetail = sendGet("/api/projects/" + slug, null);
+        assertThat(anonymousDetail.statusCode()).isEqualTo(401);
+        assertThat(anonymousDetail.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_VIEW_AUTH_REQUIRED_CODE);
+    }
+
+    @Test
+    void unverifiedMembersCanViewProjectFeedAndDetails() {
+        nano = newTestNano();
+        final String ownerCookie = registerAndReturnSessionCookie("owner.visible@example.test", "Visible Owner");
+        final String unverifiedCookie = registerAndReturnSessionCookie("viewer.unverified@example.test", "Unverified Viewer", false);
+
+        final String slug = sendJson("/api/projects", "POST", Map.of(
+            "title", "Unverified Viewer Project",
+            "description", "A visible project description with enough detail to confirm pending members can still browse project details.",
+            "founderRole", "Founder + Coordinator",
+            "founderCommitment", "I am coordinating the first project steps and making the work visible to members.",
+            "openRoles", List.of(Map.of("title", "Project Support", "commitment", "Help with member coordination."))
+        ), ownerCookie).bodyAsMap().asString("slug");
+
+        final HttpObject feedResponse = sendGet("/api/projects", unverifiedCookie);
+        assertThat(feedResponse.statusCode()).isEqualTo(200);
+        assertThat(feedResponse.bodyAsMap().asList("projects")).isNotEmpty();
+
+        final HttpObject detailResponse = sendGet("/api/projects/" + slug, unverifiedCookie);
+        assertThat(detailResponse.statusCode()).isEqualTo(200);
+        assertThat(detailResponse.bodyAsMap().asMap("project").asBoolean("canManage")).isFalse();
     }
 
     @Test
@@ -110,7 +155,7 @@ class ProjectsApiTest {
         assertThat(createResponse.statusCode()).isEqualTo(201);
         final LinkedTypeMap project = sendGet(
             "/api/projects/" + createResponse.bodyAsMap().asString("slug"),
-            null
+            sessionCookie
         ).bodyAsMap().asMap("project");
         assertThat(project.asString("description")).hasSize(ProjectFeedUtil.DESCRIPTION_MAX_LENGTH);
         assertThat(project.asMap("founder").asString("role")).hasSize(ProjectFeedUtil.FOUNDER_ROLE_MAX_LENGTH);
@@ -210,7 +255,7 @@ class ProjectsApiTest {
         assertThat(ownerEdit.statusCode()).isEqualTo(200);
         assertThat(ownerEdit.bodyAsMap().asString("slug")).isEqualTo(slug);
 
-        final LinkedTypeMap updatedProject = sendGet("/api/projects/" + slug, null).bodyAsMap().asMap("project");
+        final LinkedTypeMap updatedProject = sendGet("/api/projects/" + slug, ownerCookie).bodyAsMap().asMap("project");
         assertThat(updatedProject.asString("description")).contains("clearer volunteer handoffs");
         assertThat(updatedProject.asMap("founder").asString("role")).isEqualTo("Founder + Heat Response Lead");
         assertThat(updatedProject.asList("openRoles").stream()
@@ -268,10 +313,10 @@ class ProjectsApiTest {
         final HttpObject ownerDelete = sendRequest("/api/projects/" + slug, "DELETE", null, ownerCookie);
         assertThat(ownerDelete.statusCode()).isEqualTo(204);
 
-        final HttpObject missingDetail = sendGet("/api/projects/" + slug, null);
+        final HttpObject missingDetail = sendGet("/api/projects/" + slug, ownerCookie);
         assertThat(missingDetail.statusCode()).isEqualTo(404);
 
-        final TypeList feedProjects = sendGet("/api/projects", null).bodyAsMap().asList("projects");
+        final TypeList feedProjects = sendGet("/api/projects", ownerCookie).bodyAsMap().asList("projects");
         assertThat(feedProjects.stream()
             .map(project -> new LinkedTypeMap((Map<?, ?>) project).asString("slug"))
             .toList())
@@ -298,7 +343,7 @@ class ProjectsApiTest {
         assertThat(response.statusCode()).isEqualTo(403);
         assertThat(response.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_DELETE_EMAIL_UNVERIFIED_CODE);
 
-        final HttpObject stillExists = sendGet("/api/projects/" + slug, null);
+        final HttpObject stillExists = sendGet("/api/projects/" + slug, ownerCookie);
         assertThat(stillExists.statusCode()).isEqualTo(200);
     }
 
@@ -306,6 +351,7 @@ class ProjectsApiTest {
     void deletingAnAccountKeepsOwnedProjectsVisible() {
         nano = newTestNano();
         final String ownerCookie = registerAndReturnSessionCookie("owner.account.delete@example.test", "Owner Account Delete");
+        final String viewerCookie = registerAndReturnSessionCookie("viewer.account.delete@example.test", "Viewer Account Delete");
 
         final String slug = sendJson("/api/projects", "POST", Map.of(
             "title", "Mutual Aid Logistics",
@@ -319,11 +365,11 @@ class ProjectsApiTest {
         assertThat(deleteAccount.statusCode()).isEqualTo(200);
         assertThat(deleteAccount.bodyAsMap().asBoolean("authenticated")).isFalse();
 
-        final HttpObject preservedDetail = sendGet("/api/projects/" + slug, null);
+        final HttpObject preservedDetail = sendGet("/api/projects/" + slug, viewerCookie);
         assertThat(preservedDetail.statusCode()).isEqualTo(200);
         assertThat(preservedDetail.bodyAsMap().asMap("project").asString("slug")).isEqualTo(slug);
 
-        final TypeList feedProjects = sendGet("/api/projects", null).bodyAsMap().asList("projects");
+        final TypeList feedProjects = sendGet("/api/projects", viewerCookie).bodyAsMap().asList("projects");
         assertThat(feedProjects.stream()
             .map(project -> new LinkedTypeMap((Map<?, ?>) project).asString("slug"))
             .toList())

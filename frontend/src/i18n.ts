@@ -42,7 +42,7 @@ export const COPY = {
       buildersTitle: 'Assess fit quickly.',
       buildersCopy:
         'See what each project is building, who is leading it, and where support is needed.',
-      snapshotEyebrow: 'Public feed',
+      snapshotEyebrow: 'Member feed',
       snapshotCopy:
         'Compare scope, commitment, and open roles before you decide to join.',
       noticeCreated: 'Project published.',
@@ -50,6 +50,10 @@ export const COPY = {
       noticeDeleted: 'Your project has been deleted.',
       loading: 'Loading projects...',
       error: 'We could not load the projects right now. Please try again in a moment.',
+      membersOnlyEyebrow: 'Builders Inside',
+      membersOnlyTitle: 'Local projects live behind the member door.',
+      membersOnlyCopy: 'Sign in to browse the active project room.',
+      membersOnlyAction: 'Sign in',
       emptyTitle: 'No projects yet.',
       emptyCopy: 'Projects will appear here once the first one is published.',
       ariaLabel: 'Project feed',
@@ -306,7 +310,7 @@ export const COPY = {
       buildersTitle: 'Schnell einschätzen.',
       buildersCopy:
         'Sieh, woran gebaut wird, wer führt und wo Unterstützung gebraucht wird.',
-      snapshotEyebrow: 'Öffentlicher Feed',
+      snapshotEyebrow: 'Mitglieder-Feed',
       snapshotCopy:
         'Vergleiche Umfang, Commitment und offene Rollen, bevor du dich einbringst.',
       noticeCreated: 'Projekt veröffentlicht.',
@@ -314,6 +318,10 @@ export const COPY = {
       noticeDeleted: 'Dein Projekt wurde gelöscht.',
       loading: 'Projekte werden geladen...',
       error: 'Die Projekte konnten gerade nicht geladen werden. Bitte versuche es gleich noch einmal.',
+      membersOnlyEyebrow: 'Builders Inside',
+      membersOnlyTitle: 'Lokale Projekte liegen hinter der Mitgliedertür.',
+      membersOnlyCopy: 'Melde dich an oder erstelle ein Konto, um den aktiven Projektraum zu sehen. Die E-Mail-Bestätigung brauchst du erst, wenn du Projekte erstellen, bearbeiten, kommentieren oder Benachrichtigungen erhalten möchtest.',
+      membersOnlyAction: 'Anmelden',
       emptyTitle: 'Noch keine Projekte.',
       emptyCopy: 'Hier erscheinen Projekte, sobald das erste veröffentlicht ist.',
       ariaLabel: 'Projekt-Feed',

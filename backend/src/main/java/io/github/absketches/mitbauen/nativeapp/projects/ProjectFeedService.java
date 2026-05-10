@@ -74,6 +74,12 @@ public class ProjectFeedService extends Service {
     }
 
     protected void handleGet(final Event<HttpObject, HttpObject> event, final ProjectFeedUtil.RoutesMatch route) {
+        final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
+        if (sessionUser.isEmpty()) {
+            ProjectFeedUtil.respondUnauthorized(event, ProjectFeedUtil.PROJECT_VIEW_AUTH_REQUIRED_CODE);
+            return;
+        }
+
         switch (route) {
             case ProjectFeedUtil.ProjectFeedRoute __ ->
                 ProjectFeedUtil.respondProjects(event, ProjectFeedRepository.listProjects(databaseRuntime.dataSource()));
@@ -83,9 +89,7 @@ public class ProjectFeedService extends Service {
                         project -> ProjectFeedUtil.respondProjectDetails(
                             event,
                             project,
-                            AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource())
-                                .map(sessionUser -> sessionUser.id() == project.ownerUserId() && sessionUser.emailVerified())
-                                .orElse(false)
+                            sessionUser.get().id() == project.ownerUserId() && sessionUser.get().emailVerified()
                         ),
                         () -> ProjectFeedUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_NOT_FOUND_CODE)
                     );

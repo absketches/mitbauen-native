@@ -10,7 +10,8 @@ test('renders the project feed and completes invite registration plus login', as
   await page.goto('/')
 
   await expect(page.getByRole('heading', { name: 'Finde Projekte mit konkretem Bedarf.' })).toBeVisible()
-  await expect(page.getByText('Noch keine Projekte.')).toBeVisible()
+  await expect(page.getByText('Builders Inside')).toBeVisible()
+  await expect(page.getByText('Lokale Projekte liegen hinter der Mitgliedertür.')).toBeVisible()
 
   await page.goto(`/register?invite=${sharedInvite}`)
 
