@@ -1,169 +1,146 @@
-# Mitbauen Native
+# Mitbauen Lokal
 
-Fresh reboot of Mitbauen as a single-repo system with:
+Mitbauen Lokal is a small, community-focused platform for discovering local projects, sharing what help is needed, and keeping contributors in the loop. It is built as a lightweight full-stack app: a React frontend, a Java/Nano backend, PostgreSQL persistence, and a native-image deployment path for running comfortably on a small host such as a Raspberry Pi.
 
-- one packaged app artifact that serves both SPA routes and `/api`
-- Java 25 + Nano on the backend
-- PostgreSQL as a separately managed datastore
-- Vite + React + TypeScript on the frontend
-- local Docker Compose for contributor onboarding
-- host deployment through `systemd`
+The goal is simple: make it easier for people to find nearby initiatives and join in without turning contribution into paperwork. The codebase should feel the same way.
 
-## Planned stack
+## Project Shape
 
-- Backend: Java 25, Nano-oriented structure, plain JDBC
-- Database: PostgreSQL
-- DB driver: `org.postgresql:postgresql`
-- Pooling: `HikariCP`
-- Migrations: versioned SQL embedded in the app artifact
-- Frontend: Vite + React + TypeScript
-- Local infra: Docker Compose
-- Packaging: single jar or native binary with baked frontend assets
+- `frontend/` contains the React + TypeScript app built with Vite.
+- `backend/` contains the Java backend, database migrations, API services, and integration tests.
+- `docs/` contains longer notes such as architecture and operational reset guides.
+- `systemd/` contains deployment templates for the production service.
+- `build.sh`, `deploy.sh`, and `run-native-e2e.sh` are the main project-level helper scripts.
 
-## Current scaffold status
+## Prerequisites
 
-This repo is intentionally still early-stage, but the first end-to-end slices are in place:
+For everyday development you will want:
 
-- public project feed
-- invite-only registration and login
-- project create, detail, and edit flow
-- DB-backed sessions
-- embedded SQL migrations
-- single-binary app shell
-- local Docker setup
+- Node.js with npm
+- Java 25
+- Maven
+- Docker, if you want local PostgreSQL or containerized checks
+- Playwright browsers for frontend E2E work
 
-## Repo layout
+The backend integration tests expect PostgreSQL to be available through the test helpers in the repository. If a test fails because a local service is missing, check `docker-compose.yml` and the test output before chasing application code.
 
-```text
-backend/    Java backend, resources, and embedded SQL migrations
-frontend/   Static SPA source
-systemd/    Host service templates
-docs/       Architecture notes
-build.sh    Root build orchestrator
-deploy.sh   Host deployment bundle + install script
+## Getting Started
+
+Install frontend dependencies:
+
+```sh
+cd frontend
+npm install
 ```
 
-## Local development
+Run the frontend dev server:
 
-1. Copy `.env.example` to `.env`
-2. Start everything:
-
-```bash
-docker compose up --build
+```sh
+npm run dev
 ```
 
-Before the application container starts, Docker Compose runs a dedicated `browser-tests` container that executes the frontend browser suite. The app then runs migrations through the same packaged backend artifact before starting the HTTP server.
+Build the frontend:
 
-If you only want to run the browser suite, use:
-
-```bash
-docker compose up --build browser-tests
+```sh
+npm run build
 ```
 
-Backend integration tests run against a real PostgreSQL Docker container. `mvn verify` in `backend/` therefore expects a working local Docker daemon in addition to Java 25.
+Run backend verification from the backend directory:
 
-CI behavior:
-
-- `Native E2E` runs on pushes to every branch and on pull requests
-- `Native Release` runs only after a successful `Native E2E` run for a `main` push, then publishes the tested Raspberry Pi `arm64` artifacts
-
-If you want to run the backend from IntelliJ or another local IDE while keeping PostgreSQL in Docker:
-
-```bash
-cp .env.example .env
-docker compose up -d postgres
-cd frontend && npm run build
+```sh
+cd backend
+mvn -q verify
 ```
 
-Then start the backend app from the IDE with `jdbc_database_url`, `jdbc_database_user`, and `jdbc_database_password` set in the run configuration. The app shell is served from the built frontend assets, so that one frontend build step matters for IDE-based runs.
+Build both frontend and backend artifacts from the repository root:
 
-Useful checks:
-
-```bash
-docker compose ps
-docker compose logs -f postgres backend
+```sh
+./build.sh
 ```
 
-## Host deployment structure
+By default this creates a runnable backend JAR under `.artifacts/backend/app.jar`. To build the native binary instead:
 
-The Pi deployment follows a single-binary host setup rather than Docker on the target machine:
-
-- `build.sh` builds the frontend first, then packages the backend artifact with baked frontend assets and embedded SQL migrations
-- `deploy.sh` packages the backend artifact, a `systemd` unit, and an env template, or downloads the latest published deploy bundle from GitHub Packages
-- the backend runs as a `systemd` service on the Pi
-- PostgreSQL is managed separately on the host
-
-The generated host deployment expects:
-
-- PostgreSQL
-- `systemd`
-- a remote user with `ssh` access and `sudo` privileges
-- Java 25 only when deploying the jar mode
-- `curl` when pulling the deploy bundle from GitHub Packages
-
-For the preferred native-image deploy, no host Java runtime is required.
-
-The deployed shape is:
-
-- backend jar under `/opt/mitbauen/backend`
-- or, when `DEPLOY_BACKEND_MODE=native`, a native backend binary under `/opt/mitbauen/backend`
-- backend env file at `/etc/mitbauen/mitbauen.env`
-- `systemd` unit at `/etc/systemd/system/mitbauen-backend.service`
-- PostgreSQL data in its normal host-managed data directory or volume
-
-If the remote env file does not exist yet, `deploy.sh` will create it from the example template and stop, so you can fill in the real database credentials before rerunning the deployment. On a normal deploy, the installed `systemd` unit starts the app directly, and the app runs any pending embedded SQL migrations before opening the HTTP server.
-
-For email verification, add these runtime variables to `/etc/mitbauen/mitbauen.env`:
-
-- `app_public_base_url=https://www.mitbauen.space`
-- `app_email_from=Mitbauen <no-reply@mail.mitbauen.space>`
-- `resend_api_key=...`
-
-The production database volume is not meant to be cleaned up between releases. Forward-only migrations are tracked in `schema_migrations`, so new app versions only apply the SQL files that have not already been recorded.
-
-For a jar-based host deploy:
-
-```bash
-DEPLOY_REMOTE_USER=your-user \
-DEPLOY_REMOTE_HOST=your-pi-host \
-DEPLOY_BACKEND_MODE=jar \
-./deploy.sh
+```sh
+BUILD_NATIVE=1 ./build.sh
 ```
 
-For the default native-image host deploy:
+## Local Runtime
 
-```bash
-DEPLOY_REMOTE_USER=your-user \
-DEPLOY_REMOTE_HOST=your-pi-host \
-./deploy.sh
+The backend is configured through environment variables. The most important ones are:
+
+```sh
+app_service_http_port=8080
+jdbc_database_url=jdbc:postgresql://127.0.0.1:5432/mitbauen
+jdbc_database_user=mitbauen
+jdbc_database_password=mitbauen_dev_password
+app_public_base_url=http://127.0.0.1:8080
+app_email_from='Mitbauen <no-reply@mail.mitbauen.space>'
+resend_api_key=test-api-key
 ```
 
-If you already have a prepared native artifact or deploy bundle from CI, set `DEPLOY_USE_EXISTING_ARTIFACTS=1` to skip rebuilding locally before packaging or uploading it.
+For a local database, use the `postgres` service in `docker-compose.yml` or your own PostgreSQL instance. The application applies SQL migrations from `backend/src/main/resources/db/migrations`.
 
-To install the latest published native deploy bundle directly on a Pi, use the GitHub Packages mode:
+## Tests
 
-```bash
-GITHUB_PACKAGES_USERNAME=your-github-login \
-GITHUB_PACKAGES_TOKEN=your-classic-pat \
-DEPLOY_SOURCE=github-packages \
-DEPLOY_INSTALL_LOCAL=1 \
-./deploy.sh
+Frontend build and browser-mode component tests:
+
+```sh
+cd frontend
+npm run build
+npm run test:browser
 ```
 
-Optional knobs for that path:
+Backend integration tests:
 
-- `DEPLOY_RELEASE_VERSION=2026.04.120930` to pin a specific published version instead of the latest one
-- `GITHUB_PACKAGES_OWNER` / `GITHUB_PACKAGES_REPO` if the package source changes
+```sh
+cd backend
+mvn -q verify
+```
 
-GitHub’s Maven package registry currently requires authentication with a personal access token (classic), including for package installation: https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-apache-maven-registry
+Native end-to-end tests expect a native backend binary to exist at `.artifacts/backend/mitbauen-native-backend` unless `BACKEND_BINARY` is set:
 
-## Local URLs
+```sh
+BUILD_NATIVE=1 ./build.sh
+./run-native-e2e.sh
+```
 
-- App and API: `http://localhost:8080`
-- Postgres: `localhost:5432`
+Useful E2E overrides:
 
-## Near-term goals
+```sh
+APP_PORT=18082 PLAYWRIGHT_BASE_URL=http://127.0.0.1:18082 ./run-native-e2e.sh
+```
 
-1. Harden the single-binary startup flow for production deployment
-2. Complete the invite-only auth slice with more production safeguards
-3. Port the remaining Mitbauen domain model incrementally
+## Branching Strategy
+
+The project uses a simple staged flow:
+
+- `main` is the stable branch. It should only receive changes that are ready to ship.
+- `stg` is the integration branch. Feature work should land here first so it can be tested together.
+- Feature branches should branch from `stg` and use a short, descriptive name, for example `feature/project-field-limits` or `fix/password-reset-copy`.
+- Open pull requests back into `stg` unless a maintainer explicitly asks for a different target.
+- Keep pull requests focused. A small PR with a clear reason is much easier to review than a heroic one.
+- After `stg` has been verified, promote it into `main` through a PR or merge according to the release needs.
+
+Commit messages should be plain and specific.
+
+## Contribution Notes
+
+Please keep user-facing text available in both English and German. In the frontend this usually means updating `frontend/src/i18n.ts`; in the backend prefer stable error codes that the UI can translate instead of hardcoded English responses.
+
+When changing validation rules, update all three layers together:
+
+- frontend form validation and limits
+- backend validation constants
+- database column/check constraints via a new migration
+
+When changing API behavior, add or update backend integration tests. When changing a visible workflow, update browser or E2E tests where it makes sense.
+
+Most importantly: contributions do not have to be huge. A tidy bug fix, a clearer error state, or a test that captures expected behavior all help the project become easier for the next person.
+
+## Deployment
+
+Production deployment is designed around a small host running systemd. `deploy.sh` can create a deployment bundle from local artifacts or download one from GitHub Packages. The templates live in `systemd/`.
+
+For more operational detail, see:
+
+- `docs/architecture.md`

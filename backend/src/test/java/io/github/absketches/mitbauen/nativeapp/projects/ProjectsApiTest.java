@@ -90,6 +90,38 @@ class ProjectsApiTest {
     }
 
     @Test
+    void acceptsExpandedProjectFieldLimits() {
+        nano = newTestNano();
+        final String sessionCookie = registerAndReturnSessionCookie("owner.expanded@example.test", "Limit Builder");
+        final String description = "D".repeat(ProjectFeedUtil.DESCRIPTION_MAX_LENGTH);
+        final String founderRole = "F".repeat(ProjectFeedUtil.FOUNDER_ROLE_MAX_LENGTH);
+        final String founderCommitment = "C".repeat(ProjectFeedUtil.FOUNDER_COMMITMENT_MAX_LENGTH);
+        final String openRoleTitle = "R".repeat(ProjectFeedUtil.OPEN_ROLE_TITLE_MAX_LENGTH);
+        final String openRoleCommitment = "O".repeat(ProjectFeedUtil.OPEN_ROLE_COMMITMENT_MAX_LENGTH);
+
+        final HttpObject createResponse = sendJson("/api/projects", "POST", Map.of(
+            "title", "Expanded Field Limits",
+            "description", description,
+            "founderRole", founderRole,
+            "founderCommitment", founderCommitment,
+            "openRoles", List.of(Map.of("title", openRoleTitle, "commitment", openRoleCommitment))
+        ), sessionCookie);
+
+        assertThat(createResponse.statusCode()).isEqualTo(201);
+        final LinkedTypeMap project = sendGet(
+            "/api/projects/" + createResponse.bodyAsMap().asString("slug"),
+            null
+        ).bodyAsMap().asMap("project");
+        assertThat(project.asString("description")).hasSize(ProjectFeedUtil.DESCRIPTION_MAX_LENGTH);
+        assertThat(project.asMap("founder").asString("role")).hasSize(ProjectFeedUtil.FOUNDER_ROLE_MAX_LENGTH);
+        assertThat(project.asMap("founder").asString("commitment")).hasSize(ProjectFeedUtil.FOUNDER_COMMITMENT_MAX_LENGTH);
+
+        final LinkedTypeMap openRole = new LinkedTypeMap((Map<?, ?>) project.asList("openRoles").get(0));
+        assertThat(openRole.asString("title")).hasSize(ProjectFeedUtil.OPEN_ROLE_TITLE_MAX_LENGTH);
+        assertThat(openRole.asString("commitment")).hasSize(ProjectFeedUtil.OPEN_ROLE_COMMITMENT_MAX_LENGTH);
+    }
+
+    @Test
     void rejectsAnonymousProjectCreation() {
         nano = newTestNano();
 

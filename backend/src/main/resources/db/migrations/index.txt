@@ -7,3 +7,4 @@ V6__add_email_verification_and_account_cleanup.sql
 V7__add_project_comments_and_notifications.sql
 V8__soft_delete_users.sql
 V9__add_password_reset_tokens.sql
+V10__widen_project_field_limits.sql

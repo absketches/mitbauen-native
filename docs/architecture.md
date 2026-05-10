@@ -22,16 +22,12 @@
 
 - auth
 - users
-- invites
 - projects
 - roles
-- applications
 - messages
 - comments
 - notifications
-- email
 - db
-- security
 - shell
 
 ## Frontend principles
