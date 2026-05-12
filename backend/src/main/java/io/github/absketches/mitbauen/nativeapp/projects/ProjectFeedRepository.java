@@ -1,6 +1,10 @@
 package io.github.absketches.mitbauen.nativeapp.projects;
 
 import io.github.absketches.mitbauen.nativeapp.db.SqlTransactions;
+import io.github.absketches.mitbauen.nativeapp.projects.links.ProjectLink;
+import io.github.absketches.mitbauen.nativeapp.projects.links.ProjectLinksRepository;
+import io.github.absketches.mitbauen.nativeapp.projects.media.ProjectImage;
+import io.github.absketches.mitbauen.nativeapp.projects.media.ProjectImagesRepository;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -90,6 +94,8 @@ public class ProjectFeedRepository {
                         resultSet.getString("founder_commitment")
                     ),
                     List.of(),
+                    List.of(),
+                    List.of(),
                     resultSet.getTimestamp("created_at").toInstant()
                 ));
             }
@@ -102,6 +108,8 @@ public class ProjectFeedRepository {
         }
 
         final Map<Long, List<OpenRole>> openRolesByProjectId = loadOpenRoles(dataSource, projectIds);
+        final Map<Long, List<ProjectLink>> linksByProjectId = ProjectLinksRepository.loadProjectLinks(dataSource, projectIds);
+        final Map<Long, List<ProjectImage>> imagesByProjectId = ProjectImagesRepository.loadProjectImages(dataSource, projectIds);
         return projects.stream()
             .map(project -> new ProjectCard(
                 project.id(),
@@ -111,6 +119,8 @@ public class ProjectFeedRepository {
                 project.status(),
                 project.founder(),
                 openRolesByProjectId.getOrDefault(project.id(), List.of()),
+                linksByProjectId.getOrDefault(project.id(), List.of()),
+                imagesByProjectId.getOrDefault(project.id(), List.of()),
                 project.createdAt()
             ))
             .toList();
@@ -139,6 +149,8 @@ public class ProjectFeedRepository {
                         resultSet.getString("founder_commitment")
                     ),
                     loadOpenRoles(dataSource, List.of(projectId)).getOrDefault(projectId, List.of()),
+                    ProjectLinksRepository.loadProjectLinks(dataSource, List.of(projectId)).getOrDefault(projectId, List.of()),
+                    ProjectImagesRepository.loadProjectImages(dataSource, List.of(projectId)).getOrDefault(projectId, List.of()),
                     resultSet.getTimestamp("created_at").toInstant(),
                     resultSet.getTimestamp("updated_at").toInstant()
                 ));
@@ -158,6 +170,7 @@ public class ProjectFeedRepository {
                 final long projectId = insertProject(connection, ownerUserId, slug, input, now);
                 insertFounderRole(connection, projectId, input);
                 insertOpenRoles(connection, projectId, input.openRoles());
+                ProjectLinksRepository.insertProjectLinks(connection, projectId, input.links());
                 return slug;
             }
         );
@@ -171,6 +184,7 @@ public class ProjectFeedRepository {
                 updateProjectRow(connection, projectId, input);
                 updateFounderRole(connection, projectId, input);
                 replaceOpenRoles(connection, projectId, input.openRoles());
+                ProjectLinksRepository.replaceProjectLinks(connection, projectId, input.links());
                 return null;
             }
         );
@@ -301,6 +315,10 @@ public class ProjectFeedRepository {
     }
 
     private static Map<Long, List<OpenRole>> loadOpenRoles(final DataSource dataSource, final List<Long> projectIds) {
+        if (projectIds.isEmpty()) {
+            return Map.of();
+        }
+
         final StringJoiner placeholders = new StringJoiner(", ");
         projectIds.forEach(projectId -> placeholders.add("?"));
 

@@ -1,25 +1,37 @@
 import type { FormEvent } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ApiError } from '../api'
 import type { Dictionary } from '../i18n'
-import type { OpenRole, ProjectDetails, ProjectPayload } from '../types'
+import type { OpenRole, ProjectDetails, ProjectImage, ProjectImageChanges, ProjectLink, ProjectPayload } from '../types'
+import { ProjectImageView } from './ProjectImageView'
 
 type ProjectFormViewProps = {
   copy: Dictionary['projectForm']
   mode: 'create' | 'edit'
   slug?: string
   loadProject?: (slug: string) => Promise<ProjectDetails>
-  onSubmit: (payload: ProjectPayload) => Promise<void>
+  onSubmit: (payload: ProjectPayload, imageChanges: ProjectImageChanges) => Promise<void>
   onCancel: () => void
 }
 
+type NewProjectImage = {
+  file: File
+  previewUrl: string
+}
+
 const BLANK_ROLE: OpenRole = { title: '', commitment: '' }
+const BLANK_LINK: ProjectLink = { label: '', url: '' }
 const PROJECT_TITLE_MAX_LENGTH = 120
 const PROJECT_DESCRIPTION_MAX_LENGTH = 3000
 const FOUNDER_ROLE_MAX_LENGTH = 120
 const FOUNDER_COMMITMENT_MAX_LENGTH = 500
 const OPEN_ROLE_TITLE_MAX_LENGTH = 120
 const OPEN_ROLE_COMMITMENT_MAX_LENGTH = 500
+const PROJECT_LINKS_MAX_COUNT = 8
+const PROJECT_LINK_LABEL_MAX_LENGTH = 40
+const PROJECT_IMAGES_MAX_COUNT = 5
+const PROJECT_IMAGE_MAX_BYTES = 2 * 1024 * 1024
+const PROJECT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
 export function ProjectFormView({
   copy,
@@ -38,10 +50,23 @@ export function ProjectFormView({
     founderRole: '',
     founderCommitment: '',
     openRoles: [{ ...BLANK_ROLE }],
+    links: [],
   })
+  const [existingImages, setExistingImages] = useState<ProjectImage[]>([])
+  const [removedImageIds, setRemovedImageIds] = useState<number[]>([])
+  const [newImages, setNewImages] = useState<NewProjectImage[]>([])
+  const newImagesRef = useRef<NewProjectImage[]>([])
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    newImagesRef.current = newImages
+  }, [newImages])
+
+  useEffect(() => () => {
+    newImagesRef.current.forEach((image) => URL.revokeObjectURL(image.previewUrl))
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -68,7 +93,11 @@ export function ProjectFormView({
           founderRole: project.founder.role,
           founderCommitment: project.founder.commitment,
           openRoles: project.openRoles.length > 0 ? project.openRoles : [{ ...BLANK_ROLE }],
+          links: project.links ?? [],
         })
+        setExistingImages(project.images ?? [])
+        setRemovedImageIds([])
+        clearNewImages()
         setLoadingProject(false)
       })
       .catch(() => {
@@ -84,7 +113,7 @@ export function ProjectFormView({
     }
   }, [copy.loadError, loadProject, mode, slug])
 
-  function updateField(field: keyof Omit<ProjectPayload, 'openRoles'>, value: string) {
+  function updateField(field: 'title' | 'description' | 'founderRole' | 'founderCommitment', value: string) {
     setForm((current) => ({ ...current, [field]: value }))
   }
 
@@ -102,6 +131,71 @@ export function ProjectFormView({
       ...current,
       openRoles: [...current.openRoles, { ...BLANK_ROLE }],
     }))
+  }
+
+  function updateLink(index: number, field: keyof ProjectLink, value: string) {
+    setForm((current) => ({
+      ...current,
+      links: current.links.map((link, linkIndex) =>
+        linkIndex === index ? { ...link, [field]: value } : link,
+      ),
+    }))
+  }
+
+  function addLink() {
+    setForm((current) => ({
+      ...current,
+      links: [...current.links, { ...BLANK_LINK }],
+    }))
+  }
+
+  function removeLink(index: number) {
+    setForm((current) => ({
+      ...current,
+      links: current.links.filter((_, linkIndex) => linkIndex !== index),
+    }))
+  }
+
+  function addImages(files: FileList | null) {
+    if (!files) {
+      return
+    }
+    setNewImages((current) => {
+      const remainingSlots = PROJECT_IMAGES_MAX_COUNT - existingImages.length - current.length
+      if (remainingSlots <= 0) {
+        return current
+      }
+      const acceptedFiles = Array.from(files).slice(0, remainingSlots)
+      return [
+        ...current,
+        ...acceptedFiles.map((file) => ({
+          file,
+          previewUrl: URL.createObjectURL(file),
+        })),
+      ]
+    })
+  }
+
+  function removeExistingImage(imageId: number) {
+    setExistingImages((current) => current.filter((image) => image.id !== imageId))
+    setRemovedImageIds((current) => [...current, imageId])
+  }
+
+  function removeNewImage(index: number) {
+    setNewImages((current) => {
+      const removed = current[index]
+      if (removed) {
+        URL.revokeObjectURL(removed.previewUrl)
+      }
+      return current.filter((_, imageIndex) => imageIndex !== index)
+    })
+  }
+
+  function clearNewImages() {
+    setNewImages((current) => {
+      current.forEach((image) => URL.revokeObjectURL(image.previewUrl))
+      return []
+    })
   }
 
   function removeRole(index: number) {
@@ -132,6 +226,18 @@ export function ProjectFormView({
     if (nextForm.openRoles.length > 6) {
       errors.openRoles = copy.validationOpenRolesMax
     }
+    if (nextForm.links.length > PROJECT_LINKS_MAX_COUNT) {
+      errors.links = copy.validationLinksMax
+    }
+    if (existingImages.length + newImages.length > PROJECT_IMAGES_MAX_COUNT) {
+      errors.images = copy.validationImagesMax
+    }
+    if (newImages.some((image) => !PROJECT_IMAGE_TYPES.includes(image.file.type))) {
+      errors.images = copy.validationImageType
+    }
+    if (newImages.some((image) => image.file.size <= 0 || image.file.size > PROJECT_IMAGE_MAX_BYTES)) {
+      errors.images = copy.validationImageSize
+    }
 
     nextForm.openRoles.forEach((role, index) => {
       if (role.title.trim().length < 3 || role.title.trim().length > OPEN_ROLE_TITLE_MAX_LENGTH) {
@@ -139,6 +245,14 @@ export function ProjectFormView({
       }
       if (role.commitment.trim().length < 3 || role.commitment.trim().length > OPEN_ROLE_COMMITMENT_MAX_LENGTH) {
         errors[`openRoleCommitment_${index}`] = copy.validationRoleCommitment
+      }
+    })
+    nextForm.links.forEach((link, index) => {
+      if (link.label.trim().length < 2 || link.label.trim().length > PROJECT_LINK_LABEL_MAX_LENGTH) {
+        errors[`linkLabel_${index}`] = copy.validationLinkLabel
+      }
+      if (!isValidHttpUrl(link.url.trim())) {
+        errors[`linkUrl_${index}`] = copy.validationLinkUrl
       }
     })
 
@@ -168,6 +282,13 @@ export function ProjectFormView({
           title: role.title.trim(),
           commitment: role.commitment.trim(),
         })),
+        links: form.links.map((link) => ({
+          label: link.label.trim(),
+          url: link.url.trim(),
+        })),
+      }, {
+        newImages: newImages.map((image) => image.file),
+        removedImageIds,
       })
     } catch (error) {
       setFormError(error instanceof ApiError ? copy.saveError : error instanceof Error ? error.message : copy.saveError)
@@ -244,8 +365,51 @@ export function ProjectFormView({
                 {copy.limitReached(PROJECT_DESCRIPTION_MAX_LENGTH)}
               </span>
             ) : null}
+            <span className="auth-note">{copy.markdownHint}</span>
             {fieldErrors.description ? <span className="project-form__error">{fieldErrors.description}</span> : null}
           </label>
+
+          <div className="project-form__image-field">
+            <label>
+              {copy.imagesLabel}
+              <input
+                aria-label={copy.imagesLabel}
+                type="file"
+                accept={PROJECT_IMAGE_TYPES.join(',')}
+                multiple
+                onChange={(event) => {
+                  addImages(event.target.files)
+                  event.target.value = ''
+                }}
+                disabled={existingImages.length + newImages.length >= PROJECT_IMAGES_MAX_COUNT}
+              />
+            </label>
+            <span className="auth-note">{copy.imagesHint(PROJECT_IMAGES_MAX_COUNT)}</span>
+            {fieldErrors.images ? <span className="project-form__error">{fieldErrors.images}</span> : null}
+
+            {existingImages.length > 0 || newImages.length > 0 ? (
+              <ul className="project-form__image-list">
+                {existingImages.map((image) => (
+                  <li key={`existing-${image.id}`}>
+                    <ProjectImageView src={image.url} alt="" fallback={copy.savedImageLabel} />
+                    <span>{copy.savedImageLabel}</span>
+                    <button className="ghost-button ghost-button--small" type="button" onClick={() => removeExistingImage(image.id)}>
+                      {copy.removeImage}
+                    </button>
+                  </li>
+                ))}
+                {newImages.map((image, index) => (
+                  <li key={image.previewUrl}>
+                    <img src={image.previewUrl} alt="" />
+                    <span>{image.file.name}</span>
+                    <button className="ghost-button ghost-button--small" type="button" onClick={() => removeNewImage(index)}>
+                      {copy.removeImage}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
         </section>
 
         <section className="project-form__section">
@@ -287,6 +451,7 @@ export function ProjectFormView({
                 {copy.limitReached(FOUNDER_COMMITMENT_MAX_LENGTH)}
               </span>
             ) : null}
+            <span className="auth-note">{copy.markdownHint}</span>
             {fieldErrors.founderCommitment ? (
               <span className="project-form__error">{fieldErrors.founderCommitment}</span>
             ) : null}
@@ -348,6 +513,7 @@ export function ProjectFormView({
                       {copy.limitReached(OPEN_ROLE_COMMITMENT_MAX_LENGTH)}
                     </span>
                   ) : null}
+                  <span className="auth-note">{copy.markdownHint}</span>
                   {fieldErrors[`openRoleCommitment_${index}`] ? (
                     <span className="project-form__error">{fieldErrors[`openRoleCommitment_${index}`]}</span>
                   ) : null}
@@ -363,6 +529,64 @@ export function ProjectFormView({
             disabled={form.openRoles.length >= 6}
           >
             {copy.addRole}
+          </button>
+        </section>
+
+        <section className="project-form__section">
+          <div className="project-form__section-header">
+            <p className="hero__eyebrow">{copy.linksEyebrow}</p>
+            <h2>{copy.linksTitle}</h2>
+          </div>
+
+          {fieldErrors.links ? <p className="project-form__error">{fieldErrors.links}</p> : null}
+
+          <div className="project-form__roles">
+            {form.links.map((link, index) => (
+              <article className="project-form__role-card" key={`link-${index}`}>
+                <div className="project-form__role-header">
+                  <strong>{copy.linkCardLabel(index + 1)}</strong>
+                  <button className="ghost-button ghost-button--small" type="button" onClick={() => removeLink(index)}>
+                    {copy.removeLink}
+                  </button>
+                </div>
+                <label>
+                  {copy.linkLabelFieldLabel}
+                  <input
+                    aria-label={copy.linkLabelAriaLabel(index + 1)}
+                    value={link.label}
+                    onChange={(event) => updateLink(index, 'label', event.target.value)}
+                    type="text"
+                    maxLength={PROJECT_LINK_LABEL_MAX_LENGTH}
+                    required
+                  />
+                  {fieldErrors[`linkLabel_${index}`] ? (
+                    <span className="project-form__error">{fieldErrors[`linkLabel_${index}`]}</span>
+                  ) : null}
+                </label>
+                <label>
+                  {copy.linkUrlFieldLabel}
+                  <input
+                    aria-label={copy.linkUrlAriaLabel(index + 1)}
+                    value={link.url}
+                    onChange={(event) => updateLink(index, 'url', event.target.value)}
+                    type="url"
+                    required
+                  />
+                  {fieldErrors[`linkUrl_${index}`] ? (
+                    <span className="project-form__error">{fieldErrors[`linkUrl_${index}`]}</span>
+                  ) : null}
+                </label>
+              </article>
+            ))}
+          </div>
+
+          <button
+            className="ghost-button"
+            type="button"
+            onClick={addLink}
+            disabled={form.links.length >= PROJECT_LINKS_MAX_COUNT}
+          >
+            {copy.addLink}
           </button>
         </section>
 
@@ -383,4 +607,16 @@ export function ProjectFormView({
       </form>
     </section>
   )
+}
+
+function isValidHttpUrl(value: string) {
+  if (!value.trim()) {
+    return false
+  }
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
 }

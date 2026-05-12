@@ -106,7 +106,7 @@ test('keeps project feed private for anonymous visitors in browser mode', async 
   await expect.element(screen.getByText('Finde Projekte mit konkretem Bedarf.')).toBeVisible()
   await expect.element(screen.getByText('Builders Inside')).toBeVisible()
   await expect.element(screen.getByText('Lokale Projekte liegen hinter der Mitgliedertür.')).toBeVisible()
-  await expect.element(screen.getByText('Melde dich an oder erstelle ein Konto, um den aktiven Projektraum zu sehen. Die E-Mail-Bestätigung brauchst du erst, wenn du Projekte erstellen, bearbeiten, kommentieren oder Benachrichtigungen erhalten möchtest.')).toBeVisible()
+  await expect.element(screen.getByText('Melde dich an und bestätige deine E-Mail-Adresse, um den aktiven Projektraum zu sehen.')).toBeVisible()
   await expect.element(screen.getByText('Alle Plattformdaten werden in Deutschland gespeichert und gemäß EU-Datenschutzstandards behandelt.')).toBeVisible()
   await expect.element(screen.getByRole('button', { name: 'Anmelden' }).nth(0)).toBeVisible()
   expect(loadProjects).not.toHaveBeenCalled()
@@ -246,9 +246,10 @@ test('opens a founder profile from the public feed', async () => {
           bio: 'Helping neighbors move ideas into real, founder-led experiments.',
           email: null,
         }),
+        loadNotifications: async () => [],
         loadSession: async (): Promise<SessionResponse> => ({
           authenticated: true,
-          user: { displayName: 'Alex Builder', email: 'alex@example.test', emailVerified: false },
+          user: { displayName: 'Alex Builder', email: 'alex@example.test', emailVerified: true },
         }),
       }}
     />,
@@ -338,6 +339,57 @@ test('shows notifications and project comments for verified members', async () =
   expect(markCommentsRead).toHaveBeenCalled()
 })
 
+test('renders safe markdown for project details and comments', async () => {
+  window.history.pushState({}, '', '/projects/solar-for-neighbors')
+
+  const markdownProject: ProjectDetails = {
+    ...baseProjectDetails,
+    description: 'First paragraph with **bold text**.\nSecond line with [a safe link](https://example.com).',
+    founder: {
+      ...baseProjectDetails.founder,
+      commitment: '- Host weekly sessions\n- Share *clear notes*',
+    },
+    openRoles: [
+      {
+        title: 'Frontend Engineer',
+        commitment: 'Build **member flows** and [docs](https://example.com/docs).',
+      },
+    ],
+  }
+
+  const screen = await render(
+    <App
+      api={{
+        loadProjects: async () => [{ ...markdownProject }],
+        loadProject: async () => markdownProject,
+        loadProjectComments: async () => [
+          {
+            id: 7,
+            body: 'Comment with **bold** and [link](https://example.com/comment).',
+            authorPublicId: 'usr_nora_patel_01',
+            authorDisplayName: 'Nora Patel',
+            createdAt: '2026-04-23T09:00:00Z',
+          },
+        ],
+        markProjectCommentsRead: async () => ({ read: true }),
+        loadNotifications: async () => [],
+        loadSession: async (): Promise<SessionResponse> => ({
+          authenticated: true,
+          user: { displayName: 'Alex Builder', email: 'alex@example.test', emailVerified: true },
+        }),
+      }}
+    />,
+  )
+
+  await expect.element(screen.getByText('bold text')).toBeVisible()
+  await expect.element(screen.getByRole('link', { name: 'a safe link' })).toHaveAttribute('href', 'https://example.com/')
+  await expect.element(screen.getByText('clear notes')).toBeVisible()
+  await expect.element(screen.getByRole('link', { name: 'docs' })).toHaveAttribute('href', 'https://example.com/docs')
+  await expect.element(screen.getByText('bold', { exact: true })).toBeVisible()
+  await expect.element(screen.getByRole('link', { name: 'link', exact: true })).toHaveAttribute('href', 'https://example.com/comment')
+  await expect.element(screen.getByText('Markdown wird unterstützt: Zeilenumbrüche, **fett**, *kursiv*, Listen und Links.')).toBeVisible()
+})
+
 test('validates the create project form for authenticated users', async () => {
   window.history.pushState({}, '', '/projects/new')
 
@@ -378,6 +430,7 @@ test('creates a project, lands on detail, and returns to a highlighted feed card
   window.history.pushState({}, '', '/projects/new')
 
   let createdProject: ProjectDetails | null = null
+  let submittedPayload: ProjectPayload | null = null
   let projects = [...baseProjects]
 
   const screen = await render(
@@ -398,6 +451,7 @@ test('creates a project, lands on detail, and returns to a highlighted feed card
           user: { displayName: 'Alex Builder', email: 'alex@example.test', emailVerified: true },
         }),
         createProject: async (payload: ProjectPayload) => {
+          submittedPayload = payload
           createdProject = {
             id: 99,
             canManage: true,
@@ -412,6 +466,8 @@ test('creates a project, lands on detail, and returns to a highlighted feed card
               commitment: payload.founderCommitment,
             },
             openRoles: payload.openRoles,
+            links: payload.links,
+            images: [],
             createdAt: '2026-04-29T10:00:00Z',
             updatedAt: '2026-04-29T10:00:00Z',
           }
@@ -424,6 +480,8 @@ test('creates a project, lands on detail, and returns to a highlighted feed card
               status: createdProject.status,
               founder: createdProject.founder,
               openRoles: createdProject.openRoles,
+              links: createdProject.links,
+              images: createdProject.images,
               createdAt: createdProject.createdAt,
             },
             ...projects,
@@ -444,13 +502,122 @@ test('creates a project, lands on detail, and returns to a highlighted feed card
   )
   await screen.getByLabelText('Titel für Rolle 1').fill('Frontend Engineer')
   await screen.getByLabelText('Commitment für Rolle 1').fill('Build the first contributor-facing workflows.')
+  await screen.getByRole('button', { name: 'Link hinzufügen' }).click()
+  await screen.getByLabelText('Label für Link 1').fill('Website')
+  await screen.getByLabelText('URL für Link 1').fill('https://example.com/kitchen')
+  await screen.getByRole('button', { name: 'Link hinzufügen' }).click()
+  await screen.getByLabelText('Label für Link 2').fill('GitHub')
+  await screen.getByLabelText('URL für Link 2').fill('https://github.com/absketches')
   await screen.getByRole('button', { name: 'Projekt erstellen' }).nth(1).click()
 
   await expect.element(screen.getByRole('heading', { name: 'Circular Kitchen Atlas' })).toBeVisible()
   await expect.element(screen.getByText('Projekt erstellt.')).toBeVisible()
+  await expect.element(screen.getByRole('link', { name: 'Website' })).toHaveAttribute('href', 'https://example.com/kitchen')
+  expect(submittedPayload?.links).toEqual([
+    { label: 'Website', url: 'https://example.com/kitchen' },
+    { label: 'GitHub', url: 'https://github.com/absketches' },
+  ])
 
   await screen.getByRole('button', { name: 'Zurück zu den Projekten' }).click()
 
   await expect.element(screen.getByText('Projekt veröffentlicht.')).toBeVisible()
   await expect.element(screen.getByTestId('project-circular-kitchen-atlas')).toBeVisible()
+})
+
+test('shows a detail warning when project image upload fails after creation', async () => {
+  window.history.pushState({}, '', '/projects/new')
+
+  let createdProject: ProjectDetails | null = null
+  let projects = [...baseProjects]
+  const uploadProjectImage = vi.fn(async () => {
+    throw new Error('Image upload failed.')
+  })
+
+  const screen = await render(
+    <App
+      api={{
+        loadProjects: async () => projects,
+        loadProjectComments: async () => [],
+        markProjectCommentsRead: async () => ({ read: true }),
+        loadNotifications: async () => [],
+        loadProject: async (slug: string) => {
+          if (createdProject?.slug === slug) {
+            return createdProject
+          }
+          throw new Error('Project not found.')
+        },
+        loadSession: async (): Promise<SessionResponse> => ({
+          authenticated: true,
+          user: { displayName: 'Alex Builder', email: 'alex@example.test', emailVerified: true },
+        }),
+        createProject: async (payload: ProjectPayload) => {
+          createdProject = {
+            id: 100,
+            canManage: true,
+            slug: 'image-warning-project',
+            title: payload.title,
+            description: payload.description,
+            status: 'active',
+            founder: {
+              publicId: 'usr_alex_builder_01',
+              name: 'Alex Builder',
+              role: payload.founderRole,
+              commitment: payload.founderCommitment,
+            },
+            openRoles: payload.openRoles,
+            links: payload.links,
+            images: [],
+            createdAt: '2026-04-29T10:00:00Z',
+            updatedAt: '2026-04-29T10:00:00Z',
+          }
+          projects = [
+            {
+              id: createdProject.id,
+              slug: createdProject.slug,
+              title: createdProject.title,
+              description: createdProject.description,
+              status: createdProject.status,
+              founder: createdProject.founder,
+              openRoles: createdProject.openRoles,
+              links: createdProject.links,
+              images: createdProject.images,
+              createdAt: createdProject.createdAt,
+            },
+            ...projects,
+          ]
+          return { slug: createdProject.slug }
+        },
+        uploadProjectImage,
+      }}
+    />,
+  )
+
+  await screen.getByRole('textbox', { name: 'Titel', exact: true }).fill('Image Warning Project')
+  await screen.getByLabelText('Beschreibung').fill(
+    'A project with an image upload that fails after the main project has already been created successfully.',
+  )
+  const imageInput = screen.getByLabelText('Projektbilder').element() as HTMLInputElement
+  const imageFiles = new DataTransfer()
+  imageFiles.items.add(
+    new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'project.png', { type: 'image/png' }),
+  )
+  Object.defineProperty(imageInput, 'files', {
+    value: imageFiles.files,
+    configurable: true,
+  })
+  imageInput.dispatchEvent(new Event('change', { bubbles: true }))
+  await expect.element(screen.getByText('project.png')).toBeVisible()
+  await screen.getByLabelText('Deine Rolle in diesem Projekt').fill('Founder + Media Ops')
+  await screen.getByLabelText('Wozu du dich persönlich verpflichtest').fill(
+    'I will keep the project details updated and retry image uploads when needed.',
+  )
+  await screen.getByLabelText('Titel für Rolle 1').fill('Frontend Engineer')
+  await screen.getByLabelText('Commitment für Rolle 1').fill('Help polish the project presentation flow.')
+  await screen.getByRole('button', { name: 'Projekt erstellen' }).nth(1).click()
+
+  await expect.element(screen.getByRole('heading', { name: 'Image Warning Project' })).toBeVisible()
+  await expect.element(screen.getByText(
+    'Projekt erstellt, aber einige Bilder konnten nicht gespeichert werden. Du kannst das Projekt bearbeiten und es erneut versuchen.',
+  )).toBeVisible()
+  expect(uploadProjectImage).toHaveBeenCalledOnce()
 })

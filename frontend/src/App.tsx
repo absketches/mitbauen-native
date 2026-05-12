@@ -9,6 +9,7 @@ import {
   createProject,
   deleteAccount,
   deleteProject,
+  deleteProjectImage,
   loadNotifications,
   loadProfile,
   loadPublicProfile,
@@ -24,6 +25,7 @@ import {
   registerUser,
   updateProfile,
   updateProject,
+  uploadProjectImage,
   validateInvite,
 } from './api'
 import { ProjectCard } from './components/ProjectCard'
@@ -44,6 +46,7 @@ import type {
   ProjectComment,
   ProjectCommentPayload,
   ProjectDetails,
+  ProjectImageChanges,
   ProjectMutationResponse,
   ProjectPayload,
   RegisterPayload,
@@ -55,7 +58,7 @@ import type {
 } from './types'
 
 type FeedNotice = 'created' | 'updated' | 'deleted' | null
-type DetailNotice = 'created' | 'updated' | null
+type DetailNotice = 'created' | 'updated' | 'createdWithMediaWarning' | 'updatedWithMediaWarning' | null
 type VerificationNotice =
   | { tone: 'success'; message: string }
   | { tone: 'error'; message: string }
@@ -82,6 +85,8 @@ type AppApi = {
   createProject: (payload: ProjectPayload) => Promise<ProjectMutationResponse>
   updateProject: (slug: string, payload: ProjectPayload) => Promise<ProjectMutationResponse>
   deleteProject: (slug: string) => Promise<void>
+  uploadProjectImage: (slug: string, file: File, altText?: string) => Promise<unknown>
+  deleteProjectImage: (slug: string, imageId: number) => Promise<void>
   createProjectComment: (slug: string, payload: ProjectCommentPayload) => Promise<ProjectComment>
   markProjectCommentsRead: (slug: string) => Promise<{ read: boolean }>
 }
@@ -124,6 +129,8 @@ const defaultApi: AppApi = {
   createProject,
   updateProject,
   deleteProject,
+  uploadProjectImage,
+  deleteProjectImage,
   createProjectComment,
   markProjectCommentsRead,
 }
@@ -150,6 +157,8 @@ export default function App({ api }: AppProps) {
     createProject: saveProject,
     updateProject: saveProjectEdits,
     deleteProject: destroyProject,
+    uploadProjectImage: saveProjectImage,
+    deleteProjectImage: destroyProjectImage,
     createProjectComment: saveProjectComment,
     markProjectCommentsRead: saveProjectCommentsRead,
   } = { ...defaultApi, ...api }
@@ -203,10 +212,17 @@ export default function App({ api }: AppProps) {
   }, [])
 
   useEffect(() => {
+    if (!routeHasNotice(route)) {
+      return
+    }
+    removeNoticeFromCurrentUrl()
+  }, [route])
+
+  useEffect(() => {
     if (sessionLoading) {
       return
     }
-    if (!session.authenticated) {
+    if (!session.authenticated || !session.user?.emailVerified) {
       setProjects([])
       setProjectsError(null)
       setProjectsLoading(false)
@@ -235,7 +251,7 @@ export default function App({ api }: AppProps) {
     return () => {
       cancelled = true
     }
-  }, [copy.feed.error, fetchProjects, session.authenticated, sessionLoading])
+  }, [copy.feed.error, fetchProjects, session.authenticated, session.user?.emailVerified, sessionLoading])
 
   useEffect(() => {
     if (sessionLoading) {
@@ -374,16 +390,37 @@ export default function App({ api }: AppProps) {
     }
   }
 
-  async function handleCreateProject(payload: ProjectPayload) {
+  async function handleCreateProject(payload: ProjectPayload, imageChanges: ProjectImageChanges) {
     const result = await saveProject(payload)
+    const mediaSaved = await tryProjectMediaMutation(() => uploadNewProjectImages(result.slug, imageChanges.newImages))
     void refreshProjectsAfterMutation()
-    navigateTo(`/projects/${result.slug}?created=1`, setRoute)
+    navigateTo(`/projects/${result.slug}?created=1${mediaSaved ? '' : '&media=failed'}`, setRoute)
   }
 
-  async function handleUpdateProject(slug: string, payload: ProjectPayload) {
+  async function handleUpdateProject(slug: string, payload: ProjectPayload, imageChanges: ProjectImageChanges) {
     const result = await saveProjectEdits(slug, payload)
+    const mediaSaved = await tryProjectMediaMutation(async () => {
+      await uploadNewProjectImages(result.slug, imageChanges.newImages)
+      await Promise.all(imageChanges.removedImageIds.map((imageId) => destroyProjectImage(result.slug, imageId)))
+    })
     void refreshProjectsAfterMutation()
-    navigateTo(`/projects/${result.slug}?updated=1`, setRoute)
+    navigateTo(`/projects/${result.slug}?updated=1${mediaSaved ? '' : '&media=failed'}`, setRoute)
+  }
+
+  async function uploadNewProjectImages(slug: string, files: File[]) {
+    for (const file of files) {
+      await saveProjectImage(slug, file, '')
+    }
+  }
+
+  async function tryProjectMediaMutation(mutation: () => Promise<void>) {
+    try {
+      await mutation()
+      return true
+    } catch (nextError) {
+      console.error(nextError)
+      return false
+    }
   }
 
   async function handleDeleteProject(slug: string) {
@@ -497,7 +534,7 @@ export default function App({ api }: AppProps) {
           projects={projects}
           loading={projectsLoading}
           error={projectsError}
-          canViewProjects={session.authenticated}
+          canViewProjects={session.authenticated && !!session.user?.emailVerified}
           highlightSlug={route.highlightSlug}
           notice={route.notice}
           onOpenProject={(slug) => navigateTo(`/projects/${slug}`, setRoute)}
@@ -563,6 +600,8 @@ export default function App({ api }: AppProps) {
       {route.name === 'profile' ? (
         sessionLoading ? (
           <p className="state-card">{copy.profile.loading}</p>
+        ) : emailVerificationRequired ? (
+          <VerificationRequiredView copy={copy.verification} onBack={() => navigateTo('/', setRoute)} />
         ) : session.authenticated ? (
           <ProfileView
             copy={copy.profile}
@@ -601,6 +640,8 @@ export default function App({ api }: AppProps) {
       {route.name === 'projectDetail' ? (
         sessionLoading ? (
           <p className="state-card">{copy.header.loading}</p>
+        ) : emailVerificationRequired ? (
+          <VerificationRequiredView copy={copy.verification} onBack={() => navigateTo('/', setRoute)} />
         ) : session.authenticated ? (
           <ProjectDetailView
             copy={copy.projectDetail}
@@ -632,7 +673,7 @@ export default function App({ api }: AppProps) {
             mode="edit"
             slug={route.slug}
             loadProject={fetchProject}
-            onSubmit={(payload) => handleUpdateProject(route.slug, payload)}
+            onSubmit={(payload, imageChanges) => handleUpdateProject(route.slug, payload, imageChanges)}
             onCancel={() => navigateTo(`/projects/${route.slug}`, setRoute)}
           />
         )
@@ -1310,6 +1351,19 @@ function navigateTo(path: string, onNavigate: (route: RouteState) => void) {
   onNavigate(routeFromLocation(window.location))
 }
 
+function routeHasNotice(route: RouteState) {
+  return (route.name === 'feed' || route.name === 'projectDetail') && route.notice !== null
+}
+
+function removeNoticeFromCurrentUrl() {
+  const url = new URL(window.location.href)
+  url.searchParams.delete('created')
+  url.searchParams.delete('updated')
+  url.searchParams.delete('deleted')
+  url.searchParams.delete('media')
+  window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+}
+
 function routeFromLocation(location: Location): RouteState {
   const segments = location.pathname.split('/').filter(Boolean)
   const search = new URLSearchParams(location.search)
@@ -1354,10 +1408,10 @@ function routeFromLocation(location: Location): RouteState {
 
 function detailNoticeFromSearch(search: URLSearchParams): DetailNotice {
   if (search.get('created') === '1') {
-    return 'created'
+    return search.get('media') === 'failed' ? 'createdWithMediaWarning' : 'created'
   }
   if (search.get('updated') === '1') {
-    return 'updated'
+    return search.get('media') === 'failed' ? 'updatedWithMediaWarning' : 'updated'
   }
   return null
 }
@@ -1366,7 +1420,13 @@ function feedNoticeFromSearch(search: URLSearchParams): FeedNotice {
   if (search.get('deleted') === '1') {
     return 'deleted'
   }
-  return detailNoticeFromSearch(search)
+  if (search.get('created') === '1') {
+    return 'created'
+  }
+  if (search.get('updated') === '1') {
+    return 'updated'
+  }
+  return null
 }
 
 function homePathForRoute(route: RouteState) {
@@ -1380,5 +1440,6 @@ function feedPathForProject(slug: string, notice: DetailNotice) {
   if (!notice) {
     return '/'
   }
-  return `/?highlight=${encodeURIComponent(slug)}&${notice}=1`
+  const noticeKey = notice.startsWith('created') ? 'created' : 'updated'
+  return `/?highlight=${encodeURIComponent(slug)}&${noticeKey}=1`
 }

@@ -57,12 +57,21 @@ class ProjectsApiTest {
             "openRoles", List.of(
                 Map.of("title", "Frontend Engineer", "commitment", "Build the first contributor-facing workflows."),
                 Map.of("title", "Research Partner", "commitment", "Interview hosts and turn patterns into playbooks.")
+            ),
+            "links", List.of(
+                Map.of("label", "Website", "url", "https://example.test/kitchen"),
+                Map.of("label", "Mastodon", "url", "https://social.example.test/@kitchen")
             )
         ), sessionCookie);
 
         assertThat(createResponse.statusCode()).isEqualTo(201);
         final String slug = createResponse.bodyAsMap().asString("slug");
         assertThat(slug).isEqualTo("circular-kitchen-atlas");
+
+        final byte[] imageBytes = pngBytes();
+        final HttpObject imageResponse = sendImage("/api/projects/" + slug + "/images", "image/png", imageBytes, sessionCookie);
+        assertThat(imageResponse.statusCode()).isEqualTo(201);
+        assertThat(imageResponse.bodyAsMap().asMap("image").asString("url")).contains("/api/projects/" + slug + "/images/");
 
         final HttpObject detailResponse = sendGet("/api/projects/" + slug, sessionCookie);
         assertThat(detailResponse.statusCode()).isEqualTo(200);
@@ -73,6 +82,12 @@ class ProjectsApiTest {
         assertThat(project.asMap("founder").asString("publicId")).isNotBlank();
         assertThat(project.asMap("founder").asString("role")).isEqualTo("Founder + Community Ops");
         assertThat(project.asMap("founder").asString("commitment")).contains("pilot dinners every week");
+        final TypeList images = project.asList("images");
+        assertThat(images).hasSize(1);
+        final LinkedTypeMap image = new LinkedTypeMap((Map<?, ?>) images.get(0));
+        assertThat(image.asString("contentType")).isEqualTo("image/png");
+        assertThat(image.asInt("sizeBytes")).isEqualTo(imageBytes.length);
+        assertThat(sendGet(image.asString("url"), sessionCookie).body()).containsExactly(imageBytes);
 
         final TypeList roles = project.asList("openRoles");
         assertThat(roles).hasSize(2);
@@ -80,6 +95,10 @@ class ProjectsApiTest {
             .map(role -> new LinkedTypeMap((Map<?, ?>) role).asString("title"))
             .toList())
             .containsExactly("Frontend Engineer", "Research Partner");
+        assertThat(project.asList("links").stream()
+            .map(link -> new LinkedTypeMap((Map<?, ?>) link).asString("label"))
+            .toList())
+            .containsExactly("Website", "Mastodon");
 
         final HttpObject feedResponse = sendGet("/api/projects", sessionCookie);
         assertThat(feedResponse.statusCode()).isEqualTo(200);
@@ -87,6 +106,8 @@ class ProjectsApiTest {
         final LinkedTypeMap firstProject = new LinkedTypeMap((Map<?, ?>) feedProjects.get(0));
         assertThat(firstProject.asString("slug")).isEqualTo(slug);
         assertThat(firstProject.asMap("founder").asString("publicId")).isNotBlank();
+        assertThat(firstProject.asList("links")).hasSize(2);
+        assertThat(firstProject.asList("images")).hasSize(1);
     }
 
     @Test
@@ -112,26 +133,26 @@ class ProjectsApiTest {
     }
 
     @Test
-    void unverifiedMembersCanViewProjectFeedAndDetails() {
+    void unverifiedMembersCannotViewProjectFeedAndDetails() {
         nano = newTestNano();
         final String ownerCookie = registerAndReturnSessionCookie("owner.visible@example.test", "Visible Owner");
         final String unverifiedCookie = registerAndReturnSessionCookie("viewer.unverified@example.test", "Unverified Viewer", false);
 
         final String slug = sendJson("/api/projects", "POST", Map.of(
             "title", "Unverified Viewer Project",
-            "description", "A visible project description with enough detail to confirm pending members can still browse project details.",
+            "description", "A private project description with enough detail to confirm pending members cannot browse project details.",
             "founderRole", "Founder + Coordinator",
             "founderCommitment", "I am coordinating the first project steps and making the work visible to members.",
             "openRoles", List.of(Map.of("title", "Project Support", "commitment", "Help with member coordination."))
         ), ownerCookie).bodyAsMap().asString("slug");
 
         final HttpObject feedResponse = sendGet("/api/projects", unverifiedCookie);
-        assertThat(feedResponse.statusCode()).isEqualTo(200);
-        assertThat(feedResponse.bodyAsMap().asList("projects")).isNotEmpty();
+        assertThat(feedResponse.statusCode()).isEqualTo(403);
+        assertThat(feedResponse.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_VIEW_EMAIL_UNVERIFIED_CODE);
 
         final HttpObject detailResponse = sendGet("/api/projects/" + slug, unverifiedCookie);
-        assertThat(detailResponse.statusCode()).isEqualTo(200);
-        assertThat(detailResponse.bodyAsMap().asMap("project").asBoolean("canManage")).isFalse();
+        assertThat(detailResponse.statusCode()).isEqualTo(403);
+        assertThat(detailResponse.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_VIEW_EMAIL_UNVERIFIED_CODE);
     }
 
     @Test
@@ -214,6 +235,52 @@ class ProjectsApiTest {
 
         assertThat(response.statusCode()).isEqualTo(400);
         assertThat(response.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_OPEN_ROLES_MIN_CODE);
+    }
+
+    @Test
+    void rejectsInvalidProjectMediaAndLinks() {
+        nano = newTestNano();
+        final String sessionCookie = registerAndReturnSessionCookie("owner.links@example.test", "Link Builder");
+
+        final HttpObject response = sendJson("/api/projects", "POST", Map.of(
+            "title", "Unsafe Project Links",
+            "description", "A project with enough description to verify invalid external media and links are rejected before storage.",
+            "founderRole", "Founder + Link Steward",
+            "founderCommitment", "I am keeping project links useful and checking the resources every week.",
+            "openRoles", List.of(Map.of("title", "Link Checker", "commitment", "Help review project resources.")),
+            "links", List.of(Map.of("label", "Website", "url", "javascript:alert(1)"))
+        ), sessionCookie);
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        assertThat(response.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_LINK_URL_INVALID_CODE);
+
+        final String slug = sendJson("/api/projects", "POST", Map.of(
+            "title", "Unsafe Project Image",
+            "description", "A project with enough description to verify invalid image uploads are rejected before storage.",
+            "founderRole", "Founder + Image Steward",
+            "founderCommitment", "I am keeping project images useful and checking the resources every week.",
+            "openRoles", List.of(Map.of("title", "Image Checker", "commitment", "Help review project resources."))
+        ), sessionCookie).bodyAsMap().asString("slug");
+        final HttpObject invalidImage = sendImage("/api/projects/" + slug + "/images", "image/svg+xml", new byte[] {1, 2}, sessionCookie);
+        assertThat(invalidImage.statusCode()).isEqualTo(400);
+        assertThat(invalidImage.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_IMAGE_TYPE_INVALID_CODE);
+    }
+
+    @Test
+    void rejectsMalformedProjectPayloadShapes() {
+        nano = newTestNano();
+        final String sessionCookie = registerAndReturnSessionCookie("owner.malformed@example.test", "Malformed Payload Owner");
+
+        final HttpObject response = sendJson("/api/projects", "POST", Map.of(
+            "title", "Malformed Project",
+            "description", "A project with enough description to verify malformed nested payload shapes are rejected cleanly.",
+            "founderRole", "Founder + Payload Steward",
+            "founderCommitment", "I am keeping project payloads tidy and easy to validate.",
+            "openRoles", List.of("not-a-role-map")
+        ), sessionCookie);
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        assertThat(response.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_PAYLOAD_INVALID_CODE);
     }
 
     @Test
@@ -328,6 +395,7 @@ class ProjectsApiTest {
         nano = newTestNano();
         final String ownerEmail = "owner.delete.unverified@example.test";
         final String ownerCookie = registerAndReturnSessionCookie(ownerEmail, "Delete Unverified");
+        final String viewerCookie = registerAndReturnSessionCookie("viewer.delete.unverified@example.test", "Delete Verified Viewer");
 
         final String slug = sendJson("/api/projects", "POST", Map.of(
             "title", "Shared Pantry Routes",
@@ -343,7 +411,7 @@ class ProjectsApiTest {
         assertThat(response.statusCode()).isEqualTo(403);
         assertThat(response.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_DELETE_EMAIL_UNVERIFIED_CODE);
 
-        final HttpObject stillExists = sendGet("/api/projects/" + slug, ownerCookie);
+        final HttpObject stillExists = sendGet("/api/projects/" + slug, viewerCookie);
         assertThat(stillExists.statusCode()).isEqualTo(200);
     }
 
@@ -440,6 +508,26 @@ class ProjectsApiTest {
             request.header("Cookie", AuthUtil.AUTH_SESSION_COOKIE + "=" + sessionCookie);
         }
         return request.send(nano.context(ProjectsApiTest.class));
+    }
+
+    private HttpObject sendImage(final String path, final String contentType, final byte[] body, final String sessionCookie) {
+        final HttpObject request = new HttpObject()
+            .path(baseUrl(path))
+            .methodType("POST")
+            .contentType(contentType)
+            .body(body);
+        if (sessionCookie != null) {
+            request.header("Cookie", AuthUtil.AUTH_SESSION_COOKIE + "=" + sessionCookie);
+        }
+        return request.send(nano.context(ProjectsApiTest.class));
+    }
+
+    private static byte[] pngBytes() {
+        return new byte[] {
+            (byte) 0x89, 0x50, 0x4E, 0x47,
+            0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D
+        };
     }
 
     private HttpObject sendRequest(final String path, final String method, final Map<String, Object> body, final String sessionCookie) {

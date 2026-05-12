@@ -10,6 +10,20 @@ export type OpenRole = {
   commitment: string
 }
 
+export type ProjectLink = {
+  label: string
+  url: string
+}
+
+export type ProjectImage = {
+  id: number
+  url: string
+  contentType: string
+  sizeBytes: number
+  altText: string
+  createdAt: string
+}
+
 export type Project = {
   id: number
   slug: string
@@ -18,6 +32,8 @@ export type Project = {
   status: 'active' | 'completed' | 'dormant'
   founder: FounderInfo
   openRoles: OpenRole[]
+  links?: ProjectLink[]
+  images?: ProjectImage[]
   createdAt: string
 }
 
@@ -113,6 +129,12 @@ export type ProjectPayload = {
   founderRole: string
   founderCommitment: string
   openRoles: OpenRole[]
+  links: ProjectLink[]
+}
+
+export type ProjectImageChanges = {
+  newImages: File[]
+  removedImageIds: number[]
 }
 
 export type ProjectMutationResponse = {
