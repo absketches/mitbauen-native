@@ -18,6 +18,7 @@ import type {
   ProjectDetails,
   ProjectDetailsResponse,
   ProjectFeedResponse,
+  ProjectImage,
   ProjectMutationResponse,
   ProjectPayload,
   RegisterPayload,
@@ -44,12 +45,12 @@ export class ApiError extends Error {
 
 export async function loadProjects(): Promise<Project[]> {
   const payload = await requestJson<ProjectFeedResponse>(`${API_BASE_URL}/projects`)
-  return payload.projects
+  return payload.projects.map(hydrateProject)
 }
 
 export async function loadProject(slug: string): Promise<ProjectDetails> {
   const payload = await requestJson<ProjectDetailsResponse>(`${API_BASE_URL}/projects/${encodeURIComponent(slug)}`)
-  return payload.project
+  return hydrateProject(payload.project)
 }
 
 export async function loadSession(): Promise<SessionResponse> {
@@ -151,6 +152,24 @@ export async function deleteProject(slug: string): Promise<void> {
   })
 }
 
+export async function uploadProjectImage(slug: string, file: File, altText = ''): Promise<ProjectImage> {
+  const payload = await requestJson<{ image: ProjectImage }>(`${API_BASE_URL}/projects/${encodeURIComponent(slug)}/images`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': file.type,
+      'X-Image-Alt': altText,
+    },
+    body: file,
+  })
+  return hydrateProjectImage(payload.image)
+}
+
+export async function deleteProjectImage(slug: string, imageId: number): Promise<void> {
+  await requestJson<null>(`${API_BASE_URL}/projects/${encodeURIComponent(slug)}/images/${imageId}`, {
+    method: 'DELETE',
+  })
+}
+
 export async function loadProjectComments(slug: string): Promise<ProjectComment[]> {
   const payload = await requestJson<ProjectCommentsResponse>(`${API_BASE_URL}/projects/${encodeURIComponent(slug)}/comments`)
   return payload.comments
@@ -176,7 +195,8 @@ export async function loadNotifications(): Promise<NotificationItem[]> {
 }
 
 async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
-  const headers = init?.body
+  const isJsonBody = init?.body && typeof init.body === 'string'
+  const headers = isJsonBody
     ? {
         'Content-Type': 'application/json',
         ...(init.headers ?? {}),
@@ -206,4 +226,29 @@ async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
   }
 
   return payload as T
+}
+
+function hydrateProject<T extends Project>(project: T): T {
+  return {
+    ...project,
+    images: project.images?.map(hydrateProjectImage),
+  }
+}
+
+function hydrateProjectImage(image: ProjectImage): ProjectImage {
+  return {
+    ...image,
+    url: resolveApiAssetUrl(image.url),
+  }
+}
+
+function resolveApiAssetUrl(url: string): string {
+  if (!url.startsWith('/')) {
+    return url
+  }
+  try {
+    return `${new URL(API_BASE_URL).origin}${url}`
+  } catch {
+    return url
+  }
 }

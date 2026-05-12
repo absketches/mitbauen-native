@@ -56,4 +56,25 @@ class ProjectFeedApiTest {
         assertThat(response.statusCode()).isEqualTo(401);
         assertThat(response.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_VIEW_AUTH_REQUIRED_CODE);
     }
+
+    @Test
+    void matchesProjectRoutesByPathShape() {
+        assertThat(ProjectFeedUtil.match(request("/api/projects"), "/api/projects"))
+            .isInstanceOf(ProjectFeedUtil.ProjectFeedRoute.class);
+        assertThat(ProjectFeedUtil.match(request("/api/projects/nano-railix"), "/api/projects"))
+            .isEqualTo(new ProjectFeedUtil.ProjectDetailsRoute("nano-railix"));
+        assertThat(ProjectFeedUtil.match(request("/api/projects/nano-railix/images"), "/api/projects"))
+            .isEqualTo(new ProjectFeedUtil.ProjectImagesRoute("nano-railix"));
+        assertThat(ProjectFeedUtil.match(request("/api/projects/nano-railix/images/12"), "/api/projects"))
+            .isEqualTo(new ProjectFeedUtil.ProjectImageRoute("nano-railix", 12));
+
+        assertThat(ProjectFeedUtil.match(request("/api/projects/nano-railix/images/0"), "/api/projects"))
+            .isInstanceOf(ProjectFeedUtil.NoMatch.class);
+        assertThat(ProjectFeedUtil.match(request("/api/projects/nano-railix/images/not-a-number"), "/api/projects"))
+            .isInstanceOf(ProjectFeedUtil.NoMatch.class);
+    }
+
+    private static HttpObject request(final String path) {
+        return new HttpObject().path("http://localhost" + path);
+    }
 }

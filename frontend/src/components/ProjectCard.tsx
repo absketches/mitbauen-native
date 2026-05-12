@@ -1,5 +1,7 @@
 import type { Dictionary } from '../i18n'
 import type { Project } from '../types'
+import { ProjectImageView } from './ProjectImageView'
+import { markdownPreview } from './SafeMarkdown'
 
 type ProjectCardProps = {
   copy: Dictionary['projectCard']
@@ -10,12 +12,22 @@ type ProjectCardProps = {
 }
 
 export function ProjectCard({ copy, project, highlighted = false, onOpen, onOpenFounderProfile }: ProjectCardProps) {
-  const descriptionPreview =
-    project.description.length > 190 ? `${project.description.slice(0, 187).trimEnd()}...` : project.description
+  const descriptionPreview = markdownPreview(project.description)
+  const visibleRoles = project.openRoles.slice(0, 3)
+  const extraRoleCount = project.openRoles.length - visibleRoles.length
+  const thumbnail = project.images?.[0]
+
+  const cardClassName = [
+    'project-card',
+    thumbnail ? 'project-card--with-image' : 'project-card--without-image',
+    highlighted ? 'project-card--highlighted' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
     <article
-      className={`project-card${highlighted ? ' project-card--highlighted' : ''}`}
+      className={cardClassName}
       data-project-slug={project.slug}
       data-testid={`project-${project.slug}`}
     >
@@ -23,6 +35,12 @@ export function ProjectCard({ copy, project, highlighted = false, onOpen, onOpen
         <span className={`status-pill status-pill--${project.status}`}>{copy.status[project.status]}</span>
         <h2>{project.title}</h2>
       </div>
+
+      {thumbnail ? (
+        <div className="project-card__media">
+          <ProjectImageView className="project-card__thumbnail" src={thumbnail.url} alt={thumbnail.altText} fallback="" />
+        </div>
+      ) : null}
 
       <p className="project-card__summary">{descriptionPreview}</p>
 
@@ -39,25 +57,17 @@ export function ProjectCard({ copy, project, highlighted = false, onOpen, onOpen
             )}
           </dd>
         </div>
-        <div>
-          <dt>{copy.ownerRole}</dt>
-          <dd>{project.founder.role}</dd>
-        </div>
-        <div>
-          <dt>{copy.commitment}</dt>
-          <dd>{project.founder.commitment}</dd>
-        </div>
       </dl>
 
       <section className="project-card__roles">
         <h3>{copy.openRoles}</h3>
-        <ul>
-          {project.openRoles.map((role) => (
+        <ul className="project-card__role-chips">
+          {visibleRoles.map((role) => (
             <li key={`${project.id}-${role.title}`}>
-              <strong>{role.title}</strong>
-              <span>{role.commitment}</span>
+              {role.title}
             </li>
           ))}
+          {extraRoleCount > 0 ? <li>{copy.moreRoles(extraRoleCount)}</li> : null}
         </ul>
       </section>
 

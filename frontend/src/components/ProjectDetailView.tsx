@@ -3,8 +3,10 @@ import type { FormEvent } from 'react'
 import { useEffect, useState } from 'react'
 import { ApiError } from '../api'
 import type { ProjectComment, ProjectCommentPayload, ProjectDetails } from '../types'
+import { ProjectImageView } from './ProjectImageView'
+import { SafeMarkdown } from './SafeMarkdown'
 
-type DetailNotice = 'created' | 'updated' | null
+type DetailNotice = 'created' | 'updated' | 'createdWithMediaWarning' | 'updatedWithMediaWarning' | null
 
 type ProjectDetailViewProps = {
   copy: Dictionary['projectDetail']
@@ -170,7 +172,7 @@ export function ProjectDetailView({
     <section className="project-detail">
       {notice ? (
         <p className="state-card project-detail__notice">
-          {notice === 'created' ? copy.noticeCreated : copy.noticeUpdated}
+          {noticeCopy(copy, notice)}
         </p>
       ) : null}
       {deleteError ? <p className="state-card state-card--error">{deleteError}</p> : null}
@@ -210,14 +212,23 @@ export function ProjectDetailView({
         <article className="project-detail__panel project-detail__panel--primary">
           <p className="hero__eyebrow">{copy.whatEyebrow}</p>
           <h2>{copy.whatTitle}</h2>
-          <p className="project-detail__body">{currentProject.description}</p>
+          <SafeMarkdown className="project-detail__body" text={currentProject.description} />
+          {currentProject.images && currentProject.images.length > 0 ? (
+            <ul className="project-detail__media-grid">
+              {currentProject.images.map((image) => (
+                <li key={image.id}>
+                  <ProjectImageView src={image.url} alt={image.altText} fallback={copy.imageUnavailable} />
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </article>
 
         <aside className="project-detail__stack">
           <article className="project-detail__panel project-detail__panel--dark">
             <p className="hero__eyebrow">{copy.commitmentEyebrow}</p>
             <h2>{currentProject.founder.role}</h2>
-            <p>{currentProject.founder.commitment}</p>
+            <SafeMarkdown text={currentProject.founder.commitment} />
           </article>
 
           <article className="project-detail__panel">
@@ -227,11 +238,27 @@ export function ProjectDetailView({
               {currentProject.openRoles.map((role) => (
                 <li key={`${currentProject.slug}-${role.title}`}>
                   <strong>{role.title}</strong>
-                  <span>{role.commitment}</span>
+                  <SafeMarkdown text={role.commitment} />
                 </li>
               ))}
             </ul>
           </article>
+
+          {currentProject.links && currentProject.links.length > 0 ? (
+            <article className="project-detail__panel">
+              <p className="hero__eyebrow">{copy.linksEyebrow}</p>
+              <h2>{copy.linksTitle}</h2>
+              <ul className="project-detail__links">
+                {currentProject.links.map((link) => (
+                  <li key={`${link.label}-${link.url}`}>
+                    <a href={link.url} target="_blank" rel="noopener noreferrer">
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </article>
+          ) : null}
         </aside>
       </div>
 
@@ -270,7 +297,7 @@ export function ProjectDetailView({
                         </button>
                         <span>{new Date(comment.createdAt).toLocaleDateString()}</span>
                       </div>
-                      <p>{comment.body}</p>
+                      <SafeMarkdown className="project-detail__comment-body" text={comment.body} />
                     </div>
                   </article>
                 ))}
@@ -287,6 +314,7 @@ export function ProjectDetailView({
                 rows={4}
                 required
               />
+              <p className="auth-note">{copy.markdownHint}</p>
               {commentError ? <p className="auth-error">{commentError}</p> : null}
               <div className="project-detail__comment-actions">
                 <button className="primary-button" type="submit" disabled={commentSubmitting}>
@@ -316,4 +344,17 @@ function commentErrorMessage(error: unknown, copy: Dictionary['projectDetail'], 
     }
   }
   return error instanceof Error ? error.message : fallback
+}
+
+function noticeCopy(copy: Dictionary['projectDetail'], notice: NonNullable<DetailNotice>) {
+  switch (notice) {
+    case 'created':
+      return copy.noticeCreated
+    case 'updated':
+      return copy.noticeUpdated
+    case 'createdWithMediaWarning':
+      return copy.noticeCreatedWithMediaWarning
+    case 'updatedWithMediaWarning':
+      return copy.noticeUpdatedWithMediaWarning
+  }
 }

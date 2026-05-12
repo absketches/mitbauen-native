@@ -31,6 +31,15 @@ public class ResponseUtil {
         respondJson(event, 200, body);
     }
 
+    public static void respondBytes(final Event<HttpObject, HttpObject> event, final int statusCode, final String contentType, final byte[] body) {
+        create(event)
+            .statusCode(statusCode)
+            .contentType(contentType)
+            .header("Cache-Control", "private, max-age=3600")
+            .body(body)
+            .respond(event);
+    }
+
     public static void respondCreated(final Event<HttpObject, HttpObject> event, final Map<String, Object> body) {
         respondJson(event, 201, body);
     }

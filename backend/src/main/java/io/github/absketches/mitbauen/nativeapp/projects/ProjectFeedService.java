@@ -1,10 +1,9 @@
 package io.github.absketches.mitbauen.nativeapp.projects;
 
-import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeMapI;
-import io.github.absketches.mitbauen.nativeapp.auth.AuthUtil;
 import io.github.absketches.mitbauen.nativeapp.auth.SessionUser;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
+import io.github.absketches.mitbauen.nativeapp.projects.media.ProjectMediaService;
 import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.HttpObject;
@@ -20,10 +19,16 @@ public class ProjectFeedService extends Service {
     public static final String DEFAULT_PROJECT_FEED_PATH = "/api/projects";
 
     private final DatabaseRuntime databaseRuntime;
+    private final ProjectAccessGuard accessGuard;
+    private final ProjectMutationService mutationService;
+    private final ProjectMediaService mediaService;
     private String basePath;
 
     public ProjectFeedService(final DatabaseRuntime databaseRuntime) {
         this.databaseRuntime = databaseRuntime;
+        this.accessGuard = new ProjectAccessGuard(databaseRuntime.dataSource());
+        this.mutationService = new ProjectMutationService(databaseRuntime.dataSource(), accessGuard);
+        this.mediaService = new ProjectMediaService(databaseRuntime.dataSource(), accessGuard);
     }
 
     @Override
@@ -74,9 +79,12 @@ public class ProjectFeedService extends Service {
     }
 
     protected void handleGet(final Event<HttpObject, HttpObject> event, final ProjectFeedUtil.RoutesMatch route) {
-        final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
+        final Optional<SessionUser> sessionUser = accessGuard.verifiedSession(
+            event,
+            ProjectFeedUtil.PROJECT_VIEW_AUTH_REQUIRED_CODE,
+            ProjectFeedUtil.PROJECT_VIEW_EMAIL_UNVERIFIED_CODE
+        );
         if (sessionUser.isEmpty()) {
-            ProjectFeedUtil.respondUnauthorized(event, ProjectFeedUtil.PROJECT_VIEW_AUTH_REQUIRED_CODE);
             return;
         }
 
@@ -93,37 +101,24 @@ public class ProjectFeedService extends Service {
                         ),
                         () -> ProjectFeedUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_NOT_FOUND_CODE)
                     );
+            case ProjectFeedUtil.ProjectImageRoute imageRoute -> mediaService.handleGetProjectImage(event, imageRoute);
+            case ProjectFeedUtil.ProjectImagesRoute __ -> ProjectFeedUtil.respondMethodNotAllowed(event);
             case ProjectFeedUtil.NoMatch __ -> {
             }
         }
     }
 
     protected void handlePost(final Event<HttpObject, HttpObject> event, final ProjectFeedUtil.RoutesMatch route) {
+        if (route instanceof ProjectFeedUtil.ProjectImagesRoute imagesRoute) {
+            mediaService.handlePostProjectImage(event, imagesRoute);
+            return;
+        }
         if (!(route instanceof ProjectFeedUtil.ProjectFeedRoute)) {
             ProjectFeedUtil.respondMethodNotAllowed(event);
             return;
         }
 
-        final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
-        if (sessionUser.isEmpty()) {
-            ProjectFeedUtil.respondUnauthorized(event, ProjectFeedUtil.PROJECT_CREATE_AUTH_REQUIRED_CODE);
-            return;
-        }
-        if (!sessionUser.get().emailVerified()) {
-            ProjectFeedUtil.respondForbidden(event, ProjectFeedUtil.PROJECT_CREATE_EMAIL_UNVERIFIED_CODE);
-            return;
-        }
-
-        final LinkedTypeMap body = event.payload().bodyAsMap();
-        final ProjectInput input = ProjectFeedUtil.projectInputFrom(body);
-        final Optional<String> validation = ProjectFeedUtil.validateProjectInput(input);
-        if (validation.isPresent()) {
-            ProjectFeedUtil.respondBadRequest(event, validation.get());
-            return;
-        }
-
-        final String slug = ProjectFeedRepository.createProject(databaseRuntime.dataSource(), sessionUser.get().id(), input);
-        ProjectFeedUtil.respondProjectSaved(event, slug, 201);
+        mutationService.handleCreateProject(event);
     }
 
     protected void handlePut(final Event<HttpObject, HttpObject> event, final ProjectFeedUtil.RoutesMatch route) {
@@ -132,65 +127,19 @@ public class ProjectFeedService extends Service {
             return;
         }
 
-        final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
-        if (sessionUser.isEmpty()) {
-            ProjectFeedUtil.respondUnauthorized(event, ProjectFeedUtil.PROJECT_EDIT_AUTH_REQUIRED_CODE);
-            return;
-        }
-        if (!sessionUser.get().emailVerified()) {
-            ProjectFeedUtil.respondForbidden(event, ProjectFeedUtil.PROJECT_EDIT_EMAIL_UNVERIFIED_CODE);
-            return;
-        }
-
-        final Optional<ProjectDetails> existingProject = ProjectFeedRepository.findProjectBySlug(databaseRuntime.dataSource(), slug);
-        if (existingProject.isEmpty()) {
-            ProjectFeedUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_NOT_FOUND_CODE);
-            return;
-        }
-        if (existingProject.get().ownerUserId() != sessionUser.get().id()) {
-            ProjectFeedUtil.respondForbidden(event, ProjectFeedUtil.PROJECT_EDIT_OWNER_REQUIRED_CODE);
-            return;
-        }
-
-        final LinkedTypeMap body = event.payload().bodyAsMap();
-        final ProjectInput input = ProjectFeedUtil.projectInputFrom(body);
-        final Optional<String> validation = ProjectFeedUtil.validateProjectInput(input);
-        if (validation.isPresent()) {
-            ProjectFeedUtil.respondBadRequest(event, validation.get());
-            return;
-        }
-
-        ProjectFeedRepository.updateProject(databaseRuntime.dataSource(), existingProject.get().id(), input);
-        ProjectFeedUtil.respondProjectSaved(event, existingProject.get().slug(), 200);
+        mutationService.handleUpdateProject(event, slug);
     }
 
     protected void handleDelete(final Event<HttpObject, HttpObject> event, final ProjectFeedUtil.RoutesMatch route) {
+        if (route instanceof ProjectFeedUtil.ProjectImageRoute imageRoute) {
+            mediaService.handleDeleteProjectImage(event, imageRoute);
+            return;
+        }
         if (!(route instanceof ProjectFeedUtil.ProjectDetailsRoute(String slug))) {
             ProjectFeedUtil.respondMethodNotAllowed(event);
             return;
         }
 
-        final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
-        if (sessionUser.isEmpty()) {
-            ProjectFeedUtil.respondUnauthorized(event, ProjectFeedUtil.PROJECT_DELETE_AUTH_REQUIRED_CODE);
-            return;
-        }
-        if (!sessionUser.get().emailVerified()) {
-            ProjectFeedUtil.respondForbidden(event, ProjectFeedUtil.PROJECT_DELETE_EMAIL_UNVERIFIED_CODE);
-            return;
-        }
-
-        final Optional<ProjectDetails> existingProject = ProjectFeedRepository.findProjectBySlug(databaseRuntime.dataSource(), slug);
-        if (existingProject.isEmpty()) {
-            ProjectFeedUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_NOT_FOUND_CODE);
-            return;
-        }
-        if (existingProject.get().ownerUserId() != sessionUser.get().id()) {
-            ProjectFeedUtil.respondForbidden(event, ProjectFeedUtil.PROJECT_DELETE_OWNER_REQUIRED_CODE);
-            return;
-        }
-
-        ProjectFeedRepository.deleteProject(databaseRuntime.dataSource(), existingProject.get().id());
-        ProjectFeedUtil.respondDeleted(event);
+        mutationService.handleDeleteProject(event, slug);
     }
 }
