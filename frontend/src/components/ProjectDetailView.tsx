@@ -2,7 +2,7 @@ import type { Dictionary } from '../i18n'
 import type { FormEvent } from 'react'
 import { useEffect, useState } from 'react'
 import { ApiError } from '../api'
-import type { ProjectComment, ProjectCommentPayload, ProjectDetails } from '../types'
+import type { ProjectComment, ProjectCommentPayload, ProjectDetails, ProjectImage } from '../types'
 import { ProjectImageView } from './ProjectImageView'
 import { SafeMarkdown } from './SafeMarkdown'
 
@@ -52,6 +52,7 @@ export function ProjectDetailView({
   const [commentBody, setCommentBody] = useState('')
   const [commentSubmitting, setCommentSubmitting] = useState(false)
   const [commentError, setCommentError] = useState<string | null>(null)
+  const [expandedImage, setExpandedImage] = useState<ProjectImage | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -116,6 +117,21 @@ export function ProjectDetailView({
       cancelled = true
     }
   }, [canViewComments, copy.commentsLoadError, onLoadComments, onMarkCommentsRead, refreshKey, slug])
+
+  useEffect(() => {
+    if (!expandedImage) {
+      return
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setExpandedImage(null)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [expandedImage])
 
   if (loading) {
     return <p className="state-card">{copy.loading}</p>
@@ -217,7 +233,9 @@ export function ProjectDetailView({
             <ul className="project-detail__media-grid">
               {currentProject.images.map((image) => (
                 <li key={image.id}>
-                  <ProjectImageView src={image.url} alt={image.altText} fallback={copy.imageUnavailable} />
+                  <button className="project-detail__image-button" type="button" onClick={() => setExpandedImage(image)}>
+                    <ProjectImageView src={image.url} alt={image.altText} fallback={copy.imageUnavailable} />
+                  </button>
                 </li>
               ))}
             </ul>
@@ -325,6 +343,23 @@ export function ProjectDetailView({
           </>
         )}
       </section>
+
+      {expandedImage ? (
+        <div className="image-viewer" role="presentation" onClick={() => setExpandedImage(null)}>
+          <div
+            className="image-viewer__dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label={expandedImage.altText || currentProject.title}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button className="image-viewer__close" type="button" onClick={() => setExpandedImage(null)} aria-label="Close image">
+              x
+            </button>
+            <img src={expandedImage.url} alt={expandedImage.altText} />
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }
