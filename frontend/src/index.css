@@ -689,6 +689,7 @@ textarea {
   overflow-wrap: anywhere;
   display: -webkit-box;
   overflow: hidden;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
@@ -698,11 +699,13 @@ textarea {
   color: rgba(15, 15, 15, 0.64);
   display: -webkit-box;
   overflow: hidden;
+  line-clamp: 3;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
 }
 
 .project-card--without-image .project-card__summary {
+  line-clamp: 7;
   -webkit-line-clamp: 7;
 }
 
@@ -791,25 +794,13 @@ textarea {
   font-size: 1rem;
 }
 
-.project-card__roles ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  max-height: 4.55rem;
-  overflow: hidden;
+.project-card__roles {
+  margin-bottom: 0.85rem;
 }
 
-.project-card__role-chips {
-  flex-direction: row;
-  flex-wrap: wrap;
-  min-width: 0;
-}
-
-.project-card__roles li {
+.project-card__role-count {
   display: inline-flex;
+  margin: 0;
   min-width: 0;
   max-width: 100%;
   padding: 0.55rem 0.72rem;
@@ -821,15 +812,6 @@ textarea {
   overflow-wrap: anywhere;
   word-break: break-word;
   line-height: 1.15;
-}
-
-.project-card__roles strong {
-  display: block;
-}
-
-.project-card__roles span {
-  overflow-wrap: anywhere;
-  color: var(--muted);
 }
 
 .project-card--highlighted {
@@ -1502,7 +1484,6 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .project-card__roles li,
   .project-detail__roles li {
     flex-direction: column;
     align-items: flex-start;
