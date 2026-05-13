@@ -13,8 +13,6 @@ type ProjectCardProps = {
 
 export function ProjectCard({ copy, project, highlighted = false, onOpen, onOpenFounderProfile }: ProjectCardProps) {
   const descriptionPreview = markdownPreview(project.description)
-  const visibleRoles = project.openRoles.slice(0, 3)
-  const extraRoleCount = project.openRoles.length - visibleRoles.length
   const thumbnail = project.images?.[0]
 
   const cardClassName = [
@@ -61,14 +59,7 @@ export function ProjectCard({ copy, project, highlighted = false, onOpen, onOpen
 
       <section className="project-card__roles">
         <h3>{copy.openRoles}</h3>
-        <ul className="project-card__role-chips">
-          {visibleRoles.map((role) => (
-            <li key={`${project.id}-${role.title}`}>
-              {role.title}
-            </li>
-          ))}
-          {extraRoleCount > 0 ? <li>{copy.moreRoles(extraRoleCount)}</li> : null}
-        </ul>
+        <p className="project-card__role-count">{copy.openRolesCount(project.openRoles.length)}</p>
       </section>
 
       {onOpen ? (

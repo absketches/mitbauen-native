@@ -186,7 +186,7 @@ export const COPY = {
       ownerRole: 'Role',
       commitment: 'Commitment',
       openRoles: 'Open Roles',
-      moreRoles: (count: number) => `+${count} more`,
+      openRolesCount: (count: number) => `${count} open role${count === 1 ? '' : 's'}`,
       viewProject: 'View project',
     },
     projectDetail: {
@@ -481,7 +481,7 @@ export const COPY = {
       ownerRole: 'Rolle',
       commitment: 'Commitment',
       openRoles: 'Offene Rollen',
-      moreRoles: (count: number) => `+${count} weitere`,
+      openRolesCount: (count: number) => `${count} offene Rolle${count === 1 ? '' : 'n'}`,
       viewProject: 'Projekt ansehen',
     },
     projectDetail: {
