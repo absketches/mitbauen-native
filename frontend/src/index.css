@@ -805,10 +805,12 @@ textarea {
 .project-card__role-chips {
   flex-direction: row;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .project-card__roles li {
   display: inline-flex;
+  min-width: 0;
   max-width: 100%;
   padding: 0.55rem 0.72rem;
   border-radius: 999px;
@@ -817,6 +819,7 @@ textarea {
   color: rgba(15, 15, 15, 0.72);
   font-weight: 650;
   overflow-wrap: anywhere;
+  word-break: break-word;
   line-height: 1.15;
 }
 
@@ -1150,6 +1153,20 @@ textarea {
   background: #f7f7f2;
 }
 
+.project-detail__image-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.project-detail__image-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(15, 15, 15, 0.12);
+}
+
 .project-detail__media-grid img {
   display: block;
   width: 100%;
@@ -1240,6 +1257,48 @@ textarea {
 
 .project-detail__links a:hover {
   border-color: rgba(15, 15, 15, 0.22);
+}
+
+.image-viewer {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1.2rem;
+  background: rgba(15, 15, 15, 0.82);
+}
+
+.image-viewer__dialog {
+  position: relative;
+  max-width: min(96vw, 84rem);
+  max-height: 92vh;
+}
+
+.image-viewer__dialog img {
+  display: block;
+  max-width: 100%;
+  max-height: 92vh;
+  border-radius: 1rem;
+  object-fit: contain;
+  background: #111111;
+  box-shadow: var(--shadow-strong);
+}
+
+.image-viewer__close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 2.35rem;
+  height: 2.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 999px;
+  color: #111111;
+  background: rgba(255, 255, 255, 0.94);
+  font: inherit;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .project-detail__comments {
