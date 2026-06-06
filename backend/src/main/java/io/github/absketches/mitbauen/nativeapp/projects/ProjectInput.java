@@ -6,7 +6,7 @@ import java.util.List;
 
 public record ProjectInput(
     String title,
-    String description,
+    ProjectDescriptions descriptions,
     String founderRole,
     String founderCommitment,
     List<OpenRole> openRoles,

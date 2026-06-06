@@ -11,7 +11,7 @@ public record ProjectDetails(
     long ownerUserId,
     String slug,
     String title,
-    String description,
+    ProjectDescriptions descriptions,
     String status,
     FounderInfo founder,
     List<OpenRole> openRoles,

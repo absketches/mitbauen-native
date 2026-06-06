@@ -531,6 +531,7 @@ export default function App({ api }: AppProps) {
       {route.name === 'feed' ? (
         <FeedView
           copy={copy}
+          language={language}
           projects={projects}
           loading={projectsLoading}
           error={projectsError}
@@ -630,6 +631,7 @@ export default function App({ api }: AppProps) {
         ) : (
           <ProjectFormView
             copy={copy.projectForm}
+            language={language}
             mode="create"
             onSubmit={handleCreateProject}
             onCancel={() => navigateTo('/', setRoute)}
@@ -645,6 +647,7 @@ export default function App({ api }: AppProps) {
         ) : session.authenticated ? (
           <ProjectDetailView
             copy={copy.projectDetail}
+            language={language}
             slug={route.slug}
             notice={route.notice}
             refreshKey={projectDetailRefreshKey}
@@ -670,6 +673,7 @@ export default function App({ api }: AppProps) {
         ) : (
           <ProjectFormView
             copy={copy.projectForm}
+            language={language}
             mode="edit"
             slug={route.slug}
             loadProject={fetchProject}
@@ -688,6 +692,7 @@ export default function App({ api }: AppProps) {
 
 type FeedViewProps = {
   copy: Dictionary
+  language: Language
   projects: Project[]
   loading: boolean
   error: string | null
@@ -792,6 +797,7 @@ function NotificationBell({ copy, notifications, onOpenProject, onRefresh }: Not
 
 function FeedView({
   copy,
+  language,
   projects,
   loading,
   error,
@@ -877,6 +883,7 @@ function FeedView({
           {projects.map((project) => (
             <ProjectCard
               copy={copy.projectCard}
+              language={language}
               key={project.id}
               project={project}
               highlighted={highlightSlug === project.slug}

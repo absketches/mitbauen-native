@@ -51,7 +51,7 @@ class ProjectsApiTest {
 
         final HttpObject createResponse = sendJson("/api/projects", "POST", Map.of(
             "title", "Circular Kitchen Atlas",
-            "description", "A living guide for neighborhood kitchens that want to map surplus food, shared prep capacity, and the fastest path from extra ingredients to community meals.",
+            "descriptions", Map.of("en", "A living guide for neighborhood kitchens that want to map surplus food, shared prep capacity, and the fastest path from extra ingredients to community meals."),
             "founderRole", "Founder + Community Ops",
             "founderCommitment", "I am running pilot dinners every week, documenting learnings, and handling the volunteer operations myself.",
             "openRoles", List.of(
@@ -77,7 +77,7 @@ class ProjectsApiTest {
         assertThat(detailResponse.statusCode()).isEqualTo(200);
         final LinkedTypeMap project = detailResponse.bodyAsMap().asMap("project");
         assertThat(project.asString("title")).isEqualTo("Circular Kitchen Atlas");
-        assertThat(project.asString("description")).contains("surplus food");
+        assertThat(project.asMap("descriptions").asString("en")).contains("surplus food");
         assertThat(project.asBoolean("canManage")).isTrue();
         assertThat(project.asMap("founder").asString("publicId")).isNotBlank();
         assertThat(project.asMap("founder").asString("role")).isEqualTo("Founder + Community Ops");
@@ -117,7 +117,7 @@ class ProjectsApiTest {
 
         final String slug = sendJson("/api/projects", "POST", Map.of(
             "title", "Members Only Project",
-            "description", "A members-only project description with enough detail to satisfy validation and verify anonymous access is blocked.",
+            "descriptions", Map.of("en", "A members-only project description with enough detail to satisfy validation and verify anonymous access is blocked."),
             "founderRole", "Founder + Steward",
             "founderCommitment", "I am coordinating the first member handoffs and keeping the project notes current.",
             "openRoles", List.of(Map.of("title", "Project Helper", "commitment", "Help keep the member workflow moving."))
@@ -133,6 +133,25 @@ class ProjectsApiTest {
     }
 
     @Test
+    void storesLocalizedProjectDescriptionsAsAuthored() {
+        nano = newTestNano();
+        final String sessionCookie = registerAndReturnSessionCookie("owner.localized@example.test", "Localized Owner");
+        final String englishDescription = "An English-only project description with enough detail to prove the German field remains empty until the creator writes it.";
+
+        final String slug = sendJson("/api/projects", "POST", Map.of(
+            "title", "Localized Description Project",
+            "descriptions", Map.of("en", englishDescription),
+            "founderRole", "Founder + Translator",
+            "founderCommitment", "I am keeping the project description clear for contributors.",
+            "openRoles", List.of(Map.of("title", "Project Helper", "commitment", "Help keep the member workflow moving."))
+        ), sessionCookie).bodyAsMap().asString("slug");
+
+        final LinkedTypeMap project = sendGet("/api/projects/" + slug, sessionCookie).bodyAsMap().asMap("project");
+        assertThat(project.asMap("descriptions").asString("en")).isEqualTo(englishDescription);
+        assertThat(project.asMap("descriptions").asString("de")).isNull();
+    }
+
+    @Test
     void unverifiedMembersCannotViewProjectFeedAndDetails() {
         nano = newTestNano();
         final String ownerCookie = registerAndReturnSessionCookie("owner.visible@example.test", "Visible Owner");
@@ -140,7 +159,7 @@ class ProjectsApiTest {
 
         final String slug = sendJson("/api/projects", "POST", Map.of(
             "title", "Unverified Viewer Project",
-            "description", "A private project description with enough detail to confirm pending members cannot browse project details.",
+            "descriptions", Map.of("en", "A private project description with enough detail to confirm pending members cannot browse project details."),
             "founderRole", "Founder + Coordinator",
             "founderCommitment", "I am coordinating the first project steps and making the work visible to members.",
             "openRoles", List.of(Map.of("title", "Project Support", "commitment", "Help with member coordination."))
@@ -167,7 +186,7 @@ class ProjectsApiTest {
 
         final HttpObject createResponse = sendJson("/api/projects", "POST", Map.of(
             "title", "Expanded Field Limits",
-            "description", description,
+            "descriptions", Map.of("en", description),
             "founderRole", founderRole,
             "founderCommitment", founderCommitment,
             "openRoles", List.of(Map.of("title", openRoleTitle, "commitment", openRoleCommitment))
@@ -178,7 +197,7 @@ class ProjectsApiTest {
             "/api/projects/" + createResponse.bodyAsMap().asString("slug"),
             sessionCookie
         ).bodyAsMap().asMap("project");
-        assertThat(project.asString("description")).hasSize(ProjectFeedUtil.DESCRIPTION_MAX_LENGTH);
+        assertThat(project.asMap("descriptions").asString("en")).hasSize(ProjectFeedUtil.DESCRIPTION_MAX_LENGTH);
         assertThat(project.asMap("founder").asString("role")).hasSize(ProjectFeedUtil.FOUNDER_ROLE_MAX_LENGTH);
         assertThat(project.asMap("founder").asString("commitment")).hasSize(ProjectFeedUtil.FOUNDER_COMMITMENT_MAX_LENGTH);
 
@@ -193,7 +212,7 @@ class ProjectsApiTest {
 
         final HttpObject response = sendJson("/api/projects", "POST", Map.of(
             "title", "Hidden Makerspace Calendar",
-            "description", "A shared calendar and intake flow for community workshop nights so small makerspaces can coordinate volunteers and avoid duplicated prep work.",
+            "descriptions", Map.of("en", "A shared calendar and intake flow for community workshop nights so small makerspaces can coordinate volunteers and avoid duplicated prep work."),
             "founderRole", "Founder + Organizer",
             "founderCommitment", "I am already hosting the sessions, coordinating signups, and setting up the space each week.",
             "openRoles", List.of(Map.of("title", "Designer", "commitment", "Shape the first scheduling flow."))
@@ -210,7 +229,7 @@ class ProjectsApiTest {
 
         final HttpObject response = sendJson("/api/projects", "POST", Map.of(
             "title", "Shared Workshop Hours",
-            "description", "A lightweight scheduling and handoff tool for neighborhood workshop nights so volunteer hosts can coordinate setup, cleanup, and tool access without relying on private chat threads.",
+            "descriptions", Map.of("en", "A lightweight scheduling and handoff tool for neighborhood workshop nights so volunteer hosts can coordinate setup, cleanup, and tool access without relying on private chat threads."),
             "founderRole", "Founder + Host",
             "founderCommitment", "I am already running the sessions, opening the space, and coordinating the volunteer hosts every week.",
             "openRoles", List.of(Map.of("title", "Operations Support", "commitment", "Help coordinate setup and handoff windows."))
@@ -227,7 +246,7 @@ class ProjectsApiTest {
 
         final HttpObject response = sendJson("/api/projects", "POST", Map.of(
             "title", "Repair Story Archive",
-            "description", "A simple library for documenting repair stories so volunteers can remember what failed, what worked, and what tools they needed last time.",
+            "descriptions", Map.of("en", "A simple library for documenting repair stories so volunteers can remember what failed, what worked, and what tools they needed last time."),
             "founderRole", "Founder + Archivist",
             "founderCommitment", "I am already gathering the stories, scanning notes, and interviewing the first volunteer repair teams.",
             "openRoles", List.of()
@@ -244,7 +263,7 @@ class ProjectsApiTest {
 
         final HttpObject response = sendJson("/api/projects", "POST", Map.of(
             "title", "Unsafe Project Links",
-            "description", "A project with enough description to verify invalid external media and links are rejected before storage.",
+            "descriptions", Map.of("en", "A project with enough description to verify invalid external media and links are rejected before storage."),
             "founderRole", "Founder + Link Steward",
             "founderCommitment", "I am keeping project links useful and checking the resources every week.",
             "openRoles", List.of(Map.of("title", "Link Checker", "commitment", "Help review project resources.")),
@@ -256,7 +275,7 @@ class ProjectsApiTest {
 
         final String slug = sendJson("/api/projects", "POST", Map.of(
             "title", "Unsafe Project Image",
-            "description", "A project with enough description to verify invalid image uploads are rejected before storage.",
+            "descriptions", Map.of("en", "A project with enough description to verify invalid image uploads are rejected before storage."),
             "founderRole", "Founder + Image Steward",
             "founderCommitment", "I am keeping project images useful and checking the resources every week.",
             "openRoles", List.of(Map.of("title", "Image Checker", "commitment", "Help review project resources."))
@@ -273,7 +292,7 @@ class ProjectsApiTest {
 
         final HttpObject response = sendJson("/api/projects", "POST", Map.of(
             "title", "Malformed Project",
-            "description", "A project with enough description to verify malformed nested payload shapes are rejected cleanly.",
+            "descriptions", Map.of("en", "A project with enough description to verify malformed nested payload shapes are rejected cleanly."),
             "founderRole", "Founder + Payload Steward",
             "founderCommitment", "I am keeping project payloads tidy and easy to validate.",
             "openRoles", List.of("not-a-role-map")
@@ -291,7 +310,7 @@ class ProjectsApiTest {
 
         final String slug = sendJson("/api/projects", "POST", Map.of(
             "title", "Block Heat Map",
-            "description", "A neighborhood heat resilience project that tracks shade, cooling access, and high-risk blocks so small mutual-aid teams can coordinate the right help faster.",
+            "descriptions", Map.of("en", "A neighborhood heat resilience project that tracks shade, cooling access, and high-risk blocks so small mutual-aid teams can coordinate the right help faster."),
             "founderRole", "Founder + Coordinator",
             "founderCommitment", "I am already walking the routes, meeting residents, and coordinating the volunteer response plan each week.",
             "openRoles", List.of(Map.of("title", "Data Volunteer", "commitment", "Map the first round of block conditions."))
@@ -299,7 +318,7 @@ class ProjectsApiTest {
 
         final HttpObject forbiddenEdit = sendJson("/api/projects/" + slug, "PUT", Map.of(
             "title", "Block Heat Map Revised",
-            "description", "A revised description that should never be saved because a non-owner is attempting the edit through the public API.",
+            "descriptions", Map.of("en", "A revised description that should never be saved because a non-owner is attempting the edit through the public API."),
             "founderRole", "Founder + Coordinator",
             "founderCommitment", "Still coordinating everything.",
             "openRoles", List.of(Map.of("title", "Data Volunteer", "commitment", "Still mapping conditions."))
@@ -310,7 +329,7 @@ class ProjectsApiTest {
 
         final HttpObject ownerEdit = sendJson("/api/projects/" + slug, "PUT", Map.of(
             "title", "Block Heat Map",
-            "description", "A neighborhood heat resilience project that tracks shade, cooling access, and high-risk blocks so small mutual-aid teams can coordinate the right help faster, with clearer volunteer handoffs.",
+            "descriptions", Map.of("en", "A neighborhood heat resilience project that tracks shade, cooling access, and high-risk blocks so small mutual-aid teams can coordinate the right help faster, with clearer volunteer handoffs."),
             "founderRole", "Founder + Heat Response Lead",
             "founderCommitment", "I am coordinating weekly walks, resident calls, and volunteer handoffs while piloting the first interventions myself.",
             "openRoles", List.of(
@@ -323,7 +342,7 @@ class ProjectsApiTest {
         assertThat(ownerEdit.bodyAsMap().asString("slug")).isEqualTo(slug);
 
         final LinkedTypeMap updatedProject = sendGet("/api/projects/" + slug, ownerCookie).bodyAsMap().asMap("project");
-        assertThat(updatedProject.asString("description")).contains("clearer volunteer handoffs");
+        assertThat(updatedProject.asMap("descriptions").asString("en")).contains("clearer volunteer handoffs");
         assertThat(updatedProject.asMap("founder").asString("role")).isEqualTo("Founder + Heat Response Lead");
         assertThat(updatedProject.asList("openRoles").stream()
             .map(role -> new LinkedTypeMap((Map<?, ?>) role).asString("title"))
@@ -339,7 +358,7 @@ class ProjectsApiTest {
 
         final String slug = sendJson("/api/projects", "POST", Map.of(
             "title", "Neighborhood Heat Watch",
-            "description", "A small coordination project for mapping heat risk and volunteer check-ins so local support teams can reach vulnerable residents faster.",
+            "descriptions", Map.of("en", "A small coordination project for mapping heat risk and volunteer check-ins so local support teams can reach vulnerable residents faster."),
             "founderRole", "Founder + Coordinator",
             "founderCommitment", "I am organizing the first volunteer routes, resident outreach, and weekly coordination sessions myself.",
             "openRoles", List.of(Map.of("title", "Data Volunteer", "commitment", "Help update the first block-by-block conditions."))
@@ -349,7 +368,7 @@ class ProjectsApiTest {
 
         final HttpObject response = sendJson("/api/projects/" + slug, "PUT", Map.of(
             "title", "Neighborhood Heat Watch",
-            "description", "Updated description should be blocked.",
+            "descriptions", Map.of("en", "Updated description should be blocked."),
             "founderRole", "Founder + Coordinator",
             "founderCommitment", "Updated commitment should be blocked too.",
             "openRoles", List.of(Map.of("title", "Data Volunteer", "commitment", "Still helping.")) 
@@ -367,7 +386,7 @@ class ProjectsApiTest {
 
         final String slug = sendJson("/api/projects", "POST", Map.of(
             "title", "Community Repair Ledger",
-            "description", "A shared ledger for volunteer repair collectives so each fix, failed attempt, and reused part can be tracked and learned from across neighborhoods.",
+            "descriptions", Map.of("en", "A shared ledger for volunteer repair collectives so each fix, failed attempt, and reused part can be tracked and learned from across neighborhoods."),
             "founderRole", "Founder + Repair Lead",
             "founderCommitment", "I am already organizing the repair nights, capturing the notes, and coordinating the volunteers every week.",
             "openRoles", List.of(Map.of("title", "Data Steward", "commitment", "Organize the repair records."))
@@ -399,7 +418,7 @@ class ProjectsApiTest {
 
         final String slug = sendJson("/api/projects", "POST", Map.of(
             "title", "Shared Pantry Routes",
-            "description", "A route-planning effort for volunteer pantry pickups and deliveries so neighborhoods can coordinate stock and drop-offs more reliably.",
+            "descriptions", Map.of("en", "A route-planning effort for volunteer pantry pickups and deliveries so neighborhoods can coordinate stock and drop-offs more reliably."),
             "founderRole", "Founder + Route Lead",
             "founderCommitment", "I am already running the first pickup routes, scheduling volunteers, and coordinating pantry partners each week.",
             "openRoles", List.of(Map.of("title", "Volunteer Dispatcher", "commitment", "Help update delivery shifts and route changes."))
@@ -423,7 +442,7 @@ class ProjectsApiTest {
 
         final String slug = sendJson("/api/projects", "POST", Map.of(
             "title", "Mutual Aid Logistics",
-            "description", "A coordination project for neighborhood mutual aid teams so delivery runs, supplies, and volunteer handoffs can be managed from one shared operational view.",
+            "descriptions", Map.of("en", "A coordination project for neighborhood mutual aid teams so delivery runs, supplies, and volunteer handoffs can be managed from one shared operational view."),
             "founderRole", "Founder + Operations Lead",
             "founderCommitment", "I am already coordinating routes, volunteers, and supply pickups every week while running the first delivery shifts myself.",
             "openRoles", List.of(Map.of("title", "Logistics Support", "commitment", "Coordinate route and pickup changes."))

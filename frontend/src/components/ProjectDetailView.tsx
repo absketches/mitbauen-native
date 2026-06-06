@@ -1,7 +1,8 @@
-import type { Dictionary } from '../i18n'
+import type { Dictionary, Language } from '../i18n'
 import type { FormEvent } from 'react'
 import { useEffect, useState } from 'react'
 import { ApiError } from '../api'
+import { descriptionForLanguage } from '../projectDescriptions'
 import type { ProjectComment, ProjectCommentPayload, ProjectDetails, ProjectImage } from '../types'
 import { ProjectImageView } from './ProjectImageView'
 import { SafeMarkdown } from './SafeMarkdown'
@@ -10,6 +11,7 @@ type DetailNotice = 'created' | 'updated' | 'createdWithMediaWarning' | 'updated
 
 type ProjectDetailViewProps = {
   copy: Dictionary['projectDetail']
+  language: Language
   slug: string
   notice: DetailNotice
   refreshKey: number
@@ -27,6 +29,7 @@ type ProjectDetailViewProps = {
 
 export function ProjectDetailView({
   copy,
+  language,
   slug,
   notice,
   refreshKey,
@@ -146,6 +149,7 @@ export function ProjectDetailView({
   }
 
   const currentProject = project
+  const description = descriptionForLanguage(currentProject, language)
 
   async function handleDelete() {
     if (!window.confirm(copy.deleteConfirm)) {
@@ -228,7 +232,11 @@ export function ProjectDetailView({
         <article className="project-detail__panel project-detail__panel--primary">
           <p className="hero__eyebrow">{copy.whatEyebrow}</p>
           <h2>{copy.whatTitle}</h2>
-          <SafeMarkdown className="project-detail__body" text={currentProject.description} />
+          {description ? (
+            <SafeMarkdown className="project-detail__body" text={description} />
+          ) : (
+            <p className="project-detail__empty">{copy.descriptionMissing}</p>
+          )}
           {currentProject.images && currentProject.images.length > 0 ? (
             <ul className="project-detail__media-grid">
               {currentProject.images.map((image) => (
