@@ -188,6 +188,7 @@ export const COPY = {
       openRoles: 'Open Roles',
       openRolesCount: (count: number) => `${count} open role${count === 1 ? '' : 's'}`,
       viewProject: 'View project',
+      descriptionMissing: 'No English description available.',
     },
     projectDetail: {
       status: {
@@ -213,6 +214,7 @@ export const COPY = {
       deleteError: 'We could not delete this project right now.',
       whatEyebrow: 'Overview',
       whatTitle: 'Description',
+      descriptionMissing: 'No English description available.',
       imageUnavailable: 'Image not available.',
       commitmentEyebrow: 'Founder commitment',
       openRolesEyebrow: 'Open roles',
@@ -248,6 +250,14 @@ export const COPY = {
       ideaTitle: 'Project details.',
       titleLabel: 'Title',
       descriptionLabel: 'Description',
+      descriptionLanguageTabsLabel: 'Description language',
+      descriptionLanguageLabel: {
+        de: 'DE',
+        en: 'EN',
+      },
+      descriptionLanguageAriaLabel: (language: 'de' | 'en') =>
+        language === 'de' ? 'German project description' : 'English project description',
+      descriptionOptionalHint: 'Add at least one language. Empty language tabs stay blank for viewers.',
       imagesLabel: 'Project images',
       imagesHint: (count: number) => `Optional. Upload up to ${count} JPEG, PNG, or WebP images. Each image can be up to 2 MB.`,
       savedImageLabel: 'Saved image',
@@ -483,6 +493,7 @@ export const COPY = {
       openRoles: 'Offene Rollen',
       openRolesCount: (count: number) => `${count} offene Rolle${count === 1 ? '' : 'n'}`,
       viewProject: 'Projekt ansehen',
+      descriptionMissing: 'Keine deutsche Beschreibung verfügbar.',
     },
     projectDetail: {
       status: {
@@ -508,6 +519,7 @@ export const COPY = {
       deleteError: 'Dieses Projekt konnte gerade nicht gelöscht werden.',
       whatEyebrow: 'Überblick',
       whatTitle: 'Beschreibung',
+      descriptionMissing: 'Keine deutsche Beschreibung verfügbar.',
       imageUnavailable: 'Bild nicht verfügbar.',
       commitmentEyebrow: 'Commitment der Gründerperson',
       openRolesEyebrow: 'Offene Rollen',
@@ -543,6 +555,14 @@ export const COPY = {
       ideaTitle: 'Projektdetails.',
       titleLabel: 'Titel',
       descriptionLabel: 'Beschreibung',
+      descriptionLanguageTabsLabel: 'Sprache der Beschreibung',
+      descriptionLanguageLabel: {
+        de: 'DE',
+        en: 'EN',
+      },
+      descriptionLanguageAriaLabel: (language: 'de' | 'en') =>
+        language === 'de' ? 'Deutsche Projektbeschreibung' : 'Englische Projektbeschreibung',
+      descriptionOptionalHint: 'Füge mindestens eine Sprache hinzu. Leere Sprach-Tabs bleiben für Betrachtende leer.',
       imagesLabel: 'Projektbilder',
       imagesHint: (count: number) => `Optional. Lade bis zu ${count} JPEG-, PNG- oder WebP-Bilder hoch. Jedes Bild darf bis zu 2 MB groß sein.`,
       savedImageLabel: 'Gespeichertes Bild',

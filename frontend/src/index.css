@@ -75,6 +75,18 @@ img {
   max-width: 100%;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 textarea {
   resize: vertical;
 }
@@ -704,6 +716,12 @@ textarea {
   -webkit-box-orient: vertical;
 }
 
+.project-card__summary--empty,
+.project-detail__empty {
+  color: rgba(15, 15, 15, 0.45);
+  font-style: italic;
+}
+
 .project-card--without-image .project-card__summary {
   line-clamp: 7;
   -webkit-line-clamp: 7;
@@ -901,6 +919,58 @@ textarea {
   display: grid;
   gap: 0.35rem;
   font-weight: 600;
+}
+
+.project-form__description-field {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.project-form__field-label {
+  font-weight: 600;
+}
+
+.project-form__tabs {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.18rem;
+  border: 1px solid rgba(15, 15, 15, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.project-form__tab {
+  min-width: 3.25rem;
+  min-height: 2.2rem;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.45rem 0.85rem;
+  background: transparent;
+  color: rgba(15, 15, 15, 0.62);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.project-form__tab:hover,
+.project-form__tab:focus-visible {
+  color: #111111;
+}
+
+.project-form__tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(15, 15, 15, 0.08);
+}
+
+.project-form__tab--active {
+  background: #111111;
+  color: #ffffff;
+  box-shadow: 0 8px 20px rgba(15, 15, 15, 0.12);
+}
+
+.project-form__description-textarea {
+  font-weight: 400;
 }
 
 .checkbox-field {

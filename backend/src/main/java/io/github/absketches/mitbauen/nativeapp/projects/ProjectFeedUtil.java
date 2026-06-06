@@ -136,7 +136,7 @@ public class ProjectFeedUtil {
         final TypeList links = body.asList("links");
         return new ProjectInput(
             safeTrim(body.asString("title")),
-            safeTrim(body.asString("description")),
+            descriptionsFrom(body),
             safeTrim(body.asString("founderRole")),
             safeTrim(body.asString("founderCommitment")),
             roles == null ? List.of() : roles.stream()
@@ -209,7 +209,7 @@ public class ProjectFeedUtil {
         payload.put("id", project.id());
         payload.put("slug", project.slug());
         payload.put("title", project.title());
-        payload.put("description", project.description());
+        payload.put("descriptions", descriptionsToMap(project.descriptions()));
         payload.put("status", project.status());
         payload.put("founder", founderToMap(project.founder()));
         payload.put("openRoles", project.openRoles().stream().map(ProjectFeedUtil::openRoleToMap).toList());
@@ -225,7 +225,7 @@ public class ProjectFeedUtil {
         payload.put("canManage", canManage);
         payload.put("slug", project.slug());
         payload.put("title", project.title());
-        payload.put("description", project.description());
+        payload.put("descriptions", descriptionsToMap(project.descriptions()));
         payload.put("status", project.status());
         payload.put("founder", founderToMap(project.founder()));
         payload.put("openRoles", project.openRoles().stream().map(ProjectFeedUtil::openRoleToMap).toList());
@@ -270,8 +270,35 @@ public class ProjectFeedUtil {
         );
     }
 
+    private static ProjectDescriptions descriptionsFrom(final LinkedTypeMap body) {
+        final LinkedTypeMap descriptions = body.asMap("descriptions");
+        if (descriptions != null) {
+            return new ProjectDescriptions(
+                nullableTrim(descriptions.asString("de")),
+                nullableTrim(descriptions.asString("en"))
+            );
+        }
+
+        return new ProjectDescriptions(null, null);
+    }
+
+    private static Map<String, Object> descriptionsToMap(final ProjectDescriptions descriptions) {
+        final Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("de", descriptions.de());
+        payload.put("en", descriptions.en());
+        return payload;
+    }
+
     private static String safeTrim(final String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private static String nullableTrim(final String value) {
+        if (value == null) {
+            return null;
+        }
+        final String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private static LinkedTypeMap linkedTypeMapFromListItem(final Object item) {

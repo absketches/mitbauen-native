@@ -12,7 +12,15 @@ public class ProjectInputValidator {
         if (outside(input.title(), ProjectFeedUtil.TITLE_MIN_LENGTH, ProjectFeedUtil.TITLE_MAX_LENGTH)) {
             return Optional.of(ProjectFeedUtil.PROJECT_TITLE_INVALID_CODE);
         }
-        if (outside(input.description(), ProjectFeedUtil.DESCRIPTION_MIN_LENGTH, ProjectFeedUtil.DESCRIPTION_MAX_LENGTH)) {
+        if (input.descriptions().de() == null && input.descriptions().en() == null) {
+            return Optional.of(ProjectFeedUtil.PROJECT_DESCRIPTION_INVALID_CODE);
+        }
+        if (input.descriptions().de() != null
+            && outside(input.descriptions().de(), ProjectFeedUtil.DESCRIPTION_MIN_LENGTH, ProjectFeedUtil.DESCRIPTION_MAX_LENGTH)) {
+            return Optional.of(ProjectFeedUtil.PROJECT_DESCRIPTION_INVALID_CODE);
+        }
+        if (input.descriptions().en() != null
+            && outside(input.descriptions().en(), ProjectFeedUtil.DESCRIPTION_MIN_LENGTH, ProjectFeedUtil.DESCRIPTION_MAX_LENGTH)) {
             return Optional.of(ProjectFeedUtil.PROJECT_DESCRIPTION_INVALID_CODE);
         }
         if (outside(input.founderRole(), ProjectFeedUtil.FOUNDER_ROLE_MIN_LENGTH, ProjectFeedUtil.FOUNDER_ROLE_MAX_LENGTH)) {

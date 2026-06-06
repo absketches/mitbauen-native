@@ -1,12 +1,14 @@
 import type { FormEvent } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { ApiError } from '../api'
-import type { Dictionary } from '../i18n'
-import type { OpenRole, ProjectDetails, ProjectImage, ProjectImageChanges, ProjectLink, ProjectPayload } from '../types'
+import type { Dictionary, Language } from '../i18n'
+import { normalizeDescriptions } from '../projectDescriptions'
+import type { OpenRole, ProjectDescriptions, ProjectDetails, ProjectImage, ProjectImageChanges, ProjectLink, ProjectPayload } from '../types'
 import { ProjectImageView } from './ProjectImageView'
 
 type ProjectFormViewProps = {
   copy: Dictionary['projectForm']
+  language: Language
   mode: 'create' | 'edit'
   slug?: string
   loadProject?: (slug: string) => Promise<ProjectDetails>
@@ -32,9 +34,11 @@ const PROJECT_LINK_LABEL_MAX_LENGTH = 40
 const PROJECT_IMAGES_MAX_COUNT = 5
 const PROJECT_IMAGE_MAX_BYTES = 2 * 1024 * 1024
 const PROJECT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+type DescriptionLanguage = 'de' | 'en'
 
 export function ProjectFormView({
   copy,
+  language,
   mode,
   slug,
   loadProject,
@@ -46,12 +50,13 @@ export function ProjectFormView({
   const [canManage, setCanManage] = useState(mode !== 'edit')
   const [form, setForm] = useState<ProjectPayload>({
     title: '',
-    description: '',
+    descriptions: { de: null, en: null },
     founderRole: '',
     founderCommitment: '',
     openRoles: [{ ...BLANK_ROLE }],
     links: [],
   })
+  const [activeDescriptionLanguage, setActiveDescriptionLanguage] = useState<DescriptionLanguage>(language)
   const [existingImages, setExistingImages] = useState<ProjectImage[]>([])
   const [removedImageIds, setRemovedImageIds] = useState<number[]>([])
   const [newImages, setNewImages] = useState<NewProjectImage[]>([])
@@ -89,12 +94,13 @@ export function ProjectFormView({
         setCanManage(project.canManage)
         setForm({
           title: project.title,
-          description: project.description,
+          descriptions: project.descriptions,
           founderRole: project.founder.role,
           founderCommitment: project.founder.commitment,
           openRoles: project.openRoles.length > 0 ? project.openRoles : [{ ...BLANK_ROLE }],
           links: project.links ?? [],
         })
+        setActiveDescriptionLanguage(preferredDescriptionLanguage(project.descriptions, language))
         setExistingImages(project.images ?? [])
         setRemovedImageIds([])
         clearNewImages()
@@ -111,10 +117,20 @@ export function ProjectFormView({
     return () => {
       cancelled = true
     }
-  }, [copy.loadError, loadProject, mode, slug])
+  }, [copy.loadError, language, loadProject, mode, slug])
 
-  function updateField(field: 'title' | 'description' | 'founderRole' | 'founderCommitment', value: string) {
+  function updateField(field: 'title' | 'founderRole' | 'founderCommitment', value: string) {
     setForm((current) => ({ ...current, [field]: value }))
+  }
+
+  function updateDescription(language: DescriptionLanguage, value: string) {
+    setForm((current) => ({
+      ...current,
+      descriptions: {
+        ...current.descriptions,
+        [language]: value,
+      },
+    }))
   }
 
   function updateRole(index: number, field: keyof OpenRole, value: string) {
@@ -207,12 +223,19 @@ export function ProjectFormView({
 
   function validate(nextForm: ProjectPayload) {
     const errors: Record<string, string> = {}
+    const descriptions = normalizeDescriptions(nextForm.descriptions)
 
     if (nextForm.title.trim().length < 5 || nextForm.title.trim().length > PROJECT_TITLE_MAX_LENGTH) {
       errors.title = copy.validationTitle
     }
-    if (nextForm.description.trim().length < 40 || nextForm.description.trim().length > PROJECT_DESCRIPTION_MAX_LENGTH) {
-      errors.description = copy.validationDescription
+    if (!descriptions.de && !descriptions.en) {
+      errors.descriptions = copy.validationDescription
+    }
+    if (descriptions.de && (descriptions.de.length < 40 || descriptions.de.length > PROJECT_DESCRIPTION_MAX_LENGTH)) {
+      errors.description_de = copy.validationDescription
+    }
+    if (descriptions.en && (descriptions.en.length < 40 || descriptions.en.length > PROJECT_DESCRIPTION_MAX_LENGTH)) {
+      errors.description_en = copy.validationDescription
     }
     if (nextForm.founderRole.trim().length < 3 || nextForm.founderRole.trim().length > FOUNDER_ROLE_MAX_LENGTH) {
       errors.founderRole = copy.validationFounderRole
@@ -273,9 +296,10 @@ export function ProjectFormView({
     setSubmitting(true)
 
     try {
+      const descriptions = normalizeDescriptions(form.descriptions)
       await onSubmit({
         title: form.title.trim(),
-        description: form.description.trim(),
+        descriptions,
         founderRole: form.founderRole.trim(),
         founderCommitment: form.founderCommitment.trim(),
         openRoles: form.openRoles.map((role) => ({
@@ -350,24 +374,54 @@ export function ProjectFormView({
             {fieldErrors.title ? <span className="project-form__error">{fieldErrors.title}</span> : null}
           </label>
 
-          <label>
-            {copy.descriptionLabel}
-            <textarea
-              aria-label={copy.descriptionLabel}
-              value={form.description}
-              onChange={(event) => updateField('description', event.target.value)}
-              rows={9}
-              maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
-              required
-            />
-            {form.description.length >= PROJECT_DESCRIPTION_MAX_LENGTH ? (
+          <div className="project-form__description-field">
+            <span className="project-form__field-label">{copy.descriptionLabel}</span>
+            <div className="project-form__tabs" role="tablist" aria-label={copy.descriptionLanguageTabsLabel}>
+              {(['de', 'en'] as const).map((language) => (
+                <button
+                  key={language}
+                  className={`project-form__tab${activeDescriptionLanguage === language ? ' project-form__tab--active' : ''}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeDescriptionLanguage === language}
+                  aria-controls={`project-description-${language}`}
+                  id={`project-description-tab-${language}`}
+                  onClick={() => setActiveDescriptionLanguage(language)}
+                >
+                  {copy.descriptionLanguageLabel[language]}
+                </button>
+              ))}
+            </div>
+
+            <label className="project-form__description-textarea">
+              <span className="sr-only">
+                {copy.descriptionLanguageAriaLabel(activeDescriptionLanguage)}
+              </span>
+              <textarea
+                aria-label={copy.descriptionLabel}
+                id={`project-description-${activeDescriptionLanguage}`}
+                value={form.descriptions[activeDescriptionLanguage] ?? ''}
+                onChange={(event) => updateDescription(activeDescriptionLanguage, event.target.value)}
+                rows={9}
+                maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
+              />
+            </label>
+            {(form.descriptions[activeDescriptionLanguage]?.length ?? 0) >= PROJECT_DESCRIPTION_MAX_LENGTH ? (
               <span className="project-form__limit" aria-live="polite">
                 {copy.limitReached(PROJECT_DESCRIPTION_MAX_LENGTH)}
               </span>
             ) : null}
+            <span className="auth-note">{copy.descriptionOptionalHint}</span>
             <span className="auth-note">{copy.markdownHint}</span>
-            {fieldErrors.description ? <span className="project-form__error">{fieldErrors.description}</span> : null}
-          </label>
+            {fieldErrors.descriptions ? <span className="project-form__error">{fieldErrors.descriptions}</span> : null}
+            {(['de', 'en'] as const).map((descriptionLanguage) =>
+              fieldErrors[`description_${descriptionLanguage}`] ? (
+                <span className="project-form__error" key={descriptionLanguage}>
+                  {copy.descriptionLanguageLabel[descriptionLanguage]}: {fieldErrors[`description_${descriptionLanguage}`]}
+                </span>
+              ) : null,
+            )}
+          </div>
 
           <div className="project-form__image-field">
             <label>
@@ -607,6 +661,23 @@ export function ProjectFormView({
       </form>
     </section>
   )
+}
+
+function preferredDescriptionLanguage(descriptions: ProjectDescriptions, language: Language): DescriptionLanguage {
+  if (hasDescription(descriptions[language])) {
+    return language
+  }
+  if (hasDescription(descriptions.de)) {
+    return 'de'
+  }
+  if (hasDescription(descriptions.en)) {
+    return 'en'
+  }
+  return language
+}
+
+function hasDescription(description: string | null) {
+  return (description?.trim().length ?? 0) > 0
 }
 
 function isValidHttpUrl(value: string) {

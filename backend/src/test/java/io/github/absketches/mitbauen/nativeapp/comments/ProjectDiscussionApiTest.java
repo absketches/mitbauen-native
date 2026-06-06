@@ -190,7 +190,7 @@ class ProjectDiscussionApiTest {
     private String createProject(final String ownerCookie, final String title) {
         return sendJson("/api/projects", "POST", Map.of(
             "title", title,
-            "description", "A detailed project description for testing the comment and notification surface with enough detail to satisfy validation rules.",
+            "descriptions", Map.of("en", "A detailed project description for testing the comment and notification surface with enough detail to satisfy validation rules."),
             "founderRole", "Founder + Coordinator",
             "founderCommitment", "I am coordinating the project, publishing updates, and keeping collaborators aligned every week.",
             "openRoles", List.of(Map.of("title", "Collaborator", "commitment", "Help shape the next iteration."))

@@ -10,7 +10,7 @@ public record ProjectCard(
     long id,
     String slug,
     String title,
-    String description,
+    ProjectDescriptions descriptions,
     String status,
     FounderInfo founder,
     List<OpenRole> openRoles,

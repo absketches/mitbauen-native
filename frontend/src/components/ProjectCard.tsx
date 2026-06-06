@@ -1,18 +1,22 @@
 import type { Dictionary } from '../i18n'
+import type { Language } from '../i18n'
+import { descriptionForLanguage } from '../projectDescriptions'
 import type { Project } from '../types'
 import { ProjectImageView } from './ProjectImageView'
 import { markdownPreview } from './SafeMarkdown'
 
 type ProjectCardProps = {
   copy: Dictionary['projectCard']
+  language: Language
   project: Project
   highlighted?: boolean
   onOpen?: (slug: string) => void
   onOpenFounderProfile?: (publicId: string) => void
 }
 
-export function ProjectCard({ copy, project, highlighted = false, onOpen, onOpenFounderProfile }: ProjectCardProps) {
-  const descriptionPreview = markdownPreview(project.description)
+export function ProjectCard({ copy, language, project, highlighted = false, onOpen, onOpenFounderProfile }: ProjectCardProps) {
+  const description = descriptionForLanguage(project, language)
+  const descriptionPreview = description ? markdownPreview(description) : copy.descriptionMissing
   const thumbnail = project.images?.[0]
 
   const cardClassName = [
@@ -40,7 +44,7 @@ export function ProjectCard({ copy, project, highlighted = false, onOpen, onOpen
         </div>
       ) : null}
 
-      <p className="project-card__summary">{descriptionPreview}</p>
+      <p className={`project-card__summary${description ? '' : ' project-card__summary--empty'}`}>{descriptionPreview}</p>
 
       <dl className="project-card__meta">
         <div>

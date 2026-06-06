@@ -21,8 +21,10 @@ const baseProjects: Project[] = [
     id: 1,
     slug: 'solar-for-neighbors',
     title: 'Solar For Neighbors',
-    description:
-      'A cooperative toolkit for apartment blocks to coordinate balcony solar installs, document rooftop constraints, and help neighbors compare realistic energy savings before they commit to a shared rollout.',
+    descriptions: {
+      de: 'Ein kooperatives Toolkit für Wohnblocks, um Balkonsolar-Installationen zu koordinieren, Dachbedingungen zu dokumentieren und realistische Einsparungen zu vergleichen.',
+      en: 'A cooperative toolkit for apartment blocks to coordinate balcony solar installs, document rooftop constraints, and help neighbors compare realistic energy savings before they commit to a shared rollout.',
+    },
     status: 'active',
     founder: {
       publicId: 'usr_avery_bloom_01',
@@ -40,8 +42,10 @@ const baseProjects: Project[] = [
     id: 2,
     slug: 'neighborhood-tool-library',
     title: 'Neighborhood Tool Library',
-    description:
-      'A simple way for neighbors to share tools, coordinate booking windows, and capture repair know-how so the same drill, ladder, or sewing machine can stay useful across an entire street.',
+    descriptions: {
+      de: 'Eine einfache Möglichkeit für Nachbarinnen und Nachbarn, Werkzeuge zu teilen, Buchungsfenster zu koordinieren und Reparaturwissen festzuhalten.',
+      en: 'A simple way for neighbors to share tools, coordinate booking windows, and capture repair know-how so the same drill, ladder, or sewing machine can stay useful across an entire street.',
+    },
     status: 'active',
     founder: {
       publicId: 'usr_nora_patel_01',
@@ -132,6 +136,34 @@ test('honors an explicit English language selection', async () => {
   await expect.element(screen.getByText('Local projects live behind the member door.')).toBeVisible()
   await expect.element(screen.getByRole('button', { name: 'Sign in' }).nth(0)).toBeVisible()
   expect(document.documentElement.lang).toBe('en')
+})
+
+test('shows project descriptions for the selected language only', async () => {
+  window.history.pushState({}, '', '/')
+  const localizedProject: Project = {
+    ...baseProjects[0],
+    descriptions: {
+      de: null,
+      en: 'English project description written by the creator.',
+    },
+  }
+
+  const screen = await render(
+    <App
+      api={{
+        loadProjects: async () => [localizedProject],
+        loadNotifications: async () => [],
+        loadSession: async (): Promise<SessionResponse> => ({
+          authenticated: true,
+          user: { displayName: 'Alex Builder', email: 'alex@example.test', emailVerified: true },
+        }),
+      }}
+    />,
+  )
+
+  await expect.element(screen.getByText('Keine deutsche Beschreibung verfügbar.')).toBeVisible()
+  await screen.getByRole('button', { name: 'EN', exact: true }).click()
+  await expect.element(screen.getByText('English project description written by the creator.')).toBeVisible()
 })
 
 test('renders the invite-only registration view for an open invite', async () => {
@@ -344,7 +376,10 @@ test('renders safe markdown for project details and comments', async () => {
 
   const markdownProject: ProjectDetails = {
     ...baseProjectDetails,
-    description: 'First paragraph with **bold text**.\nSecond line with [a safe link](https://example.com).',
+    descriptions: {
+      de: 'First paragraph with **bold text**.\nSecond line with [a safe link](https://example.com).',
+      en: null,
+    },
     founder: {
       ...baseProjectDetails.founder,
       commitment: '- Host weekly sessions\n- Share *clear notes*',
@@ -410,7 +445,7 @@ test('validates the create project form for authenticated users', async () => {
   )
 
   await screen.getByRole('textbox', { name: 'Titel', exact: true }).fill('Tiny')
-  await screen.getByLabelText('Beschreibung').fill('Too short to pass.')
+  await screen.getByRole('textbox', { name: 'Beschreibung', exact: true }).fill('Too short to pass.')
   await screen.getByLabelText('Deine Rolle in diesem Projekt').fill('Go')
   await screen.getByLabelText('Wozu du dich persönlich verpflichtest').fill('No')
   await screen.getByLabelText('Titel für Rolle 1').fill('No')
@@ -423,6 +458,75 @@ test('validates the create project form for authenticated users', async () => {
   await expect.element(screen.getByText('Gib ein Gründer-Commitment zwischen 5 und 500 Zeichen ein.')).toBeVisible()
   await expect.element(screen.getByText('Gib einen Rollentitel zwischen 3 und 120 Zeichen ein.')).toBeVisible()
   await expect.element(screen.getByText('Gib ein Rollen-Commitment zwischen 3 und 500 Zeichen ein.')).toBeVisible()
+  expect(createProjectMock).not.toHaveBeenCalled()
+})
+
+test('opens the populated description tab when editing an older English-only project', async () => {
+  window.history.pushState({}, '', '/projects/solar-for-neighbors/edit')
+  const englishDescription =
+    'An English project description migrated from the original single description field so the editor should open the English tab.'
+  const editableProject: ProjectDetails = {
+    ...baseProjectDetails,
+    canManage: true,
+    descriptions: {
+      de: null,
+      en: englishDescription,
+    },
+  }
+
+  const screen = await render(
+    <App
+      api={{
+        loadProjects: async () => baseProjects,
+        loadProject: async () => editableProject,
+        loadNotifications: async () => [],
+        loadSession: async (): Promise<SessionResponse> => ({
+          authenticated: true,
+          user: { displayName: 'Alex Builder', email: 'alex@example.test', emailVerified: true },
+        }),
+      }}
+    />,
+  )
+
+  await expect.element(screen.getByRole('heading', { name: 'Projekt bearbeiten.' })).toBeVisible()
+  await expect.element(screen.getByRole('tab', { name: 'EN' })).toHaveAttribute('aria-selected', 'true')
+  await expect.element(screen.getByRole('textbox', { name: 'Beschreibung', exact: true })).toHaveValue(englishDescription)
+})
+
+test('shows description validation errors for inactive language tabs', async () => {
+  window.history.pushState({}, '', '/projects/new')
+  const createProjectMock = vi.fn(async (_payload: ProjectPayload) => ({ slug: 'ignored' }))
+
+  const screen = await render(
+    <App
+      api={{
+        loadProjects: async () => baseProjects,
+        loadSession: async (): Promise<SessionResponse> => ({
+          authenticated: true,
+          user: { displayName: 'Alex Builder', email: 'alex@example.test', emailVerified: true },
+        }),
+        loadNotifications: async () => [],
+        createProject: createProjectMock,
+      }}
+    />,
+  )
+
+  await screen.getByRole('textbox', { name: 'Titel', exact: true }).fill('Localized Validation Project')
+  await screen.getByRole('textbox', { name: 'Beschreibung', exact: true }).fill(
+    'Eine deutsche Projektbeschreibung mit genug Details, damit nur der englische Tab einen Fehler auslöst.',
+  )
+  await screen.getByRole('tab', { name: 'EN' }).click()
+  await screen.getByRole('textbox', { name: 'Beschreibung', exact: true }).fill('Too short.')
+  await screen.getByRole('tab', { name: 'DE' }).click()
+  await screen.getByLabelText('Deine Rolle in diesem Projekt').fill('Founder + Editor')
+  await screen.getByLabelText('Wozu du dich persönlich verpflichtest').fill(
+    'I am keeping the bilingual project information accurate and useful.',
+  )
+  await screen.getByLabelText('Titel für Rolle 1').fill('Language Reviewer')
+  await screen.getByLabelText('Commitment für Rolle 1').fill('Review translated project details.')
+  await screen.getByRole('button', { name: 'Projekt erstellen' }).nth(1).click()
+
+  await expect.element(screen.getByText('EN: Gib eine Projektbeschreibung zwischen 40 und 3000 Zeichen ein.')).toBeVisible()
   expect(createProjectMock).not.toHaveBeenCalled()
 })
 
@@ -457,7 +561,7 @@ test('creates a project, lands on detail, and returns to a highlighted feed card
             canManage: true,
             slug: 'circular-kitchen-atlas',
             title: payload.title,
-            description: payload.description,
+            descriptions: payload.descriptions,
             status: 'active',
             founder: {
               publicId: 'usr_alex_builder_01',
@@ -476,7 +580,7 @@ test('creates a project, lands on detail, and returns to a highlighted feed card
               id: createdProject.id,
               slug: createdProject.slug,
               title: createdProject.title,
-              description: createdProject.description,
+              descriptions: createdProject.descriptions,
               status: createdProject.status,
               founder: createdProject.founder,
               openRoles: createdProject.openRoles,
@@ -493,7 +597,7 @@ test('creates a project, lands on detail, and returns to a highlighted feed card
   )
 
   await screen.getByRole('textbox', { name: 'Titel', exact: true }).fill('Circular Kitchen Atlas')
-  await screen.getByLabelText('Beschreibung').fill(
+  await screen.getByRole('textbox', { name: 'Beschreibung', exact: true }).fill(
     'A living guide for neighborhood kitchens that want to map surplus food, shared prep capacity, and the fastest path from extra ingredients to community meals.',
   )
   await screen.getByLabelText('Deine Rolle in diesem Projekt').fill('Founder + Community Ops')
@@ -517,6 +621,8 @@ test('creates a project, lands on detail, and returns to a highlighted feed card
     { label: 'Website', url: 'https://example.com/kitchen' },
     { label: 'GitHub', url: 'https://github.com/absketches' },
   ])
+  expect(submittedPayload?.descriptions.en).toBeNull()
+  expect(submittedPayload?.descriptions.de).toContain('surplus food')
 
   await screen.getByRole('button', { name: 'Zurück zu den Projekten' }).click()
 
@@ -556,7 +662,7 @@ test('shows a detail warning when project image upload fails after creation', as
             canManage: true,
             slug: 'image-warning-project',
             title: payload.title,
-            description: payload.description,
+            descriptions: payload.descriptions,
             status: 'active',
             founder: {
               publicId: 'usr_alex_builder_01',
@@ -575,7 +681,7 @@ test('shows a detail warning when project image upload fails after creation', as
               id: createdProject.id,
               slug: createdProject.slug,
               title: createdProject.title,
-              description: createdProject.description,
+              descriptions: createdProject.descriptions,
               status: createdProject.status,
               founder: createdProject.founder,
               openRoles: createdProject.openRoles,
@@ -593,7 +699,7 @@ test('shows a detail warning when project image upload fails after creation', as
   )
 
   await screen.getByRole('textbox', { name: 'Titel', exact: true }).fill('Image Warning Project')
-  await screen.getByLabelText('Beschreibung').fill(
+  await screen.getByRole('textbox', { name: 'Beschreibung', exact: true }).fill(
     'A project with an image upload that fails after the main project has already been created successfully.',
   )
   const imageInput = screen.getByLabelText('Projektbilder').element() as HTMLInputElement

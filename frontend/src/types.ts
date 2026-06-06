@@ -24,11 +24,16 @@ export type ProjectImage = {
   createdAt: string
 }
 
+export type ProjectDescriptions = {
+  de: string | null
+  en: string | null
+}
+
 export type Project = {
   id: number
   slug: string
   title: string
-  description: string
+  descriptions: ProjectDescriptions
   status: 'active' | 'completed' | 'dormant'
   founder: FounderInfo
   openRoles: OpenRole[]
@@ -125,7 +130,7 @@ export type PasswordResetConfirmPayload = {
 
 export type ProjectPayload = {
   title: string
-  description: string
+  descriptions: ProjectDescriptions
   founderRole: string
   founderCommitment: string
   openRoles: OpenRole[]

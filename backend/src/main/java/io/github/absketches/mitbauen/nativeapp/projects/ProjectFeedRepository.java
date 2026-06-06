@@ -28,7 +28,8 @@ public class ProjectFeedRepository {
             p.id,
             p.slug,
             p.title,
-            p.description,
+            p.description_de,
+            p.description_en,
             p.status,
             p.created_at,
             u.public_id as founder_public_id,
@@ -54,7 +55,8 @@ public class ProjectFeedRepository {
             p.owner_user_id,
             p.slug,
             p.title,
-            p.description,
+            p.description_de,
+            p.description_en,
             p.status,
             p.created_at,
             p.updated_at,
@@ -85,7 +87,7 @@ public class ProjectFeedRepository {
                     projectId,
                     resultSet.getString("slug"),
                     resultSet.getString("title"),
-                    resultSet.getString("description"),
+                    descriptionsFrom(resultSet),
                     resultSet.getString("status"),
                     new FounderInfo(
                         resultSet.getString("founder_public_id"),
@@ -115,7 +117,7 @@ public class ProjectFeedRepository {
                 project.id(),
                 project.slug(),
                 project.title(),
-                project.description(),
+                project.descriptions(),
                 project.status(),
                 project.founder(),
                 openRolesByProjectId.getOrDefault(project.id(), List.of()),
@@ -140,7 +142,7 @@ public class ProjectFeedRepository {
                     resultSet.getLong("owner_user_id"),
                     resultSet.getString("slug"),
                     resultSet.getString("title"),
-                    resultSet.getString("description"),
+                    descriptionsFrom(resultSet),
                     resultSet.getString("status"),
                     new FounderInfo(
                         resultSet.getString("founder_public_id"),
@@ -215,16 +217,17 @@ public class ProjectFeedRepository {
         final Instant now
     ) throws SQLException {
         final String sql = """
-            insert into projects (owner_user_id, slug, title, description, status, created_at, updated_at)
-            values (?, ?, ?, ?, 'active', ?, ?)
+            insert into projects (owner_user_id, slug, title, description_de, description_en, status, created_at, updated_at)
+            values (?, ?, ?, ?, ?, 'active', ?, ?)
             """;
         try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             statement.setLong(1, ownerUserId);
             statement.setString(2, slug);
             statement.setString(3, input.title());
-            statement.setString(4, input.description());
-            statement.setTimestamp(5, Timestamp.from(now));
+            statement.setString(4, input.descriptions().de());
+            statement.setString(5, input.descriptions().en());
             statement.setTimestamp(6, Timestamp.from(now));
+            statement.setTimestamp(7, Timestamp.from(now));
             statement.executeUpdate();
             try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
                 if (generatedKeys.next()) {
@@ -238,14 +241,15 @@ public class ProjectFeedRepository {
     private static void updateProjectRow(final Connection connection, final long projectId, final ProjectInput input) throws SQLException {
         final String sql = """
             update projects
-            set title = ?, description = ?, updated_at = ?
+            set title = ?, description_de = ?, description_en = ?, updated_at = ?
             where id = ?
             """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, input.title());
-            statement.setString(2, input.description());
-            statement.setTimestamp(3, Timestamp.from(Instant.now()));
-            statement.setLong(4, projectId);
+            statement.setString(2, input.descriptions().de());
+            statement.setString(3, input.descriptions().en());
+            statement.setTimestamp(4, Timestamp.from(Instant.now()));
+            statement.setLong(5, projectId);
             statement.executeUpdate();
         }
     }
@@ -351,6 +355,15 @@ public class ProjectFeedRepository {
         }
 
         return roles;
+    }
+
+    private static ProjectDescriptions descriptionsFrom(final ResultSet resultSet) throws SQLException {
+        final String descriptionDe = resultSet.getString("description_de");
+        final String descriptionEn = resultSet.getString("description_en");
+        return new ProjectDescriptions(
+            descriptionDe,
+            descriptionEn
+        );
     }
 
     private static String nextSlug(final Connection connection, final String title) throws SQLException {

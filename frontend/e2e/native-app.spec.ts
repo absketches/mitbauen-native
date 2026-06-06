@@ -38,7 +38,7 @@ test('renders the project feed and completes invite registration plus login', as
   await expect(page.getByRole('heading', { name: 'Projekt erstellen.' })).toBeVisible()
 
   await page.getByLabel('Titel', { exact: true }).fill('Circular Kitchen Atlas')
-  await page.getByLabel('Beschreibung').fill(
+  await page.getByRole('textbox', { name: 'Beschreibung', exact: true }).fill(
     'A living guide for neighborhood kitchens that want to map surplus food, shared prep capacity, and the fastest path from extra ingredients to community meals.',
   )
   await page.getByLabel('Deine Rolle in diesem Projekt').fill('Founder + Community Ops')
