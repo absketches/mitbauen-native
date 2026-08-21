@@ -28,10 +28,10 @@ jobs:
           --health-retries 20
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: npm
@@ -107,7 +107,7 @@ jobs:
         run: DEPLOY_BACKEND_MODE=native DEPLOY_USE_EXISTING_ARTIFACTS=1 ./deploy.sh
 
       - name: Upload native deploy bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mitbauen-native-host-deploy
           path: |
@@ -116,7 +116,7 @@ jobs:
 
       - name: Upload E2E logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: native-e2e-logs
           path: |
