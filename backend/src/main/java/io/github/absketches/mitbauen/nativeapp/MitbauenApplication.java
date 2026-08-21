@@ -2,12 +2,13 @@ package io.github.absketches.mitbauen.nativeapp;
 
 import io.github.absketches.mitbauen.nativeapp.auth.AuthService;
 import io.github.absketches.mitbauen.nativeapp.auth.EmailVerificationSettings;
-import io.github.absketches.mitbauen.nativeapp.auth.ResendVerificationEmailSender;
-import io.github.absketches.mitbauen.nativeapp.auth.VerificationEmailSender;
+import io.github.absketches.mitbauen.nativeapp.auth.ResendTransactionalEmailSender;
+import io.github.absketches.mitbauen.nativeapp.auth.TransactionalEmailSender;
 import io.github.absketches.mitbauen.nativeapp.comments.ProjectCommentsService;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseConfig;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
 import io.github.absketches.mitbauen.nativeapp.db.MigrationRunner;
+import io.github.absketches.mitbauen.nativeapp.jobs.JobsService;
 import io.github.absketches.mitbauen.nativeapp.notifications.NotificationsService;
 import io.github.absketches.mitbauen.nativeapp.projects.ProjectFeedService;
 import io.github.absketches.mitbauen.nativeapp.shell.AppShellService;
@@ -21,7 +22,7 @@ public class MitbauenApplication {
     public static void main(final String[] ignoredArgs) {
         final DatabaseRuntime databaseRuntime = dbStartup();
         final EmailVerificationSettings emailVerificationSettings = EmailVerificationSettings.fromEnvironment();
-        final VerificationEmailSender verificationEmailSender = new ResendVerificationEmailSender(
+        final TransactionalEmailSender transactionalEmailSender = new ResendTransactionalEmailSender(
             emailVerificationSettings.resendApiKey(),
             emailVerificationSettings.emailFrom()
         );
@@ -30,9 +31,10 @@ public class MitbauenApplication {
                 new HttpClient(),
                 new AppShellService(),
                 new ProjectFeedService(databaseRuntime),
+                new JobsService(databaseRuntime, transactionalEmailSender),
                 new ProjectCommentsService(databaseRuntime),
                 new NotificationsService(databaseRuntime),
-                new AuthService(databaseRuntime, emailVerificationSettings, verificationEmailSender)
+                new AuthService(databaseRuntime, emailVerificationSettings, transactionalEmailSender)
         );
         nano.subscribeEvent(Context.EVENT_APP_SHUTDOWN, event -> databaseRuntime.stop());
     }

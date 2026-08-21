@@ -3,8 +3,9 @@ import type { FormEvent } from 'react'
 import { useEffect, useState } from 'react'
 import { ApiError } from '../api'
 import { descriptionForLanguage } from '../projectDescriptions'
-import type { ProjectComment, ProjectCommentPayload, ProjectDetails, ProjectImage } from '../types'
+import type { JobApplicationPayload, JobApplicationResponse, ProjectComment, ProjectCommentPayload, ProjectDetails, ProjectImage } from '../types'
 import { ProjectImageView } from './ProjectImageView'
+import { RoleApplicationForm } from './RoleApplicationForm'
 import { SafeMarkdown } from './SafeMarkdown'
 
 type DetailNotice = 'created' | 'updated' | 'createdWithMediaWarning' | 'updatedWithMediaWarning' | null
@@ -24,6 +25,7 @@ type ProjectDetailViewProps = {
   onOpenFounderProfile: (publicId: string) => void
   onEdit: (slug: string) => void
   onDelete: (slug: string) => Promise<void>
+  onApplyJob: (payload: JobApplicationPayload) => Promise<JobApplicationResponse>
   onBackToFeed: (slug: string, notice: DetailNotice) => void
 }
 
@@ -42,6 +44,7 @@ export function ProjectDetailView({
   onOpenFounderProfile,
   onEdit,
   onDelete,
+  onApplyJob,
   onBackToFeed,
 }: ProjectDetailViewProps) {
   const [project, setProject] = useState<ProjectDetails | null>(null)
@@ -56,6 +59,7 @@ export function ProjectDetailView({
   const [commentSubmitting, setCommentSubmitting] = useState(false)
   const [commentError, setCommentError] = useState<string | null>(null)
   const [expandedImage, setExpandedImage] = useState<ProjectImage | null>(null)
+  const [applyingRoleId, setApplyingRoleId] = useState<number | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -265,6 +269,25 @@ export function ProjectDetailView({
                 <li key={`${currentProject.slug}-${role.title}`}>
                   <strong>{role.title}</strong>
                   <SafeMarkdown text={role.commitment} />
+                  {role.id ? (
+                    <>
+                      <div className="project-detail__role-actions">
+                        <button className="primary-button" type="button" onClick={() => setApplyingRoleId(role.id ?? null)}>
+                          {copy.apply}
+                        </button>
+                      </div>
+                      {applyingRoleId === role.id ? (
+                        <RoleApplicationForm
+                          copy={copy}
+                          roleId={role.id}
+                          onSubmit={async (payload) => {
+                            await onApplyJob(payload)
+                          }}
+                          onCancel={() => setApplyingRoleId(null)}
+                        />
+                      ) : null}
+                    </>
+                  ) : null}
                 </li>
               ))}
             </ul>

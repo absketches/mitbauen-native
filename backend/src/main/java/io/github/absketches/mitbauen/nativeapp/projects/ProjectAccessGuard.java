@@ -21,16 +21,7 @@ public class ProjectAccessGuard {
         final String authRequiredCode,
         final String emailUnverifiedCode
     ) {
-        final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), dataSource);
-        if (sessionUser.isEmpty()) {
-            ProjectFeedUtil.respondUnauthorized(event, authRequiredCode);
-            return Optional.empty();
-        }
-        if (!sessionUser.get().emailVerified()) {
-            ProjectFeedUtil.respondForbidden(event, emailUnverifiedCode);
-            return Optional.empty();
-        }
-        return sessionUser;
+        return AuthUtil.verifiedSessionUser(event, dataSource, authRequiredCode, emailUnverifiedCode);
     }
 
     public boolean requireOwner(

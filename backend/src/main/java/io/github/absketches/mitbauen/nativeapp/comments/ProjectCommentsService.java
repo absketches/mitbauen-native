@@ -142,15 +142,11 @@ public class ProjectCommentsService extends Service {
     }
 
     private Optional<SessionUser> verifiedSessionUser(final Event<HttpObject, HttpObject> event) {
-        final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
-        if (sessionUser.isEmpty()) {
-            ProjectCommentsUtil.respondUnauthorized(event);
-            return Optional.empty();
-        }
-        if (!sessionUser.get().emailVerified()) {
-            ProjectCommentsUtil.respondForbidden(event);
-            return Optional.empty();
-        }
-        return sessionUser;
+        return AuthUtil.verifiedSessionUser(
+            event,
+            databaseRuntime.dataSource(),
+            ProjectCommentsUtil.AUTH_REQUIRED_CODE,
+            ProjectCommentsUtil.EMAIL_UNVERIFIED_CODE
+        );
     }
 }

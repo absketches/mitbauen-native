@@ -94,14 +94,6 @@ public class ProjectCommentsUtil {
         ResponseUtil.respondBadRequest(event, code);
     }
 
-    public static void respondUnauthorized(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondUnauthorized(event, AUTH_REQUIRED_CODE);
-    }
-
-    public static void respondForbidden(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondForbidden(event, EMAIL_UNVERIFIED_CODE);
-    }
-
     public static void respondNotFound(final Event<HttpObject, HttpObject> event, final String code) {
         ResponseUtil.respondNotFound(event, code);
     }

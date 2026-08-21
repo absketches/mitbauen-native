@@ -40,3 +40,4 @@ frontend/src/__screenshots__/
 # Local ops notes
 docs/pi-database-reset.md
 docs/production-monitoring.md
+monitoring/

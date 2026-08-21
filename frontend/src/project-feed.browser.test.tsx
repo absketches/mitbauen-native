@@ -8,6 +8,7 @@ import App from './App'
 import { ApiError } from './api'
 import type {
   InviteValidationResponse,
+  JobListing,
   NotificationItem,
   Project,
   ProjectComment,
@@ -23,7 +24,7 @@ const baseProjects: Project[] = [
     title: 'Solar For Neighbors',
     descriptions: {
       de: 'Ein kooperatives Toolkit für Wohnblocks, um Balkonsolar-Installationen zu koordinieren, Dachbedingungen zu dokumentieren und realistische Einsparungen zu vergleichen.',
-      en: 'A cooperative toolkit for apartment blocks to coordinate balcony solar installs, document rooftop constraints, and help neighbors compare realistic energy savings before they commit to a shared rollout.',
+      en: 'A cooperative toolkit for apartment blocks to coordinate balcony solar installs, document rooftop constraints and help neighbors compare realistic energy savings before they commit to a shared rollout.',
     },
     status: 'active',
     founder: {
@@ -33,8 +34,8 @@ const baseProjects: Project[] = [
       commitment: '10 hrs/week',
     },
     openRoles: [
-      { title: 'Android Engineer', commitment: '6 hrs/week' },
-      { title: 'Community Researcher', commitment: '4 hrs/week' },
+      { id: 11, title: 'Android Engineer', commitment: '6 hrs/week' },
+      { id: 12, title: 'Community Researcher', commitment: '4 hrs/week' },
     ],
     createdAt: '2026-04-22T09:00:00Z',
   },
@@ -44,7 +45,7 @@ const baseProjects: Project[] = [
     title: 'Neighborhood Tool Library',
     descriptions: {
       de: 'Eine einfache Möglichkeit für Nachbarinnen und Nachbarn, Werkzeuge zu teilen, Buchungsfenster zu koordinieren und Reparaturwissen festzuhalten.',
-      en: 'A simple way for neighbors to share tools, coordinate booking windows, and capture repair know-how so the same drill, ladder, or sewing machine can stay useful across an entire street.',
+      en: 'A simple way for neighbors to share tools, coordinate booking windows and capture repair know-how so the same drill, ladder or sewing machine can stay useful across an entire street.',
     },
     status: 'active',
     founder: {
@@ -54,8 +55,8 @@ const baseProjects: Project[] = [
       commitment: '8 hrs/week',
     },
     openRoles: [
-      { title: 'Frontend Engineer', commitment: '5 hrs/week' },
-      { title: 'Partnerships Lead', commitment: '3 hrs/week' },
+      { id: 21, title: 'Frontend Engineer', commitment: '5 hrs/week' },
+      { id: 22, title: 'Partnerships Lead', commitment: '3 hrs/week' },
     ],
     createdAt: '2026-04-20T14:30:00Z',
   },
@@ -87,6 +88,25 @@ const baseNotifications: NotificationItem[] = [
     latestBody: 'This discussion is visible to verified members.',
     latestAt: '2026-04-23T09:00:00Z',
     unreadCount: 1,
+  },
+]
+
+const baseJobs: JobListing[] = [
+  {
+    id: 'solar-for-neighbors::Android Engineer',
+    roleId: 11,
+    projectSlug: 'solar-for-neighbors',
+    projectTitle: 'Solar For Neighbors',
+    roleTitle: 'Android Engineer',
+    roleCommitment: 'Help build the first mobile workflow for neighborhood solar planning.',
+  },
+  {
+    id: 'neighborhood-tool-library::Partnerships Lead',
+    roleId: 22,
+    projectSlug: 'neighborhood-tool-library',
+    projectTitle: 'Neighborhood Tool Library',
+    roleTitle: 'Partnerships Lead',
+    roleCommitment: 'Coordinate local partners and keep the first lending locations aligned.',
   },
 ]
 
@@ -164,6 +184,46 @@ test('shows project descriptions for the selected language only', async () => {
   await expect.element(screen.getByText('Keine deutsche Beschreibung verfügbar.')).toBeVisible()
   await screen.getByRole('button', { name: 'EN', exact: true }).click()
   await expect.element(screen.getByText('English project description written by the creator.')).toBeVisible()
+})
+
+test('shows open roles on the jobs page for verified members', async () => {
+  window.history.pushState({}, '', '/jobs')
+  window.localStorage.setItem('mitbauen_language', 'en')
+  const loadJobs = vi.fn(async () => [baseJobs[0]])
+  const applyForJob = vi.fn(async () => ({ sent: true }))
+
+  const screen = await render(
+    <App
+      api={{
+        loadProjects: async () => baseProjects,
+        loadJobs,
+        applyForJob,
+        loadNotifications: async () => [],
+        loadSession: async (): Promise<SessionResponse> => ({
+          authenticated: true,
+          user: { displayName: 'Alex Builder', email: 'alex@example.test', emailVerified: true },
+        }),
+        loadProject: async (): Promise<ProjectDetails> => baseProjectDetails,
+        loadProjectComments: async () => [],
+      }}
+    />,
+  )
+
+  await expect.element(screen.getByText('Android Engineer')).toBeVisible()
+  await expect.element(screen.getByRole('button', { name: 'Solar For Neighbors' })).toBeVisible()
+  await expect.element(screen.getByText('Help build the first mobile workflow for neighborhood solar planning.')).toBeVisible()
+  expect(loadJobs).toHaveBeenCalled()
+
+  await screen.getByRole('button', { name: 'Apply' }).click()
+  await screen.getByLabelText('How do you fit this role?').fill('I have built Android planning workflows and can help this role move quickly.')
+  await screen.getByLabelText('Availability').fill('Two evenings per week.')
+  await screen.getByRole('button', { name: 'Send application' }).click()
+  expect(applyForJob).toHaveBeenCalledWith({
+    roleId: 11,
+    fit: 'I have built Android planning workflows and can help this role move quickly.',
+    availability: 'Two evenings per week.',
+  })
+  await expect.element(screen.getByText('Application sent to the project creator.')).toBeVisible()
 })
 
 test('renders the invite-only registration view for an open invite', async () => {
@@ -386,6 +446,7 @@ test('renders safe markdown for project details and comments', async () => {
     },
     openRoles: [
       {
+        id: 31,
         title: 'Frontend Engineer',
         commitment: 'Build **member flows** and [docs](https://example.com/docs).',
       },
@@ -598,11 +659,11 @@ test('creates a project, lands on detail, and returns to a highlighted feed card
 
   await screen.getByRole('textbox', { name: 'Titel', exact: true }).fill('Circular Kitchen Atlas')
   await screen.getByRole('textbox', { name: 'Beschreibung', exact: true }).fill(
-    'A living guide for neighborhood kitchens that want to map surplus food, shared prep capacity, and the fastest path from extra ingredients to community meals.',
+    'A living guide for neighborhood kitchens that want to map surplus food, shared prep capacity and the fastest path from extra ingredients to community meals.',
   )
   await screen.getByLabelText('Deine Rolle in diesem Projekt').fill('Founder + Community Ops')
   await screen.getByLabelText('Wozu du dich persönlich verpflichtest').fill(
-    'I am already running the pilot dinners, documenting learnings, and coordinating the volunteer operations myself.',
+    'I am already running the pilot dinners, documenting learnings and coordinating the volunteer operations myself.',
   )
   await screen.getByLabelText('Titel für Rolle 1').fill('Frontend Engineer')
   await screen.getByLabelText('Commitment für Rolle 1').fill('Build the first contributor-facing workflows.')

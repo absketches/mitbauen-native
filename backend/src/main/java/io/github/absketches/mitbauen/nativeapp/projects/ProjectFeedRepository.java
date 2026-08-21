@@ -327,10 +327,16 @@ public class ProjectFeedRepository {
         projectIds.forEach(projectId -> placeholders.add("?"));
 
         final String sql = """
-            select project_id, title, commitment
-            from project_roles
-            where is_open = true and is_founder = false and project_id in (%s)
-            order by project_id, sort_order asc, id asc
+            select
+                case when owner.is_deleted = false then role.id end as id,
+                role.project_id,
+                role.title,
+                role.commitment
+            from project_roles role
+            join projects project on project.id = role.project_id
+            join users owner on owner.id = project.owner_user_id
+            where role.is_open = true and role.is_founder = false and role.project_id in (%s)
+            order by role.project_id, role.sort_order asc, role.id asc
             """.formatted(placeholders);
 
         final Map<Long, List<OpenRole>> roles = new HashMap<>();
@@ -345,6 +351,7 @@ public class ProjectFeedRepository {
                 while (resultSet.next()) {
                     roles.computeIfAbsent(resultSet.getLong("project_id"), ignored -> new ArrayList<>())
                         .add(new OpenRole(
+                            nullableLong(resultSet, "id"),
                             resultSet.getString("title"),
                             resultSet.getString("commitment")
                         ));
@@ -355,6 +362,11 @@ public class ProjectFeedRepository {
         }
 
         return roles;
+    }
+
+    private static Long nullableLong(final ResultSet resultSet, final String column) throws SQLException {
+        final long value = resultSet.getLong(column);
+        return resultSet.wasNull() ? null : value;
     }
 
     private static ProjectDescriptions descriptionsFrom(final ResultSet resultSet) throws SQLException {

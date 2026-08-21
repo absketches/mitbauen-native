@@ -31,7 +31,7 @@ class AuthApiTest {
     private static final String PRIMARY_PASSWORD = "SuperSafe1";
     private static final EmailVerificationSettings EMAIL_VERIFICATION_SETTINGS =
         new EmailVerificationSettings("https://www.mitbauen.space", "Mitbauen <no-reply@mail.mitbauen.space>", "");
-    private static final VerificationEmailSender NOOP_VERIFICATION_EMAIL_SENDER =
+    private static final TransactionalEmailSender NOOP_TRANSACTIONAL_EMAIL_SENDER =
         (recipientEmail, recipientName, verificationUrl) -> { };
 
     private Nano nano;
@@ -383,7 +383,7 @@ class AuthApiTest {
         final String[] sentPasswordResetUrl = new String[1];
         nano = newTestNano(
             EMAIL_VERIFICATION_SETTINGS,
-            new VerificationEmailSender() {
+            new TransactionalEmailSender() {
                 @Override
                 public void sendVerificationEmail(
                     final String recipientEmail,
@@ -447,7 +447,7 @@ class AuthApiTest {
         final int[] resetEmailsSent = {0};
         nano = newTestNano(
             EMAIL_VERIFICATION_SETTINGS,
-            new VerificationEmailSender() {
+            new TransactionalEmailSender() {
                 @Override
                 public void sendVerificationEmail(
                     final String recipientEmail,
@@ -666,12 +666,12 @@ class AuthApiTest {
     }
 
     private Nano newTestNano() {
-        return newTestNano(EMAIL_VERIFICATION_SETTINGS, NOOP_VERIFICATION_EMAIL_SENDER);
+        return newTestNano(EMAIL_VERIFICATION_SETTINGS, NOOP_TRANSACTIONAL_EMAIL_SENDER);
     }
 
     private Nano newTestNano(
         final EmailVerificationSettings emailVerificationSettings,
-        final VerificationEmailSender verificationEmailSender
+        final TransactionalEmailSender transactionalEmailSender
     ) {
         final PostgresTestDatabase.DatabaseConfig databaseConfig = PostgresTestDatabase.createDatabase("auth");
         TestDatabaseMigrations.migrate(databaseConfig.jdbcUrl(), databaseConfig.jdbcUser(), databaseConfig.jdbcPassword());
@@ -688,7 +688,7 @@ class AuthApiTest {
             ),
             new HttpServer(),
             new HttpClient(),
-            new AuthService(databaseRuntime, emailVerificationSettings, verificationEmailSender)
+            new AuthService(databaseRuntime, emailVerificationSettings, transactionalEmailSender)
         );
     }
 
