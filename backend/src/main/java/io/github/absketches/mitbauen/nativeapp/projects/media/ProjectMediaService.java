@@ -1,6 +1,7 @@
 package io.github.absketches.mitbauen.nativeapp.projects.media;
 
 import io.github.absketches.mitbauen.nativeapp.auth.SessionUser;
+import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
 import io.github.absketches.mitbauen.nativeapp.projects.ProjectAccessGuard;
 import io.github.absketches.mitbauen.nativeapp.projects.ProjectDetails;
 import io.github.absketches.mitbauen.nativeapp.projects.ProjectFeedRepository;
@@ -24,8 +25,8 @@ public class ProjectMediaService {
     public void handleGetProjectImage(final Event<HttpObject, HttpObject> event, final ProjectFeedUtil.ProjectImageRoute imageRoute) {
         ProjectImagesRepository.findProjectImageContentBySlug(dataSource, imageRoute.slug(), imageRoute.imageId())
             .ifPresentOrElse(
-                image -> ProjectFeedUtil.respondProjectImage(event, image),
-                () -> ProjectFeedUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_IMAGE_NOT_FOUND_CODE)
+                image -> ResponseUtil.respondBytes(event, 200, image.contentType(), image.data()),
+                () -> ResponseUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_IMAGE_NOT_FOUND_CODE)
             );
     }
 
@@ -41,7 +42,7 @@ public class ProjectMediaService {
 
         final Optional<ProjectDetails> existingProject = ProjectFeedRepository.findProjectBySlug(dataSource, imagesRoute.slug());
         if (existingProject.isEmpty()) {
-            ProjectFeedUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_NOT_FOUND_CODE);
+            ResponseUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_NOT_FOUND_CODE);
             return;
         }
         if (!accessGuard.requireOwner(event, sessionUser.get(), existingProject.get(), ProjectFeedUtil.PROJECT_IMAGE_OWNER_REQUIRED_CODE)) {
@@ -53,7 +54,7 @@ public class ProjectMediaService {
         final String altText = safeHeader(event.payload().header("x-image-alt"));
         final Optional<String> validation = ProjectImageValidator.validateUpload(contentType, body, altText);
         if (validation.isPresent()) {
-            ProjectFeedUtil.respondBadRequest(event, validation.get());
+            ResponseUtil.respondBadRequest(event, validation.get());
             return;
         }
 
@@ -66,10 +67,10 @@ public class ProjectMediaService {
             ProjectFeedUtil.PROJECT_IMAGES_MAX_COUNT
         );
         if (image.isEmpty()) {
-            ProjectFeedUtil.respondBadRequest(event, ProjectFeedUtil.PROJECT_IMAGES_MAX_CODE);
+            ResponseUtil.respondBadRequest(event, ProjectFeedUtil.PROJECT_IMAGES_MAX_CODE);
             return;
         }
-        ProjectFeedUtil.respondProjectImageSaved(event, existingProject.get().slug(), image.get());
+        ResponseUtil.respondCreated(event, ProjectFeedUtil.projectImageSavedPayload(existingProject.get().slug(), image.get()));
     }
 
     public void handleDeleteProjectImage(final Event<HttpObject, HttpObject> event, final ProjectFeedUtil.ProjectImageRoute imageRoute) {
@@ -84,7 +85,7 @@ public class ProjectMediaService {
 
         final Optional<ProjectDetails> existingProject = ProjectFeedRepository.findProjectBySlug(dataSource, imageRoute.slug());
         if (existingProject.isEmpty()) {
-            ProjectFeedUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_NOT_FOUND_CODE);
+            ResponseUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_NOT_FOUND_CODE);
             return;
         }
         if (!accessGuard.requireOwner(event, sessionUser.get(), existingProject.get(), ProjectFeedUtil.PROJECT_IMAGE_OWNER_REQUIRED_CODE)) {
@@ -92,10 +93,10 @@ public class ProjectMediaService {
         }
 
         if (!ProjectImagesRepository.deleteProjectImage(dataSource, existingProject.get().id(), imageRoute.imageId())) {
-            ProjectFeedUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_IMAGE_NOT_FOUND_CODE);
+            ResponseUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_IMAGE_NOT_FOUND_CODE);
             return;
         }
-        ProjectFeedUtil.respondDeleted(event);
+        ResponseUtil.respondEmpty(event, 204);
     }
 
     private static String safeHeader(final String value) {

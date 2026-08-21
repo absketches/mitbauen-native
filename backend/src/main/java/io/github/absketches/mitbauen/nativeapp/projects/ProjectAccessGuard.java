@@ -2,6 +2,7 @@ package io.github.absketches.mitbauen.nativeapp.projects;
 
 import io.github.absketches.mitbauen.nativeapp.auth.AuthUtil;
 import io.github.absketches.mitbauen.nativeapp.auth.SessionUser;
+import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.HttpObject;
 
@@ -33,7 +34,7 @@ public class ProjectAccessGuard {
         if (project.ownerUserId() == sessionUser.id()) {
             return true;
         }
-        ProjectFeedUtil.respondForbidden(event, ownerRequiredCode);
+        ResponseUtil.respondForbidden(event, ownerRequiredCode);
         return false;
     }
 }

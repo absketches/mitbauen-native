@@ -5,12 +5,14 @@ import berlin.yuna.typemap.model.TypeMapI;
 import io.github.absketches.mitbauen.nativeapp.auth.AuthUtil;
 import io.github.absketches.mitbauen.nativeapp.auth.SessionUser;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
+import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
 import io.github.absketches.mitbauen.nativeapp.projects.ProjectDetails;
 import io.github.absketches.mitbauen.nativeapp.projects.ProjectFeedRepository;
 import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.HttpObject;
 
+import java.util.Map;
 import java.util.Optional;
 
 import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST;
@@ -53,7 +55,7 @@ public class ProjectCommentsService extends Service {
             return;
         }
         if (event.payload().isMethodOptions()) {
-            ProjectCommentsUtil.respondOptions(event);
+            ResponseUtil.respondOptions(event);
             return;
         }
         handleHttpRequest(event, route);
@@ -63,7 +65,7 @@ public class ProjectCommentsService extends Service {
         switch (event.payload().methodType()) {
             case GET -> handleGet(event, route);
             case POST -> handlePost(event, route);
-            default -> ProjectCommentsUtil.respondMethodNotAllowed(event);
+            default -> ResponseUtil.respondMethodNotAllowed(event, ProjectCommentsUtil.METHOD_NOT_ALLOWED_CODE);
         }
     }
 
@@ -72,14 +74,14 @@ public class ProjectCommentsService extends Service {
             handleCommentsLookup(event, commentsRoute.slug());
             return;
         }
-        ProjectCommentsUtil.respondMethodNotAllowed(event);
+        ResponseUtil.respondMethodNotAllowed(event, ProjectCommentsUtil.METHOD_NOT_ALLOWED_CODE);
     }
 
     protected void handlePost(final Event<HttpObject, HttpObject> event, final ProjectCommentsUtil.RouteMatch route) {
         switch (route) {
             case ProjectCommentsUtil.ProjectCommentsRoute commentsRoute -> handleCommentCreate(event, commentsRoute.slug());
             case ProjectCommentsUtil.ProjectCommentsReadRoute readRoute -> handleCommentsRead(event, readRoute.slug());
-            default -> ProjectCommentsUtil.respondMethodNotAllowed(event);
+            default -> ResponseUtil.respondMethodNotAllowed(event, ProjectCommentsUtil.METHOD_NOT_ALLOWED_CODE);
         }
     }
 
@@ -89,9 +91,9 @@ public class ProjectCommentsService extends Service {
             return;
         }
         final Optional<ProjectDetails> project = findProject(event, slug);
-        project.ifPresent(details -> ProjectCommentsUtil.respondComments(
+        project.ifPresent(details -> ResponseUtil.respondOk(
             event,
-            ProjectCommentsRepository.listComments(databaseRuntime.dataSource(), details.id())
+            ProjectCommentsUtil.commentsPayload(ProjectCommentsRepository.listComments(databaseRuntime.dataSource(), details.id()))
         ));
     }
 
@@ -108,7 +110,7 @@ public class ProjectCommentsService extends Service {
         final String commentBody = ProjectCommentsUtil.commentBodyFrom(body);
         final Optional<String> validation = ProjectCommentsUtil.validateCommentBody(commentBody);
         if (validation.isPresent()) {
-            ProjectCommentsUtil.respondBadRequest(event, validation.get());
+            ResponseUtil.respondBadRequest(event, validation.get());
             return;
         }
         final ProjectComment comment = ProjectCommentsRepository.createComment(
@@ -117,7 +119,7 @@ public class ProjectCommentsService extends Service {
             sessionUser.get().id(),
             commentBody
         );
-        ProjectCommentsUtil.respondCommentCreated(event, comment);
+        ResponseUtil.respondCreated(event, ProjectCommentsUtil.commentPayload(comment));
     }
 
     private void handleCommentsRead(final Event<HttpObject, HttpObject> event, final String slug) {
@@ -130,13 +132,13 @@ public class ProjectCommentsService extends Service {
             return;
         }
         ProjectCommentsRepository.markCommentsRead(databaseRuntime.dataSource(), project.get().id(), sessionUser.get().id());
-        ProjectCommentsUtil.respondRead(event);
+        ResponseUtil.respondOk(event, Map.of("read", true));
     }
 
     private Optional<ProjectDetails> findProject(final Event<HttpObject, HttpObject> event, final String slug) {
         final Optional<ProjectDetails> project = ProjectFeedRepository.findProjectBySlug(databaseRuntime.dataSource(), slug);
         if (project.isEmpty()) {
-            ProjectCommentsUtil.respondNotFound(event, ProjectCommentsUtil.PROJECT_NOT_FOUND_CODE);
+            ResponseUtil.respondNotFound(event, ProjectCommentsUtil.PROJECT_NOT_FOUND_CODE);
         }
         return project;
     }

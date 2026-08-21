@@ -4,6 +4,7 @@ import berlin.yuna.typemap.model.TypeMapI;
 import io.github.absketches.mitbauen.nativeapp.auth.AuthUtil;
 import io.github.absketches.mitbauen.nativeapp.auth.SessionUser;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
+import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
 import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.HttpObject;
@@ -49,11 +50,11 @@ public class NotificationsService extends Service {
             return;
         }
         if (event.payload().isMethodOptions()) {
-            NotificationsUtil.respondOptions(event);
+            ResponseUtil.respondOptions(event);
             return;
         }
         if (!event.payload().isMethodGet()) {
-            NotificationsUtil.respondMethodNotAllowed(event);
+            ResponseUtil.respondMethodNotAllowed(event, NotificationsUtil.METHOD_NOT_ALLOWED_CODE);
             return;
         }
         handleNotificationsLookup(event);
@@ -64,9 +65,9 @@ public class NotificationsService extends Service {
         if (sessionUser.isEmpty()) {
             return;
         }
-        NotificationsUtil.respondNotifications(
+        ResponseUtil.respondOk(
             event,
-            NotificationsRepository.listNotifications(databaseRuntime.dataSource(), sessionUser.get().id())
+            NotificationsUtil.notificationsPayload(NotificationsRepository.listNotifications(databaseRuntime.dataSource(), sessionUser.get().id()))
         );
     }
 

@@ -1,7 +1,5 @@
 package io.github.absketches.mitbauen.nativeapp.notifications;
 
-import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
-import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.util.LinkedHashMap;
@@ -22,16 +20,8 @@ public class NotificationsUtil {
         return NOTIFICATIONS_PATH.equals(request.uri().getPath());
     }
 
-    public static void respondNotifications(final Event<HttpObject, HttpObject> event, final List<NotificationItem> notifications) {
-        ResponseUtil.respondOk(event, Map.of("notifications", notifications.stream().map(NotificationsUtil::notificationToMap).toList()));
-    }
-
-    public static void respondOptions(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondOptions(event);
-    }
-
-    public static void respondMethodNotAllowed(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondMethodNotAllowed(event, METHOD_NOT_ALLOWED_CODE);
+    public static Map<String, Object> notificationsPayload(final List<NotificationItem> notifications) {
+        return Map.of("notifications", notifications.stream().map(NotificationsUtil::notificationToMap).toList());
     }
 
     private static Map<String, Object> notificationToMap(final NotificationItem notification) {

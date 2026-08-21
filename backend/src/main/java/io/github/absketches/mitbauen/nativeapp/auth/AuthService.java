@@ -3,12 +3,14 @@ package io.github.absketches.mitbauen.nativeapp.auth;
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeMapI;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
+import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
 import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST;
@@ -61,7 +63,7 @@ public class AuthService extends Service {
             return;
         }
         if (event.payload().isMethodOptions()) {
-            AuthUtil.respondOptions(event);
+            ResponseUtil.respondOptions(event);
             return;
         }
         handleHttpRequest(event, route);
@@ -73,7 +75,7 @@ public class AuthService extends Service {
             case POST -> handlePost(event, route);
             case PUT -> handlePut(event, route);
             case DELETE -> handleDelete(event, route);
-            default -> AuthUtil.respondMethodNotAllowed(event);
+            default -> ResponseUtil.respondMethodNotAllowed(event, AuthUtil.METHOD_NOT_ALLOWED_CODE);
         }
     }
 
@@ -83,7 +85,7 @@ public class AuthService extends Service {
             case SESSION -> handleSessionLookup(event);
             case PROFILE -> handleProfileLookup(event);
             case PUBLIC_PROFILE -> handlePublicProfileLookup(event);
-            default -> AuthUtil.respondMethodNotAllowed(event);
+            default -> ResponseUtil.respondMethodNotAllowed(event, AuthUtil.METHOD_NOT_ALLOWED_CODE);
         }
     }
 
@@ -96,35 +98,35 @@ public class AuthService extends Service {
             case VERIFY_EMAIL_CONFIRM -> handleVerifyEmailConfirm(event);
             case PASSWORD_RESET_REQUEST -> handlePasswordResetRequest(event);
             case PASSWORD_RESET_CONFIRM -> handlePasswordResetConfirm(event);
-            default -> AuthUtil.respondMethodNotAllowed(event);
+            default -> ResponseUtil.respondMethodNotAllowed(event, AuthUtil.METHOD_NOT_ALLOWED_CODE);
         }
     }
 
     protected void handlePut(final Event<HttpObject, HttpObject> event, final AuthUtil.Route route) {
         switch (route) {
             case PROFILE -> handleProfileUpdate(event);
-            default -> AuthUtil.respondMethodNotAllowed(event);
+            default -> ResponseUtil.respondMethodNotAllowed(event, AuthUtil.METHOD_NOT_ALLOWED_CODE);
         }
     }
 
     protected void handleDelete(final Event<HttpObject, HttpObject> event, final AuthUtil.Route route) {
         switch (route) {
             case PROFILE -> handleAccountDelete(event);
-            default -> AuthUtil.respondMethodNotAllowed(event);
+            default -> ResponseUtil.respondMethodNotAllowed(event, AuthUtil.METHOD_NOT_ALLOWED_CODE);
         }
     }
 
     protected void handleInviteValidate(final Event<HttpObject, HttpObject> event) {
         final String token = event.payload().queryParam("token");
         if (token == null || token.isBlank()) {
-            AuthUtil.respondInvalidInvite(event);
+            ResponseUtil.respondOk(event, Map.of("valid", false));
             return;
         }
         AuthRepository.findInviteByToken(databaseRuntime.dataSource(), token)
             .filter(InviteLink::active)
             .ifPresentOrElse(
-                inviteLink -> AuthUtil.respondInviteValidation(event),
-                () -> AuthUtil.respondInvalidInvite(event)
+                inviteLink -> ResponseUtil.respondOk(event, Map.of("valid", true)),
+                () -> ResponseUtil.respondOk(event, Map.of("valid", false))
             );
     }
 
@@ -138,22 +140,22 @@ public class AuthService extends Service {
         final boolean emailPublic = safeBoolean(body.get("emailPublic"));
 
         if (inviteToken == null || inviteToken.isBlank() || email.isBlank() || displayName.isBlank() || password == null || password.isBlank()) {
-            AuthUtil.respondBadRequest(event, AuthUtil.REGISTRATION_REQUIRED_CODE);
+            ResponseUtil.respondBadRequest(event, AuthUtil.REGISTRATION_REQUIRED_CODE);
             return;
         }
         final Optional<String> registrationValidation = validateRegistrationProfileInput(displayName, bio, email);
         if (registrationValidation.isPresent()) {
-            AuthUtil.respondBadRequest(event, registrationValidation.get());
+            ResponseUtil.respondBadRequest(event, registrationValidation.get());
             return;
         }
         if (!AuthUtil.meetsPasswordRequirements(password)) {
-            AuthUtil.respondBadRequest(event, AuthUtil.PASSWORD_REQUIREMENTS_CODE);
+            ResponseUtil.respondBadRequest(event, AuthUtil.PASSWORD_REQUIREMENTS_CODE);
             return;
         }
 
         final Optional<InviteLink> invite = AuthRepository.findInviteByToken(databaseRuntime.dataSource(), inviteToken).filter(InviteLink::active);
         if (invite.isEmpty()) {
-            AuthUtil.respondBadRequest(event, AuthUtil.INVITE_INVALID_CODE);
+            ResponseUtil.respondBadRequest(event, AuthUtil.INVITE_INVALID_CODE);
             return;
         }
         final String passwordHash = AuthUtil.hashPassword(password);
@@ -168,7 +170,7 @@ public class AuthService extends Service {
             false
         );
         if (createdUser.isEmpty()) {
-            AuthUtil.respondConflict(event, AuthUtil.EMAIL_EXISTS_CODE);
+            ResponseUtil.respondConflict(event, AuthUtil.EMAIL_EXISTS_CODE);
             return;
         }
         final SessionUser sessionUser = createdUser.get();
@@ -194,13 +196,13 @@ public class AuthService extends Service {
         final String email = AuthUtil.normalizeEmail(body.asString("email"));
         final String password = body.asString("password");
         if (email.isBlank() || password == null || password.isBlank()) {
-            AuthUtil.respondBadRequest(event, AuthUtil.LOGIN_REQUIRED_CODE);
+            ResponseUtil.respondBadRequest(event, AuthUtil.LOGIN_REQUIRED_CODE);
             return;
         }
 
         final Optional<LoginIdentity> loginIdentity = AuthRepository.findLoginIdentityByEmail(databaseRuntime.dataSource(), email);
         if (loginIdentity.isEmpty() || !AuthUtil.verifyPassword(password, loginIdentity.get().passwordHash())) {
-            AuthUtil.respondUnauthorized(event, AuthUtil.LOGIN_INVALID_CODE);
+            ResponseUtil.respondUnauthorized(event, AuthUtil.LOGIN_INVALID_CODE);
             return;
         }
 
@@ -217,46 +219,46 @@ public class AuthService extends Service {
     protected void handleSessionLookup(final Event<HttpObject, HttpObject> event) {
         final Optional<String> sessionToken = AuthUtil.readSessionToken(event.payload());
         if (sessionToken.isEmpty()) {
-            AuthUtil.respondAnonymousSession(event);
+            ResponseUtil.respondOk(event, Map.of("authenticated", false));
             return;
         }
         AuthRepository.findSessionUserByTokenHash(databaseRuntime.dataSource(), AuthUtil.hashToken(sessionToken.get()))
             .ifPresentOrElse(
-                sessionUser -> AuthUtil.respondSession(event, sessionUser),
-                () -> AuthUtil.respondAnonymousSession(event)
+                sessionUser -> ResponseUtil.respondOk(event, AuthUtil.sessionPayload(true, sessionUser)),
+                () -> ResponseUtil.respondOk(event, Map.of("authenticated", false))
             );
     }
 
     protected void handleProfileLookup(final Event<HttpObject, HttpObject> event) {
         final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
         if (sessionUser.isEmpty()) {
-            AuthUtil.respondUnauthorized(event, AuthUtil.PROFILE_AUTH_REQUIRED_CODE);
+            ResponseUtil.respondUnauthorized(event, AuthUtil.PROFILE_AUTH_REQUIRED_CODE);
             return;
         }
 
         AuthRepository.findProfileByUserId(databaseRuntime.dataSource(), sessionUser.get().id())
             .ifPresentOrElse(
-                profile -> AuthUtil.respondProfile(event, profile),
-                () -> AuthUtil.respondNotFound(event, AuthUtil.PROFILE_NOT_FOUND_CODE)
+                profile -> ResponseUtil.respondOk(event, Map.of("profile", AuthUtil.profilePayload(profile))),
+                () -> ResponseUtil.respondNotFound(event, AuthUtil.PROFILE_NOT_FOUND_CODE)
             );
     }
 
     protected void handlePublicProfileLookup(final Event<HttpObject, HttpObject> event) {
         final Optional<String> publicId = AuthUtil.publicProfileId(event.payload());
         if (publicId.isEmpty()) {
-            AuthUtil.respondNotFound(event, AuthUtil.PROFILE_NOT_FOUND_CODE);
+            ResponseUtil.respondNotFound(event, AuthUtil.PROFILE_NOT_FOUND_CODE);
             return;
         }
 
         AuthRepository.findPublicProfileByPublicId(databaseRuntime.dataSource(), publicId.get())
             .ifPresentOrElse(
-                profile -> AuthUtil.respondPublicProfile(event, profile),
+                profile -> ResponseUtil.respondOk(event, Map.of("profile", AuthUtil.publicProfilePayload(profile))),
                 () -> {
                     if (AuthRepository.isDeletedPublicProfile(databaseRuntime.dataSource(), publicId.get())) {
-                        AuthUtil.respondDeletedUser(event);
+                        ResponseUtil.respondJson(event, 410, Map.of("code", "USER_DELETED"));
                         return;
                     }
-                    AuthUtil.respondNotFound(event, AuthUtil.PROFILE_NOT_FOUND_CODE);
+                    ResponseUtil.respondNotFound(event, AuthUtil.PROFILE_NOT_FOUND_CODE);
                 }
             );
     }
@@ -264,7 +266,7 @@ public class AuthService extends Service {
     protected void handleProfileUpdate(final Event<HttpObject, HttpObject> event) {
         final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
         if (sessionUser.isEmpty()) {
-            AuthUtil.respondUnauthorized(event, AuthUtil.PROFILE_UPDATE_AUTH_REQUIRED_CODE);
+            ResponseUtil.respondUnauthorized(event, AuthUtil.PROFILE_UPDATE_AUTH_REQUIRED_CODE);
             return;
         }
 
@@ -275,7 +277,7 @@ public class AuthService extends Service {
 
         final Optional<String> validation = validateEditableProfileInput(displayName, bio);
         if (validation.isPresent()) {
-            AuthUtil.respondBadRequest(event, validation.get());
+            ResponseUtil.respondBadRequest(event, validation.get());
             return;
         }
 
@@ -286,7 +288,7 @@ public class AuthService extends Service {
             bio,
             emailPublic
         );
-        AuthUtil.respondProfile(event, profile);
+        ResponseUtil.respondOk(event, Map.of("profile", AuthUtil.profilePayload(profile)));
     }
 
     protected void handleLogout(final Event<HttpObject, HttpObject> event) {
@@ -298,7 +300,7 @@ public class AuthService extends Service {
     protected void handleAccountDelete(final Event<HttpObject, HttpObject> event) {
         final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
         if (sessionUser.isEmpty()) {
-            AuthUtil.respondUnauthorized(event, AuthUtil.ACCOUNT_DELETE_AUTH_REQUIRED_CODE);
+            ResponseUtil.respondUnauthorized(event, AuthUtil.ACCOUNT_DELETE_AUTH_REQUIRED_CODE);
             return;
         }
         AuthRepository.deleteAccount(databaseRuntime.dataSource(), sessionUser.get().id());
@@ -308,22 +310,22 @@ public class AuthService extends Service {
     protected void handleVerifyEmailRequest(final Event<HttpObject, HttpObject> event) {
         final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
         if (sessionUser.isEmpty()) {
-            AuthUtil.respondUnauthorized(event, AuthUtil.VERIFICATION_AUTH_REQUIRED_CODE);
+            ResponseUtil.respondUnauthorized(event, AuthUtil.VERIFICATION_AUTH_REQUIRED_CODE);
             return;
         }
         if (sessionUser.get().emailVerified()) {
-            AuthUtil.respondVerificationEmailRequest(event, false, true);
+            ResponseUtil.respondOk(event, Map.of("sent", false, "alreadyVerified", true));
             return;
         }
         try {
             if (!resendVerificationEmail(sessionUser.get())) {
-                AuthUtil.respondTooManyRequests(event, AuthUtil.VERIFICATION_DAILY_LIMIT_CODE);
+                ResponseUtil.respondTooManyRequests(event, AuthUtil.VERIFICATION_DAILY_LIMIT_CODE);
                 return;
             }
-            AuthUtil.respondVerificationEmailRequest(event, true, false);
+            ResponseUtil.respondOk(event, Map.of("sent", true, "alreadyVerified", false));
         } catch (RuntimeException exception) {
             context.warn(() -> "Unable to resend verification email for {}", sessionUser.get().email());
-            AuthUtil.respondServerError(event, AuthUtil.VERIFICATION_SEND_FAILED_CODE);
+            ResponseUtil.respondServerError(event, AuthUtil.VERIFICATION_SEND_FAILED_CODE);
         }
     }
 
@@ -331,37 +333,37 @@ public class AuthService extends Service {
         final LinkedTypeMap body = AuthUtil.bodyAsMap(event.payload());
         final String token = safeTrim(body.asString("token"));
         if (token.isBlank()) {
-            AuthUtil.respondBadRequest(event, AuthUtil.VERIFICATION_TOKEN_REQUIRED_CODE);
+            ResponseUtil.respondBadRequest(event, AuthUtil.VERIFICATION_TOKEN_REQUIRED_CODE);
             return;
         }
         final boolean confirmed = confirmVerificationEmail(token);
         if (!confirmed) {
-            AuthUtil.respondBadRequest(event, AuthUtil.VERIFICATION_TOKEN_INVALID_CODE);
+            ResponseUtil.respondBadRequest(event, AuthUtil.VERIFICATION_TOKEN_INVALID_CODE);
             return;
         }
-        AuthUtil.respondVerificationConfirmed(event);
+        ResponseUtil.respondOk(event, Map.of("verified", true));
     }
 
     protected void handlePasswordResetRequest(final Event<HttpObject, HttpObject> event) {
         final LinkedTypeMap body = AuthUtil.bodyAsMap(event.payload());
         final String email = AuthUtil.normalizeEmail(body.asString("email"));
         if (email.isBlank()) {
-            AuthUtil.respondBadRequest(event, AuthUtil.PASSWORD_RESET_EMAIL_REQUIRED_CODE);
+            ResponseUtil.respondBadRequest(event, AuthUtil.PASSWORD_RESET_EMAIL_REQUIRED_CODE);
             return;
         }
 
         final Optional<SessionUser> recipient = AuthRepository.findPasswordResetRecipientByEmail(databaseRuntime.dataSource(), email);
         if (recipient.isEmpty()) {
-            AuthUtil.respondPasswordResetRequest(event);
+            ResponseUtil.respondOk(event, Map.of("requested", true));
             return;
         }
 
         try {
             issuePasswordResetEmail(recipient.get());
-            AuthUtil.respondPasswordResetRequest(event);
+            ResponseUtil.respondOk(event, Map.of("requested", true));
         } catch (RuntimeException exception) {
             context.warn(() -> "Unable to send password reset email for {}", email);
-            AuthUtil.respondServerError(event, AuthUtil.PASSWORD_RESET_SEND_FAILED_CODE);
+            ResponseUtil.respondServerError(event, AuthUtil.PASSWORD_RESET_SEND_FAILED_CODE);
         }
     }
 
@@ -370,18 +372,18 @@ public class AuthService extends Service {
         final String token = safeTrim(body.asString("token"));
         final String password = body.asString("password");
         if (token.isBlank()) {
-            AuthUtil.respondBadRequest(event, AuthUtil.PASSWORD_RESET_TOKEN_REQUIRED_CODE);
+            ResponseUtil.respondBadRequest(event, AuthUtil.PASSWORD_RESET_TOKEN_REQUIRED_CODE);
             return;
         }
         if (!AuthUtil.meetsPasswordRequirements(password)) {
-            AuthUtil.respondBadRequest(event, AuthUtil.PASSWORD_REQUIREMENTS_CODE);
+            ResponseUtil.respondBadRequest(event, AuthUtil.PASSWORD_REQUIREMENTS_CODE);
             return;
         }
         if (!resetPassword(token, password)) {
-            AuthUtil.respondBadRequest(event, AuthUtil.PASSWORD_RESET_TOKEN_INVALID_CODE);
+            ResponseUtil.respondBadRequest(event, AuthUtil.PASSWORD_RESET_TOKEN_INVALID_CODE);
             return;
         }
-        AuthUtil.respondPasswordResetConfirmed(event);
+        ResponseUtil.respondOk(event, Map.of("reset", true));
     }
 
     private void issueInitialVerificationEmail(final SessionUser sessionUser) {

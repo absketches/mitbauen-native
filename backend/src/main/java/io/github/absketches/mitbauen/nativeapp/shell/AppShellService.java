@@ -1,6 +1,7 @@
 package io.github.absketches.mitbauen.nativeapp.shell;
 
 import berlin.yuna.typemap.model.TypeMapI;
+import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
 import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.HttpObject;
@@ -39,7 +40,7 @@ public class AppShellService extends Service {
             return;
         }
         if (event.payload().isMethodOptions()) {
-            AppShellUtil.respondOptions(event);
+            event.payload().createResponse().respond(event);
             return;
         }
         handleHttpRequest(event, route);
@@ -48,7 +49,7 @@ public class AppShellService extends Service {
     protected void handleHttpRequest(final Event<HttpObject, HttpObject> event, final AppShellUtil.RoutesMatch route) {
         switch (event.payload().methodType()) {
             case GET, HEAD -> handleGet(event, route);
-            default -> AppShellUtil.respondMethodNotAllowed(event);
+            default -> ResponseUtil.respondMethodNotAllowed(event, AppShellUtil.METHOD_NOT_ALLOWED_CODE);
         }
     }
 

@@ -3,6 +3,7 @@ package io.github.absketches.mitbauen.nativeapp.projects;
 import berlin.yuna.typemap.model.TypeMapI;
 import io.github.absketches.mitbauen.nativeapp.auth.SessionUser;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
+import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
 import io.github.absketches.mitbauen.nativeapp.projects.media.ProjectMediaService;
 import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.helper.event.model.Event;
@@ -62,7 +63,7 @@ public class ProjectFeedService extends Service {
             return;
         }
         if (event.payload().isMethodOptions()) {
-            ProjectFeedUtil.respondOptions(event);
+            ResponseUtil.respondOptions(event);
             return;
         }
         handleHttpRequest(event, route);
@@ -74,7 +75,7 @@ public class ProjectFeedService extends Service {
             case POST -> handlePost(event, route);
             case PUT -> handlePut(event, route);
             case DELETE -> handleDelete(event, route);
-            default -> ProjectFeedUtil.respondMethodNotAllowed(event);
+            default -> ResponseUtil.respondMethodNotAllowed(event, ProjectFeedUtil.METHOD_NOT_ALLOWED_CODE);
         }
     }
 
@@ -90,19 +91,21 @@ public class ProjectFeedService extends Service {
 
         switch (route) {
             case ProjectFeedUtil.ProjectFeedRoute __ ->
-                ProjectFeedUtil.respondProjects(event, ProjectFeedRepository.listProjects(databaseRuntime.dataSource()));
+                ResponseUtil.respondOk(event, ProjectFeedUtil.projectsPayload(ProjectFeedRepository.listProjects(databaseRuntime.dataSource())));
             case ProjectFeedUtil.ProjectDetailsRoute detailsRoute ->
                 ProjectFeedRepository.findProjectBySlug(databaseRuntime.dataSource(), detailsRoute.slug())
                     .ifPresentOrElse(
-                        project -> ProjectFeedUtil.respondProjectDetails(
+                        project -> ResponseUtil.respondOk(
                             event,
-                            project,
-                            sessionUser.get().id() == project.ownerUserId() && sessionUser.get().emailVerified()
+                            ProjectFeedUtil.projectDetailsPayload(
+                                project,
+                                sessionUser.get().id() == project.ownerUserId() && sessionUser.get().emailVerified()
+                            )
                         ),
-                        () -> ProjectFeedUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_NOT_FOUND_CODE)
+                        () -> ResponseUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_NOT_FOUND_CODE)
                     );
             case ProjectFeedUtil.ProjectImageRoute imageRoute -> mediaService.handleGetProjectImage(event, imageRoute);
-            case ProjectFeedUtil.ProjectImagesRoute __ -> ProjectFeedUtil.respondMethodNotAllowed(event);
+            case ProjectFeedUtil.ProjectImagesRoute __ -> ResponseUtil.respondMethodNotAllowed(event, ProjectFeedUtil.METHOD_NOT_ALLOWED_CODE);
             case ProjectFeedUtil.NoMatch __ -> {
             }
         }
@@ -114,7 +117,7 @@ public class ProjectFeedService extends Service {
             return;
         }
         if (!(route instanceof ProjectFeedUtil.ProjectFeedRoute)) {
-            ProjectFeedUtil.respondMethodNotAllowed(event);
+            ResponseUtil.respondMethodNotAllowed(event, ProjectFeedUtil.METHOD_NOT_ALLOWED_CODE);
             return;
         }
 
@@ -123,7 +126,7 @@ public class ProjectFeedService extends Service {
 
     protected void handlePut(final Event<HttpObject, HttpObject> event, final ProjectFeedUtil.RoutesMatch route) {
         if (!(route instanceof ProjectFeedUtil.ProjectDetailsRoute(String slug))) {
-            ProjectFeedUtil.respondMethodNotAllowed(event);
+            ResponseUtil.respondMethodNotAllowed(event, ProjectFeedUtil.METHOD_NOT_ALLOWED_CODE);
             return;
         }
 
@@ -136,7 +139,7 @@ public class ProjectFeedService extends Service {
             return;
         }
         if (!(route instanceof ProjectFeedUtil.ProjectDetailsRoute(String slug))) {
-            ProjectFeedUtil.respondMethodNotAllowed(event);
+            ResponseUtil.respondMethodNotAllowed(event, ProjectFeedUtil.METHOD_NOT_ALLOWED_CODE);
             return;
         }
 

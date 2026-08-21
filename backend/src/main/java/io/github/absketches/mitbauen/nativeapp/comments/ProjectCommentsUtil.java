@@ -1,8 +1,6 @@
 package io.github.absketches.mitbauen.nativeapp.comments;
 
 import berlin.yuna.typemap.model.LinkedTypeMap;
-import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
-import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.util.LinkedHashMap;
@@ -78,32 +76,12 @@ public class ProjectCommentsUtil {
         return Optional.empty();
     }
 
-    public static void respondComments(final Event<HttpObject, HttpObject> event, final List<ProjectComment> comments) {
-        ResponseUtil.respondOk(event, Map.of("comments", comments.stream().map(ProjectCommentsUtil::commentToMap).toList()));
+    public static Map<String, Object> commentsPayload(final List<ProjectComment> comments) {
+        return Map.of("comments", comments.stream().map(ProjectCommentsUtil::commentToMap).toList());
     }
 
-    public static void respondCommentCreated(final Event<HttpObject, HttpObject> event, final ProjectComment comment) {
-        ResponseUtil.respondCreated(event, Map.of("comment", commentToMap(comment)));
-    }
-
-    public static void respondRead(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondOk(event, Map.of("read", true));
-    }
-
-    public static void respondBadRequest(final Event<HttpObject, HttpObject> event, final String code) {
-        ResponseUtil.respondBadRequest(event, code);
-    }
-
-    public static void respondNotFound(final Event<HttpObject, HttpObject> event, final String code) {
-        ResponseUtil.respondNotFound(event, code);
-    }
-
-    public static void respondOptions(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondOptions(event);
-    }
-
-    public static void respondMethodNotAllowed(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondMethodNotAllowed(event, METHOD_NOT_ALLOWED_CODE);
+    public static Map<String, Object> commentPayload(final ProjectComment comment) {
+        return Map.of("comment", commentToMap(comment));
     }
 
     private static Optional<String> validSlug(final String slug) {

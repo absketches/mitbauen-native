@@ -2,6 +2,7 @@ package io.github.absketches.mitbauen.nativeapp.projects;
 
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import io.github.absketches.mitbauen.nativeapp.auth.SessionUser;
+import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.HttpObject;
 
@@ -34,12 +35,12 @@ public class ProjectMutationService {
         }
         final Optional<String> validation = ProjectInputValidator.validate(input.get());
         if (validation.isPresent()) {
-            ProjectFeedUtil.respondBadRequest(event, validation.get());
+            ResponseUtil.respondBadRequest(event, validation.get());
             return;
         }
 
         final String slug = ProjectFeedRepository.createProject(dataSource, sessionUser.get().id(), input.get());
-        ProjectFeedUtil.respondProjectSaved(event, slug, 201);
+        ResponseUtil.respondJson(event, 201, ProjectFeedUtil.projectSavedPayload(slug));
     }
 
     public void handleUpdateProject(final Event<HttpObject, HttpObject> event, final String slug) {
@@ -54,7 +55,7 @@ public class ProjectMutationService {
 
         final Optional<ProjectDetails> existingProject = ProjectFeedRepository.findProjectBySlug(dataSource, slug);
         if (existingProject.isEmpty()) {
-            ProjectFeedUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_NOT_FOUND_CODE);
+            ResponseUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_NOT_FOUND_CODE);
             return;
         }
         if (!accessGuard.requireOwner(event, sessionUser.get(), existingProject.get(), ProjectFeedUtil.PROJECT_EDIT_OWNER_REQUIRED_CODE)) {
@@ -67,12 +68,12 @@ public class ProjectMutationService {
         }
         final Optional<String> validation = ProjectInputValidator.validate(input.get());
         if (validation.isPresent()) {
-            ProjectFeedUtil.respondBadRequest(event, validation.get());
+            ResponseUtil.respondBadRequest(event, validation.get());
             return;
         }
 
         ProjectFeedRepository.updateProject(dataSource, existingProject.get().id(), input.get());
-        ProjectFeedUtil.respondProjectSaved(event, existingProject.get().slug(), 200);
+        ResponseUtil.respondOk(event, ProjectFeedUtil.projectSavedPayload(existingProject.get().slug()));
     }
 
     public void handleDeleteProject(final Event<HttpObject, HttpObject> event, final String slug) {
@@ -87,7 +88,7 @@ public class ProjectMutationService {
 
         final Optional<ProjectDetails> existingProject = ProjectFeedRepository.findProjectBySlug(dataSource, slug);
         if (existingProject.isEmpty()) {
-            ProjectFeedUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_NOT_FOUND_CODE);
+            ResponseUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_NOT_FOUND_CODE);
             return;
         }
         if (!accessGuard.requireOwner(event, sessionUser.get(), existingProject.get(), ProjectFeedUtil.PROJECT_DELETE_OWNER_REQUIRED_CODE)) {
@@ -95,7 +96,7 @@ public class ProjectMutationService {
         }
 
         ProjectFeedRepository.deleteProject(dataSource, existingProject.get().id());
-        ProjectFeedUtil.respondDeleted(event);
+        ResponseUtil.respondEmpty(event, 204);
     }
 
     private static Optional<ProjectInput> projectInputOrRespondBadRequest(final Event<HttpObject, HttpObject> event) {
@@ -103,7 +104,7 @@ public class ProjectMutationService {
             final LinkedTypeMap body = event.payload().bodyAsMap();
             return Optional.of(ProjectFeedUtil.projectInputFrom(body));
         } catch (RuntimeException exception) {
-            ProjectFeedUtil.respondBadRequest(event, ProjectFeedUtil.PROJECT_PAYLOAD_INVALID_CODE);
+            ResponseUtil.respondBadRequest(event, ProjectFeedUtil.PROJECT_PAYLOAD_INVALID_CODE);
             return Optional.empty();
         }
     }

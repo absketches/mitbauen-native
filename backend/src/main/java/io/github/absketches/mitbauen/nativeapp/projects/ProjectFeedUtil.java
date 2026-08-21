@@ -2,11 +2,8 @@ package io.github.absketches.mitbauen.nativeapp.projects;
 
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeList;
-import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
 import io.github.absketches.mitbauen.nativeapp.projects.links.ProjectLink;
 import io.github.absketches.mitbauen.nativeapp.projects.media.ProjectImage;
-import io.github.absketches.mitbauen.nativeapp.projects.media.ProjectImageContent;
-import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.util.LinkedHashMap;
@@ -157,52 +154,20 @@ public class ProjectFeedUtil {
         );
     }
 
-    public static void respondProjects(final Event<HttpObject, HttpObject> event, final List<ProjectCard> projects) {
-        ResponseUtil.respondOk(event, Map.of("projects", projects.stream().map(ProjectFeedUtil::projectToMap).toList()));
+    public static Map<String, Object> projectsPayload(final List<ProjectCard> projects) {
+        return Map.of("projects", projects.stream().map(ProjectFeedUtil::projectToMap).toList());
     }
 
-    public static void respondProjectDetails(final Event<HttpObject, HttpObject> event, final ProjectDetails project, final boolean canManage) {
-        ResponseUtil.respondOk(event, Map.of("project", projectDetailsToMap(project, canManage)));
+    public static Map<String, Object> projectDetailsPayload(final ProjectDetails project, final boolean canManage) {
+        return Map.of("project", projectDetailsToMap(project, canManage));
     }
 
-    public static void respondProjectSaved(final Event<HttpObject, HttpObject> event, final String slug, final int statusCode) {
-        ResponseUtil.respondJson(event, statusCode, Map.of("slug", slug));
+    public static Map<String, Object> projectSavedPayload(final String slug) {
+        return Map.of("slug", slug);
     }
 
-    public static void respondProjectImageSaved(final Event<HttpObject, HttpObject> event, final String slug, final ProjectImage image) {
-        ResponseUtil.respondCreated(event, Map.of("image", projectImageToMap(slug, image)));
-    }
-
-    public static void respondProjectImage(final Event<HttpObject, HttpObject> event, final ProjectImageContent image) {
-        ResponseUtil.respondBytes(event, 200, image.contentType(), image.data());
-    }
-
-    public static void respondDeleted(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondEmpty(event, 204);
-    }
-
-    public static void respondBadRequest(final Event<HttpObject, HttpObject> event, final String code) {
-        ResponseUtil.respondBadRequest(event, code);
-    }
-
-    public static void respondUnauthorized(final Event<HttpObject, HttpObject> event, final String code) {
-        ResponseUtil.respondUnauthorized(event, code);
-    }
-
-    public static void respondForbidden(final Event<HttpObject, HttpObject> event, final String code) {
-        ResponseUtil.respondForbidden(event, code);
-    }
-
-    public static void respondNotFound(final Event<HttpObject, HttpObject> event, final String code) {
-        ResponseUtil.respondNotFound(event, code);
-    }
-
-    public static void respondOptions(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondOptions(event);
-    }
-
-    public static void respondMethodNotAllowed(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondMethodNotAllowed(event, METHOD_NOT_ALLOWED_CODE);
+    public static Map<String, Object> projectImageSavedPayload(final String slug, final ProjectImage image) {
+        return Map.of("image", projectImageToMap(slug, image));
     }
 
     private static Map<String, Object> projectToMap(final ProjectCard project) {

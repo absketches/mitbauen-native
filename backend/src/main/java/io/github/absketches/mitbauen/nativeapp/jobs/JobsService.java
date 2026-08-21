@@ -5,10 +5,12 @@ import io.github.absketches.mitbauen.nativeapp.auth.AuthUtil;
 import io.github.absketches.mitbauen.nativeapp.auth.SessionUser;
 import io.github.absketches.mitbauen.nativeapp.auth.TransactionalEmailSender;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
+import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
 import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.HttpObject;
 
+import java.util.Map;
 import java.util.Optional;
 
 import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST;
@@ -52,7 +54,7 @@ public class JobsService extends Service {
             return;
         }
         if (event.payload().isMethodOptions()) {
-            JobsUtil.respondOptions(event);
+            ResponseUtil.respondOptions(event);
             return;
         }
 
@@ -67,7 +69,7 @@ public class JobsService extends Service {
 
     private void handleJobsList(final Event<HttpObject, HttpObject> event) {
         if (!event.payload().isMethodGet()) {
-            JobsUtil.respondMethodNotAllowed(event);
+            ResponseUtil.respondMethodNotAllowed(event, JobsUtil.METHOD_NOT_ALLOWED_CODE);
             return;
         }
 
@@ -81,12 +83,12 @@ public class JobsService extends Service {
             return;
         }
 
-        JobsUtil.respondJobs(event, JobsRepository.listJobs(databaseRuntime.dataSource()));
+        ResponseUtil.respondOk(event, JobsUtil.jobsPayload(JobsRepository.listJobs(databaseRuntime.dataSource())));
     }
 
     private void handleApplication(final Event<HttpObject, HttpObject> event) {
         if (!event.payload().isMethodPost()) {
-            JobsUtil.respondMethodNotAllowed(event);
+            ResponseUtil.respondMethodNotAllowed(event, JobsUtil.METHOD_NOT_ALLOWED_CODE);
             return;
         }
 
@@ -102,21 +104,21 @@ public class JobsService extends Service {
 
         final JobsUtil.JobApplicationInput input = JobsUtil.applicationInputFrom(AuthUtil.bodyAsMap(event.payload()));
         if (input.roleId() == null || input.roleId() <= 0) {
-            JobsUtil.respondBadRequest(event, JobsUtil.JOB_APPLICATION_ROLE_INVALID_CODE);
+            ResponseUtil.respondBadRequest(event, JobsUtil.JOB_APPLICATION_ROLE_INVALID_CODE);
             return;
         }
         if (input.fit().length() < JobsUtil.APPLICATION_FIT_MIN_LENGTH || input.fit().length() > JobsUtil.APPLICATION_FIT_MAX_LENGTH) {
-            JobsUtil.respondBadRequest(event, JobsUtil.JOB_APPLICATION_FIT_INVALID_CODE);
+            ResponseUtil.respondBadRequest(event, JobsUtil.JOB_APPLICATION_FIT_INVALID_CODE);
             return;
         }
         if (input.availability().length() > JobsUtil.APPLICATION_AVAILABILITY_MAX_LENGTH) {
-            JobsUtil.respondBadRequest(event, JobsUtil.JOB_APPLICATION_AVAILABILITY_INVALID_CODE);
+            ResponseUtil.respondBadRequest(event, JobsUtil.JOB_APPLICATION_AVAILABILITY_INVALID_CODE);
             return;
         }
 
         final Optional<JobApplicationTarget> target = JobsRepository.findApplicationTarget(databaseRuntime.dataSource(), input.roleId());
         if (target.isEmpty()) {
-            JobsUtil.respondNotFound(event);
+            ResponseUtil.respondNotFound(event, JobsUtil.JOB_APPLICATION_NOT_FOUND_CODE);
             return;
         }
 
@@ -128,7 +130,7 @@ public class JobsService extends Service {
             input.availability()
         );
         if (createResult == JobApplicationCreateResult.DUPLICATE_OR_UNAVAILABLE) {
-            JobsUtil.respondConflict(event);
+            ResponseUtil.respondConflict(event, JobsUtil.JOB_APPLICATION_DUPLICATE_CODE);
             return;
         }
 
@@ -143,7 +145,7 @@ public class JobsService extends Service {
                 input.fit(),
                 input.availability()
             );
-            JobsUtil.respondApplicationSent(event);
+            ResponseUtil.respondOk(event, Map.of("sent", true));
         } catch (RuntimeException exception) {
             try {
                 JobsRepository.deleteApplication(databaseRuntime.dataSource(), input.roleId(), sessionUser.get().id());
@@ -151,7 +153,7 @@ public class JobsService extends Service {
                 exception.addSuppressed(cleanupException);
             }
             context.error(() -> "Unable to send role application email", exception);
-            JobsUtil.respondServerError(event);
+            ResponseUtil.respondServerError(event, JobsUtil.JOB_APPLICATION_SEND_FAILED_CODE);
         }
     }
 }
