@@ -1,5 +1,9 @@
 import type {
   InviteValidationResponse,
+  JobApplicationPayload,
+  JobApplicationResponse,
+  JobListing,
+  JobsResponse,
   LoginPayload,
   NotificationItem,
   NotificationsResponse,
@@ -46,6 +50,18 @@ export class ApiError extends Error {
 export async function loadProjects(): Promise<Project[]> {
   const payload = await requestJson<ProjectFeedResponse>(`${API_BASE_URL}/projects`)
   return payload.projects.map(hydrateProject)
+}
+
+export async function loadJobs(): Promise<JobListing[]> {
+  const payload = await requestJson<JobsResponse>(`${API_BASE_URL}/jobs`)
+  return payload.jobs
+}
+
+export async function applyForJob(payload: JobApplicationPayload): Promise<JobApplicationResponse> {
+  return requestJson<JobApplicationResponse>(`${API_BASE_URL}/jobs/applications`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 }
 
 export async function loadProject(slug: string): Promise<ProjectDetails> {

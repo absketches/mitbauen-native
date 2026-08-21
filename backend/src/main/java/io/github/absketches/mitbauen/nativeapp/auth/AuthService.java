@@ -19,16 +19,16 @@ public class AuthService extends Service {
 
     private final DatabaseRuntime databaseRuntime;
     private final EmailVerificationSettings emailVerificationSettings;
-    private final VerificationEmailSender verificationEmailSender;
+    private final TransactionalEmailSender transactionalEmailSender;
 
     public AuthService(
         final DatabaseRuntime databaseRuntime,
         final EmailVerificationSettings emailVerificationSettings,
-        final VerificationEmailSender verificationEmailSender
+        final TransactionalEmailSender transactionalEmailSender
     ) {
         this.databaseRuntime = databaseRuntime;
         this.emailVerificationSettings = emailVerificationSettings;
-        this.verificationEmailSender = verificationEmailSender;
+        this.transactionalEmailSender = transactionalEmailSender;
     }
 
     @Override
@@ -404,7 +404,7 @@ public class AuthService extends Service {
             AuthUtil.hashToken(token),
             Instant.now().plus(AuthUtil.PASSWORD_RESET_TTL)
         );
-        verificationEmailSender.sendPasswordResetEmail(
+        transactionalEmailSender.sendPasswordResetEmail(
             recipient.email(),
             recipient.displayName(),
             AuthUtil.passwordResetUrl(emailVerificationSettings.publicBaseUrl(), token)
@@ -436,7 +436,7 @@ public class AuthService extends Service {
         }
 
         try {
-            verificationEmailSender.sendVerificationEmail(
+            transactionalEmailSender.sendVerificationEmail(
                 sessionUser.email(),
                 sessionUser.displayName(),
                 AuthUtil.emailVerificationUrl(emailVerificationSettings.publicBaseUrl(), token)

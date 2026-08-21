@@ -204,6 +204,24 @@ public class AuthUtil {
             .flatMap(token -> AuthRepository.findSessionUserByTokenHash(dataSource, hashToken(token)));
     }
 
+    public static Optional<SessionUser> verifiedSessionUser(
+        final Event<HttpObject, HttpObject> event,
+        final DataSource dataSource,
+        final String authRequiredCode,
+        final String emailUnverifiedCode
+    ) {
+        final Optional<SessionUser> sessionUser = currentSessionUser(event.payload(), dataSource);
+        if (sessionUser.isEmpty()) {
+            ResponseUtil.respondUnauthorized(event, authRequiredCode);
+            return Optional.empty();
+        }
+        if (!sessionUser.get().emailVerified()) {
+            ResponseUtil.respondForbidden(event, emailUnverifiedCode);
+            return Optional.empty();
+        }
+        return sessionUser;
+    }
+
     public static String sessionCookie(final HttpObject request, final String token) {
         return cookieValue(request, token, SESSION_TTL.toSeconds());
     }

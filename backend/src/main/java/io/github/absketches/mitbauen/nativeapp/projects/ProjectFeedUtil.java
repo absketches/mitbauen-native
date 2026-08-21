@@ -142,6 +142,7 @@ public class ProjectFeedUtil {
             roles == null ? List.of() : roles.stream()
                 .map(ProjectFeedUtil::linkedTypeMapFromListItem)
                 .map(role -> new OpenRole(
+                    null,
                     safeTrim(role.asString("title")),
                     safeTrim(role.asString("commitment"))
                 ))
@@ -246,10 +247,13 @@ public class ProjectFeedUtil {
     }
 
     private static Map<String, Object> openRoleToMap(final OpenRole role) {
-        return Map.of(
-            "title", role.title(),
-            "commitment", role.commitment()
-        );
+        final Map<String, Object> payload = new LinkedHashMap<>();
+        if (role.id() != null) {
+            payload.put("id", role.id());
+        }
+        payload.put("title", role.title());
+        payload.put("commitment", role.commitment());
+        return payload;
     }
 
     private static Map<String, Object> projectLinkToMap(final ProjectLink link) {

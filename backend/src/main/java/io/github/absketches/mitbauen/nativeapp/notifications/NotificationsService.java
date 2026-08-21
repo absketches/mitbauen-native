@@ -71,15 +71,11 @@ public class NotificationsService extends Service {
     }
 
     private Optional<SessionUser> verifiedSessionUser(final Event<HttpObject, HttpObject> event) {
-        final Optional<SessionUser> sessionUser = AuthUtil.currentSessionUser(event.payload(), databaseRuntime.dataSource());
-        if (sessionUser.isEmpty()) {
-            NotificationsUtil.respondUnauthorized(event);
-            return Optional.empty();
-        }
-        if (!sessionUser.get().emailVerified()) {
-            NotificationsUtil.respondForbidden(event);
-            return Optional.empty();
-        }
-        return sessionUser;
+        return AuthUtil.verifiedSessionUser(
+            event,
+            databaseRuntime.dataSource(),
+            NotificationsUtil.AUTH_REQUIRED_CODE,
+            NotificationsUtil.EMAIL_UNVERIFIED_CODE
+        );
     }
 }

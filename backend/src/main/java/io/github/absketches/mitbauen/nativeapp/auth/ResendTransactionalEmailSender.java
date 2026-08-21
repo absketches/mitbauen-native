@@ -11,7 +11,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
 
-public class ResendVerificationEmailSender implements VerificationEmailSender {
+public class ResendTransactionalEmailSender implements TransactionalEmailSender {
 
     private static final URI RESEND_EMAILS_ENDPOINT = URI.create("https://api.resend.com/emails");
 
@@ -19,7 +19,7 @@ public class ResendVerificationEmailSender implements VerificationEmailSender {
     private final String apiKey;
     private final String emailFrom;
 
-    public ResendVerificationEmailSender(final String apiKey, final String emailFrom) {
+    public ResendTransactionalEmailSender(final String apiKey, final String emailFrom) {
         this.httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
@@ -35,6 +35,30 @@ public class ResendVerificationEmailSender implements VerificationEmailSender {
     @Override
     public void sendPasswordResetEmail(final String recipientEmail, final String recipientName, final String passwordResetUrl) {
         sendEmail(passwordResetEmailPayload(emailFrom, recipientEmail, recipientName, passwordResetUrl));
+    }
+
+    @Override
+    public void sendRoleApplicationEmail(
+        final String recipientEmail,
+        final String recipientName,
+        final String projectTitle,
+        final String roleTitle,
+        final String applicantName,
+        final String applicantEmail,
+        final String fit,
+        final String availability
+    ) {
+        sendEmail(roleApplicationEmailPayload(
+            emailFrom,
+            recipientEmail,
+            recipientName,
+            projectTitle,
+            roleTitle,
+            applicantName,
+            applicantEmail,
+            fit,
+            availability
+        ));
     }
 
     private void sendEmail(final String payload) {
@@ -85,6 +109,26 @@ public class ResendVerificationEmailSender implements VerificationEmailSender {
             "subject", "Reset your password",
             "html", passwordResetHtmlBody(recipientName, passwordResetUrl),
             "text", passwordResetTextBody(recipientName, passwordResetUrl)
+        ));
+    }
+
+    public static String roleApplicationEmailPayload(
+        final String emailFrom,
+        final String recipientEmail,
+        final String recipientName,
+        final String projectTitle,
+        final String roleTitle,
+        final String applicantName,
+        final String applicantEmail,
+        final String fit,
+        final String availability
+    ) {
+        return JsonEncoder.toJson(LinkedTypeMap.linkedMapOf(
+            "from", emailFrom,
+            "to", List.of(recipientEmail),
+            "subject", "New application for " + roleTitle,
+            "html", roleApplicationHtmlBody(recipientName, projectTitle, roleTitle, applicantName, applicantEmail, fit, availability),
+            "text", roleApplicationTextBody(recipientName, projectTitle, roleTitle, applicantName, applicantEmail, fit, availability)
         ));
     }
 
@@ -168,6 +212,69 @@ public class ResendVerificationEmailSender implements VerificationEmailSender {
             nutze diesen Link, um ein neues Passwort für dein Mitbauen Lokal Konto zu setzen:
             %s
             """.formatted(recipientName, passwordResetUrl, recipientName, passwordResetUrl);
+    }
+
+    private static String roleApplicationHtmlBody(
+        final String recipientName,
+        final String projectTitle,
+        final String roleTitle,
+        final String applicantName,
+        final String applicantEmail,
+        final String fit,
+        final String availability
+    ) {
+        return """
+            <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111111">
+              <p>Hello %s,</p>
+              <p>%s applied for <strong>%s</strong> on <strong>%s</strong>.</p>
+              <p><strong>Applicant email:</strong> %s</p>
+              <p><strong>Why they fit:</strong></p>
+              <p>%s</p>
+              <p><strong>Availability:</strong></p>
+              <p>%s</p>
+            </div>
+            """.formatted(
+            htmlEscape(recipientName),
+            htmlEscape(applicantName),
+            htmlEscape(roleTitle),
+            htmlEscape(projectTitle),
+            htmlEscape(applicantEmail),
+            htmlEscape(fit).replace("\n", "<br />"),
+            htmlEscape(availability.isBlank() ? "Not provided" : availability).replace("\n", "<br />")
+        );
+    }
+
+    private static String roleApplicationTextBody(
+        final String recipientName,
+        final String projectTitle,
+        final String roleTitle,
+        final String applicantName,
+        final String applicantEmail,
+        final String fit,
+        final String availability
+    ) {
+        return """
+            Hello %s,
+
+            %s applied for %s on %s.
+
+            Applicant email:
+            %s
+
+            Why they fit:
+            %s
+
+            Availability:
+            %s
+            """.formatted(
+            recipientName,
+            applicantName,
+            roleTitle,
+            projectTitle,
+            applicantEmail,
+            fit,
+            availability.isBlank() ? "Not provided" : availability
+        );
     }
 
     private static String htmlEscape(final String value) {

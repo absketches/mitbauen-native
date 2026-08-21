@@ -2,6 +2,7 @@ import type { FormEvent } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { COPY, persistLanguage, readStoredLanguage, type Dictionary, type Language } from './i18n'
 import {
+  applyForJob,
   ApiError,
   confirmPasswordReset,
   confirmEmailVerification,
@@ -10,6 +11,7 @@ import {
   deleteAccount,
   deleteProject,
   deleteProjectImage,
+  loadJobs,
   loadNotifications,
   loadProfile,
   loadPublicProfile,
@@ -33,8 +35,13 @@ import { ProjectDetailView } from './components/ProjectDetailView'
 import { ProjectFormView } from './components/ProjectFormView'
 import { ProfileView } from './components/ProfileView'
 import { PublicProfileView } from './components/PublicProfileView'
+import { RoleApplicationForm } from './components/RoleApplicationForm'
+import { SafeMarkdown } from './components/SafeMarkdown'
 import type {
   InviteValidationResponse,
+  JobApplicationPayload,
+  JobApplicationResponse,
+  JobListing,
   LoginPayload,
   NotificationItem,
   PasswordResetConfirmPayload,
@@ -66,6 +73,8 @@ type VerificationNotice =
 
 type AppApi = {
   loadProjects: () => Promise<Project[]>
+  loadJobs: () => Promise<JobListing[]>
+  applyForJob: (payload: JobApplicationPayload) => Promise<JobApplicationResponse>
   loadProject: (slug: string) => Promise<ProjectDetails>
   loadProjectComments: (slug: string) => Promise<ProjectComment[]>
   loadProfile: () => Promise<UserProfile>
@@ -97,6 +106,7 @@ type AppProps = {
 
 type RouteState =
   | { name: 'feed'; highlightSlug: string | null; notice: FeedNotice }
+  | { name: 'jobs' }
   | { name: 'login' }
   | { name: 'forgotPassword' }
   | { name: 'resetPassword'; token: string }
@@ -110,6 +120,8 @@ type RouteState =
 
 const defaultApi: AppApi = {
   loadProjects,
+  loadJobs,
+  applyForJob,
   loadProject,
   loadProjectComments,
   loadProfile,
@@ -138,6 +150,8 @@ const defaultApi: AppApi = {
 export default function App({ api }: AppProps) {
   const {
     loadProjects: fetchProjects,
+    loadJobs: fetchJobs,
+    applyForJob: sendJobApplication,
     loadProject: fetchProject,
     loadProjectComments: fetchProjectComments,
     loadProfile: fetchProfile,
@@ -173,6 +187,9 @@ export default function App({ api }: AppProps) {
   const [projects, setProjects] = useState<Project[]>([])
   const [projectsLoading, setProjectsLoading] = useState(true)
   const [projectsError, setProjectsError] = useState<string | null>(null)
+  const [jobs, setJobs] = useState<JobListing[]>([])
+  const [jobsLoading, setJobsLoading] = useState(true)
+  const [jobsError, setJobsError] = useState<string | null>(null)
   const emailVerificationRequired = session.authenticated && !!session.user && !session.user.emailVerified
   const notificationsEnabled = session.authenticated && !!session.user?.emailVerified
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
@@ -257,13 +274,51 @@ export default function App({ api }: AppProps) {
     if (sessionLoading) {
       return
     }
+    if (route.name !== 'jobs') {
+      return
+    }
+    if (!session.authenticated || !session.user?.emailVerified) {
+      setJobs([])
+      setJobsError(null)
+      setJobsLoading(false)
+      return
+    }
+
+    let cancelled = false
+
+    setJobsLoading(true)
+    fetchJobs()
+      .then((nextJobs) => {
+        if (!cancelled) {
+          setJobs(nextJobs)
+          setJobsError(null)
+          setJobsLoading(false)
+        }
+      })
+      .catch((nextError: Error) => {
+        if (!cancelled) {
+          setJobsError(copy.jobs.error)
+          setJobsLoading(false)
+          console.error(nextError)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [copy.jobs.error, fetchJobs, route.name, session.authenticated, session.user?.emailVerified, sessionLoading])
+
+  useEffect(() => {
+    if (sessionLoading) {
+      return
+    }
     if (session.authenticated && (route.name === 'login' || route.name === 'register')) {
       navigateTo('/', setRoute)
       return
     }
     if (
       !session.authenticated
-      && (route.name === 'projectCreate' || route.name === 'projectDetail' || route.name === 'projectEdit' || route.name === 'profile')
+      && (route.name === 'jobs' || route.name === 'projectCreate' || route.name === 'projectDetail' || route.name === 'projectEdit' || route.name === 'profile')
     ) {
       navigateTo('/login', setRoute)
     }
@@ -325,6 +380,7 @@ export default function App({ api }: AppProps) {
     setVerificationNotice(null)
     setNotifications([])
     setProjects([])
+    setJobs([])
     navigateTo('/', setRoute)
   }
 
@@ -334,6 +390,20 @@ export default function App({ api }: AppProps) {
       setProjects(nextProjects)
       setProjectsError(null)
       setProjectsLoading(false)
+    } catch (nextError) {
+      console.error(nextError)
+    }
+  }
+
+  async function refreshJobsAfterMutation() {
+    if (route.name !== 'jobs') {
+      return
+    }
+    try {
+      const nextJobs = await fetchJobs()
+      setJobs(nextJobs)
+      setJobsError(null)
+      setJobsLoading(false)
     } catch (nextError) {
       console.error(nextError)
     }
@@ -394,6 +464,7 @@ export default function App({ api }: AppProps) {
     const result = await saveProject(payload)
     const mediaSaved = await tryProjectMediaMutation(() => uploadNewProjectImages(result.slug, imageChanges.newImages))
     void refreshProjectsAfterMutation()
+    void refreshJobsAfterMutation()
     navigateTo(`/projects/${result.slug}?created=1${mediaSaved ? '' : '&media=failed'}`, setRoute)
   }
 
@@ -404,6 +475,7 @@ export default function App({ api }: AppProps) {
       await Promise.all(imageChanges.removedImageIds.map((imageId) => destroyProjectImage(result.slug, imageId)))
     })
     void refreshProjectsAfterMutation()
+    void refreshJobsAfterMutation()
     navigateTo(`/projects/${result.slug}?updated=1${mediaSaved ? '' : '&media=failed'}`, setRoute)
   }
 
@@ -426,6 +498,7 @@ export default function App({ api }: AppProps) {
   async function handleDeleteProject(slug: string) {
     await destroyProject(slug)
     void refreshProjectsAfterMutation()
+    void refreshJobsAfterMutation()
     navigateTo('/?deleted=1', setRoute)
   }
 
@@ -433,6 +506,7 @@ export default function App({ api }: AppProps) {
     await saveProfile(payload)
     await refreshSessionState()
     void refreshProjectsAfterMutation()
+    void refreshJobsAfterMutation()
   }
 
   async function handleDeleteAccount() {
@@ -440,6 +514,7 @@ export default function App({ api }: AppProps) {
     setSession(nextSession)
     setVerificationNotice(null)
     setNotifications([])
+    setJobs([])
     await refreshProjectsAfterMutation()
     navigateTo('/', setRoute)
   }
@@ -489,9 +564,14 @@ export default function App({ api }: AppProps) {
                 />
               ) : null}
               {session.user.emailVerified ? (
-                <button className="ghost-button" type="button" onClick={() => navigateTo('/projects/new', setRoute)}>
-                  {copy.header.createProject}
-                </button>
+                <>
+                  <button className="ghost-button" type="button" onClick={() => navigateTo('/jobs', setRoute)}>
+                    {copy.header.jobs}
+                  </button>
+                  <button className="ghost-button" type="button" onClick={() => navigateTo('/projects/new', setRoute)}>
+                    {copy.header.createProject}
+                  </button>
+                </>
               ) : null}
               <button className="ghost-button" type="button" onClick={() => navigateTo('/profile', setRoute)}>
                 {copy.header.profile}
@@ -559,6 +639,23 @@ export default function App({ api }: AppProps) {
           onRequestPasswordReset={sendPasswordReset}
           onNavigate={setRoute}
         />
+      ) : null}
+
+      {route.name === 'jobs' ? (
+        sessionLoading ? (
+          <p className="state-card">{copy.jobs.loading}</p>
+        ) : emailVerificationRequired ? (
+          <VerificationRequiredView copy={copy.verification} onBack={() => navigateTo('/', setRoute)} />
+        ) : session.authenticated ? (
+          <JobsView
+            copy={copy.jobs}
+            jobs={jobs}
+            loading={jobsLoading}
+            error={jobsError}
+            onOpenProject={(slug) => navigateTo(`/projects/${slug}`, setRoute)}
+            onApplyJob={sendJobApplication}
+          />
+        ) : null
       ) : null}
 
       {route.name === 'resetPassword' ? (
@@ -660,6 +757,7 @@ export default function App({ api }: AppProps) {
             onOpenFounderProfile={(publicId) => navigateTo(`/users/${encodeURIComponent(publicId)}`, setRoute)}
             onEdit={(slug) => navigateTo(`/projects/${slug}/edit`, setRoute)}
             onDelete={handleDeleteProject}
+            onApplyJob={sendJobApplication}
             onBackToFeed={(slug, notice) => navigateTo(feedPathForProject(slug, notice), setRoute)}
           />
         ) : null
@@ -709,6 +807,15 @@ type NotificationBellProps = {
   notifications: NotificationItem[]
   onOpenProject: (slug: string) => void
   onRefresh: () => void
+}
+
+type JobsViewProps = {
+  copy: Dictionary['jobs']
+  jobs: JobListing[]
+  loading: boolean
+  error: string | null
+  onOpenProject: (slug: string) => void
+  onApplyJob: (payload: JobApplicationPayload) => Promise<JobApplicationResponse>
 }
 
 function NotificationBell({ copy, notifications, onOpenProject, onRefresh }: NotificationBellProps) {
@@ -894,6 +1001,90 @@ function FeedView({
         </section>
       ) : null}
     </>
+  )
+}
+
+function JobsView({ copy, jobs, loading, error, onOpenProject, onApplyJob }: JobsViewProps) {
+  const [applyingRoleId, setApplyingRoleId] = useState<number | null>(null)
+  const applyingJob = jobs.find((job) => job.roleId === applyingRoleId) ?? null
+
+  useEffect(() => {
+    if (!applyingJob) {
+      return
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setApplyingRoleId(null)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [applyingJob])
+
+  return (
+    <section className="jobs-view">
+      {loading ? <p className="state-card">{copy.loading}</p> : null}
+      {error ? <p className="state-card state-card--error">{error}</p> : null}
+
+      {!loading && !error && jobs.length === 0 ? (
+        <article className="state-card">
+          <strong>{copy.emptyTitle}</strong>
+          <p className="state-card__copy">{copy.emptyCopy}</p>
+        </article>
+      ) : null}
+
+      {!loading && !error && jobs.length > 0 ? (
+        <div className="jobs-list" aria-label={copy.ariaLabel}>
+          {jobs.map((job) => (
+            <article className="job-card" key={job.id}>
+              <div className="job-card__header">
+                <h2>{job.roleTitle}</h2>
+                <button className="job-card__project-link" type="button" onClick={() => onOpenProject(job.projectSlug)}>
+                  {job.projectTitle}
+                </button>
+              </div>
+              <div className="job-card__commitment">
+                <SafeMarkdown text={job.roleCommitment} />
+              </div>
+              <div className="job-card__actions">
+                <button className="primary-button" type="button" onClick={() => setApplyingRoleId(job.roleId)}>
+                  {copy.apply}
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      {applyingJob ? (
+        <div className="job-application-modal" role="presentation" onMouseDown={() => setApplyingRoleId(null)}>
+          <article
+            className="job-application-modal__panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="job-application-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="job-application-modal__header">
+              <h2 id="job-application-title">{applyingJob.roleTitle}</h2>
+              <button className="job-card__project-link" type="button" onClick={() => onOpenProject(applyingJob.projectSlug)}>
+                {applyingJob.projectTitle}
+              </button>
+            </div>
+            <RoleApplicationForm
+              copy={copy}
+              roleId={applyingJob.roleId}
+              onSubmit={async (payload) => {
+                await onApplyJob(payload)
+              }}
+              onCancel={() => setApplyingRoleId(null)}
+            />
+          </article>
+        </div>
+      ) : null}
+    </section>
   )
 }
 
@@ -1393,6 +1584,9 @@ function routeFromLocation(location: Location): RouteState {
   }
   if (location.pathname === '/profile') {
     return { name: 'profile' }
+  }
+  if (location.pathname === '/jobs') {
+    return { name: 'jobs' }
   }
   if (segments.length === 2 && segments[0] === 'users') {
     return { name: 'publicProfile', publicId: decodeURIComponent(segments[1]) }

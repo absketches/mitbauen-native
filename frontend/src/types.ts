@@ -6,6 +6,7 @@ export type FounderInfo = {
 }
 
 export type OpenRole = {
+  id?: number
   title: string
   commitment: string
 }
@@ -44,6 +45,19 @@ export type Project = {
 
 export type ProjectFeedResponse = {
   projects: Project[]
+}
+
+export type JobListing = {
+  id: string
+  roleId: number
+  projectSlug: string
+  projectTitle: string
+  roleTitle: string
+  roleCommitment: string
+}
+
+export type JobsResponse = {
+  jobs: JobListing[]
 }
 
 export type ProjectDetails = Project & {
@@ -170,6 +184,16 @@ export type ProjectCommentResponse = {
 
 export type ProjectCommentPayload = {
   body: string
+}
+
+export type JobApplicationPayload = {
+  roleId: number
+  fit: string
+  availability: string
+}
+
+export type JobApplicationResponse = {
+  sent: boolean
 }
 
 export type ProjectCommentsReadResponse = {

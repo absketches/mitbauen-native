@@ -5,7 +5,7 @@ import berlin.yuna.typemap.model.TypeList;
 import io.github.absketches.mitbauen.nativeapp.auth.AuthService;
 import io.github.absketches.mitbauen.nativeapp.auth.AuthUtil;
 import io.github.absketches.mitbauen.nativeapp.auth.EmailVerificationSettings;
-import io.github.absketches.mitbauen.nativeapp.auth.VerificationEmailSender;
+import io.github.absketches.mitbauen.nativeapp.auth.TransactionalEmailSender;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
 import io.github.absketches.mitbauen.nativeapp.db.PostgresTestDatabase;
 import io.github.absketches.mitbauen.nativeapp.db.TestDatabaseMigrations;
@@ -26,7 +26,7 @@ class ProjectsApiTest {
     private static final String PRIMARY_PASSWORD = "SuperSafe1";
     private static final EmailVerificationSettings EMAIL_VERIFICATION_SETTINGS =
         new EmailVerificationSettings("https://www.mitbauen.space", "Mitbauen <no-reply@mail.mitbauen.space>", "");
-    private static final VerificationEmailSender NOOP_VERIFICATION_EMAIL_SENDER =
+    private static final TransactionalEmailSender NOOP_TRANSACTIONAL_EMAIL_SENDER =
         (recipientEmail, recipientName, verificationUrl) -> { };
 
     private Nano nano;
@@ -464,12 +464,12 @@ class ProjectsApiTest {
     }
 
     private Nano newTestNano() {
-        return newTestNano(EMAIL_VERIFICATION_SETTINGS, NOOP_VERIFICATION_EMAIL_SENDER);
+        return newTestNano(EMAIL_VERIFICATION_SETTINGS, NOOP_TRANSACTIONAL_EMAIL_SENDER);
     }
 
     private Nano newTestNano(
         final EmailVerificationSettings emailVerificationSettings,
-        final VerificationEmailSender verificationEmailSender
+        final TransactionalEmailSender transactionalEmailSender
     ) {
         final PostgresTestDatabase.DatabaseConfig databaseConfig = PostgresTestDatabase.createDatabase("projects");
         TestDatabaseMigrations.migrate(databaseConfig.jdbcUrl(), databaseConfig.jdbcUser(), databaseConfig.jdbcPassword());
@@ -486,7 +486,7 @@ class ProjectsApiTest {
             ),
             new HttpServer(),
             new HttpClient(),
-            new AuthService(databaseRuntime, emailVerificationSettings, verificationEmailSender),
+            new AuthService(databaseRuntime, emailVerificationSettings, transactionalEmailSender),
             new ProjectFeedService(databaseRuntime)
         );
     }

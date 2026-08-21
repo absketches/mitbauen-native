@@ -26,14 +26,6 @@ public class NotificationsUtil {
         ResponseUtil.respondOk(event, Map.of("notifications", notifications.stream().map(NotificationsUtil::notificationToMap).toList()));
     }
 
-    public static void respondUnauthorized(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondUnauthorized(event, AUTH_REQUIRED_CODE);
-    }
-
-    public static void respondForbidden(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondForbidden(event, EMAIL_UNVERIFIED_CODE);
-    }
-
     public static void respondOptions(final Event<HttpObject, HttpObject> event) {
         ResponseUtil.respondOptions(event);
     }

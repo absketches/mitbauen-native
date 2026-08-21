@@ -18,12 +18,13 @@
 - backend-owned password hashing and session cookies
 - explicit module boundaries
 
-## Planned backend modules
+## Backend modules
 
 - auth
 - users
 - projects
 - roles
+- jobs
 - messages
 - comments
 - notifications
