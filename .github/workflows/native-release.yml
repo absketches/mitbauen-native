@@ -1,24 +1,15 @@
 name: Native Release
 
 on:
-  workflow_run:
-    workflows:
-      - Native E2E
-    types:
-      - completed
-    branches:
-      - main
+  workflow_dispatch:
 
 concurrency:
-  group: native-release-${{ github.event.workflow_run.head_sha || github.ref }}
+  group: native-release-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
   release:
-    if: >
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -29,8 +20,27 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 1
+
+      - name: Find successful Native E2E run
+        id: native_e2e
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          run_id="$(gh api --method GET "repos/${{ github.repository }}/actions/workflows/native-e2e.yml/runs" \
+            -f branch=main \
+            -f event=push \
+            -f status=success \
+            -f head_sha="${GITHUB_SHA}" \
+            --jq '.workflow_runs[0].id // empty')"
+
+          if [ -z "$run_id" ]; then
+            echo "No successful Native E2E run found for ${GITHUB_SHA} on main."
+            exit 1
+          fi
+
+          echo "run_id=${run_id}" >> "$GITHUB_OUTPUT"
 
       - name: Download tested native artifacts
         env:
@@ -38,7 +48,7 @@ jobs:
         run: |
           rm -rf .artifacts/downloaded .artifacts/release
           mkdir -p .artifacts/downloaded .artifacts/release
-          gh run download "${{ github.event.workflow_run.id }}" \
+          gh run download "${{ steps.native_e2e.outputs.run_id }}" \
             --name mitbauen-native-host-deploy \
             --dir .artifacts/downloaded
 
