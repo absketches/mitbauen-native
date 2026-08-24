@@ -4,7 +4,7 @@ Date: 2026-08-24
 
 Status: Accepted
 
-Commit provenance: `f599608` ("feat: Add project description translation fallback") and `3265f82` ("undo temporary backfill logic for project translations").
+Commit provenance: `f599608` ("feat: Add project description translation fallback") and `8da4af1` ("undo temporary backfill logic for project translations").
 
 ## Context
 
@@ -23,7 +23,7 @@ successful results in `project_description_translations`.
 
 Read APIs resolve `descriptionViews` from authored descriptions plus persisted
 translation rows. Translated views are marked as tool translations so the UI can
-show a disclaimer. Temporary manual backfill code and scripts have been removed in commit `3265f82`.
+show a disclaimer. Temporary manual backfill code and scripts have been removed in commit `8da4af1`.
 
 ## Consequences
 
