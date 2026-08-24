@@ -186,6 +186,50 @@ test('shows project descriptions for the selected language only', async () => {
   await expect.element(screen.getByText('English project description written by the creator.')).toBeVisible()
 })
 
+test('shows translated project descriptions with a disclaimer', async () => {
+  window.history.pushState({}, '', '/')
+  const localizedProject: Project = {
+    ...baseProjects[0],
+    descriptions: {
+      de: null,
+      en: 'English project description written by the creator.',
+    },
+    descriptionViews: {
+      de: {
+        text: 'Deutsche Beschreibung, die durch ein Tool erzeugt wurde.',
+        language: 'de',
+        originalLanguage: 'en',
+        translated: true,
+        source: 'tool_translation',
+      },
+      en: {
+        text: 'English project description written by the creator.',
+        language: 'en',
+        originalLanguage: 'en',
+        translated: false,
+        source: 'original',
+      },
+    },
+  }
+
+  const screen = await render(
+    <App
+      api={{
+        loadProjects: async () => [localizedProject],
+        loadNotifications: async () => [],
+        loadSession: async (): Promise<SessionResponse> => ({
+          authenticated: true,
+          user: { displayName: 'Alex Builder', email: 'alex@example.test', emailVerified: true },
+        }),
+      }}
+    />,
+  )
+
+  await expect.element(screen.getByText('Deutsche Beschreibung, die durch ein Tool erzeugt wurde.')).toBeVisible()
+  await expect.element(screen.getByText('Mit einem Tool übersetzt. Diese Version wurde nicht von der erstellenden Person bereitgestellt.')).toBeVisible()
+  expect(document.body.textContent).not.toContain('Keine deutsche Beschreibung verfügbar.')
+})
+
 test('shows open roles on the jobs page for verified members', async () => {
   window.history.pushState({}, '', '/jobs')
   window.localStorage.setItem('mitbauen_language', 'en')

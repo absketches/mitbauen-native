@@ -61,7 +61,12 @@ public class NotificationsService extends Service {
     }
 
     private void handleNotificationsLookup(final Event<HttpObject, HttpObject> event) {
-        final Optional<SessionUser> sessionUser = verifiedSessionUser(event);
+        final Optional<SessionUser> sessionUser = AuthUtil.verifiedSessionUser(
+            event,
+            databaseRuntime.dataSource(),
+            NotificationsUtil.AUTH_REQUIRED_CODE,
+            NotificationsUtil.EMAIL_UNVERIFIED_CODE
+        );
         if (sessionUser.isEmpty()) {
             return;
         }
@@ -71,12 +76,4 @@ public class NotificationsService extends Service {
         );
     }
 
-    private Optional<SessionUser> verifiedSessionUser(final Event<HttpObject, HttpObject> event) {
-        return AuthUtil.verifiedSessionUser(
-            event,
-            databaseRuntime.dataSource(),
-            NotificationsUtil.AUTH_REQUIRED_CODE,
-            NotificationsUtil.EMAIL_UNVERIFIED_CODE
-        );
-    }
 }

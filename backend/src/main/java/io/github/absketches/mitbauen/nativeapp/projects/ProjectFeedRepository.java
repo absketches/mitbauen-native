@@ -1,6 +1,7 @@
 package io.github.absketches.mitbauen.nativeapp.projects;
 
 import io.github.absketches.mitbauen.nativeapp.db.SqlTransactions;
+import io.github.absketches.mitbauen.nativeapp.db.SqlUtil;
 import io.github.absketches.mitbauen.nativeapp.projects.links.ProjectLink;
 import io.github.absketches.mitbauen.nativeapp.projects.links.ProjectLinksRepository;
 import io.github.absketches.mitbauen.nativeapp.projects.media.ProjectImage;
@@ -19,9 +20,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.StringJoiner;
 
 public class ProjectFeedRepository {
+
+    private static final int PROJECT_FEED_LIMIT = 100;
 
     private static final String PROJECT_FEED_SQL = """
         select
@@ -47,6 +49,7 @@ public class ProjectFeedRepository {
             end,
             p.created_at desc,
             p.id desc
+        limit ?
         """;
 
     private static final String PROJECT_DETAILS_SQL = """
@@ -78,28 +81,31 @@ public class ProjectFeedRepository {
         final List<Long> projectIds = new ArrayList<>();
 
         try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(PROJECT_FEED_SQL);
-             ResultSet resultSet = statement.executeQuery()) {
-            while (resultSet.next()) {
-                final long projectId = resultSet.getLong("id");
-                projectIds.add(projectId);
-                projects.add(new ProjectCard(
-                    projectId,
-                    resultSet.getString("slug"),
-                    resultSet.getString("title"),
-                    descriptionsFrom(resultSet),
-                    resultSet.getString("status"),
-                    new FounderInfo(
-                        resultSet.getString("founder_public_id"),
-                        resultSet.getString("founder_name"),
-                        resultSet.getString("founder_role_title"),
-                        resultSet.getString("founder_commitment")
-                    ),
-                    List.of(),
-                    List.of(),
-                    List.of(),
-                    resultSet.getTimestamp("created_at").toInstant()
-                ));
+             PreparedStatement statement = connection.prepareStatement(PROJECT_FEED_SQL)) {
+            statement.setInt(1, PROJECT_FEED_LIMIT);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    final long projectId = resultSet.getLong("id");
+                    projectIds.add(projectId);
+                    projects.add(new ProjectCard(
+                        projectId,
+                        resultSet.getString("slug"),
+                        resultSet.getString("title"),
+                        descriptionsFrom(resultSet),
+                        resultSet.getString("status"),
+                        new FounderInfo(
+                            resultSet.getString("founder_public_id"),
+                            resultSet.getString("founder_name"),
+                            resultSet.getString("founder_role_title"),
+                            resultSet.getString("founder_commitment")
+                        ),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        Map.of(),
+                        resultSet.getTimestamp("created_at").toInstant()
+                    ));
+                }
             }
         } catch (SQLException exception) {
             throw new IllegalStateException("Unable to load project feed", exception);
@@ -112,6 +118,8 @@ public class ProjectFeedRepository {
         final Map<Long, List<OpenRole>> openRolesByProjectId = loadOpenRoles(dataSource, projectIds);
         final Map<Long, List<ProjectLink>> linksByProjectId = ProjectLinksRepository.loadProjectLinks(dataSource, projectIds);
         final Map<Long, List<ProjectImage>> imagesByProjectId = ProjectImagesRepository.loadProjectImages(dataSource, projectIds);
+        final Map<Long, Map<String, ProjectDescriptionTranslation>> translationsByProjectId =
+            ProjectDescriptionTranslationRepository.loadTranslations(dataSource, projectIds);
         return projects.stream()
             .map(project -> new ProjectCard(
                 project.id(),
@@ -123,6 +131,7 @@ public class ProjectFeedRepository {
                 openRolesByProjectId.getOrDefault(project.id(), List.of()),
                 linksByProjectId.getOrDefault(project.id(), List.of()),
                 imagesByProjectId.getOrDefault(project.id(), List.of()),
+                translationsByProjectId.getOrDefault(project.id(), Map.of()),
                 project.createdAt()
             ))
             .toList();
@@ -137,6 +146,7 @@ public class ProjectFeedRepository {
                     return Optional.empty();
                 }
                 final long projectId = resultSet.getLong("id");
+                final ProjectAssociations associations = loadProjectAssociations(dataSource, projectId);
                 return Optional.of(new ProjectDetails(
                     projectId,
                     resultSet.getLong("owner_user_id"),
@@ -150,9 +160,10 @@ public class ProjectFeedRepository {
                         resultSet.getString("founder_role_title"),
                         resultSet.getString("founder_commitment")
                     ),
-                    loadOpenRoles(dataSource, List.of(projectId)).getOrDefault(projectId, List.of()),
-                    ProjectLinksRepository.loadProjectLinks(dataSource, List.of(projectId)).getOrDefault(projectId, List.of()),
-                    ProjectImagesRepository.loadProjectImages(dataSource, List.of(projectId)).getOrDefault(projectId, List.of()),
+                    associations.openRoles(),
+                    associations.links(),
+                    associations.images(),
+                    associations.translations(),
                     resultSet.getTimestamp("created_at").toInstant(),
                     resultSet.getTimestamp("updated_at").toInstant()
                 ));
@@ -162,7 +173,7 @@ public class ProjectFeedRepository {
         }
     }
 
-    public static String createProject(final DataSource dataSource, final long ownerUserId, final ProjectInput input) {
+    public static CreatedProject createProject(final DataSource dataSource, final long ownerUserId, final ProjectInput input) {
         return SqlTransactions.execute(
             dataSource,
             "Unable to create project",
@@ -173,17 +184,25 @@ public class ProjectFeedRepository {
                 insertFounderRole(connection, projectId, input);
                 insertOpenRoles(connection, projectId, input.openRoles());
                 ProjectLinksRepository.insertProjectLinks(connection, projectId, input.links());
-                return slug;
+                return new CreatedProject(projectId, slug);
             }
         );
     }
 
-    public static void updateProject(final DataSource dataSource, final long projectId, final ProjectInput input) {
+    public static void updateProject(
+        final DataSource dataSource,
+        final long projectId,
+        final ProjectInput input,
+        final boolean clearTranslations
+    ) {
         SqlTransactions.execute(
             dataSource,
             "Unable to update project",
             connection -> {
                 updateProjectRow(connection, projectId, input);
+                if (clearTranslations) {
+                    ProjectDescriptionTranslationRepository.deleteTranslations(connection, projectId);
+                }
                 updateFounderRole(connection, projectId, input);
                 replaceOpenRoles(connection, projectId, input.openRoles());
                 ProjectLinksRepository.replaceProjectLinks(connection, projectId, input.links());
@@ -323,9 +342,6 @@ public class ProjectFeedRepository {
             return Map.of();
         }
 
-        final StringJoiner placeholders = new StringJoiner(", ");
-        projectIds.forEach(projectId -> placeholders.add("?"));
-
         final String sql = """
             select
                 case when owner.is_deleted = false then role.id end as id,
@@ -337,15 +353,13 @@ public class ProjectFeedRepository {
             join users owner on owner.id = project.owner_user_id
             where role.is_open = true and role.is_founder = false and role.project_id in (%s)
             order by role.project_id, role.sort_order asc, role.id asc
-            """.formatted(placeholders);
+            """.formatted(SqlUtil.placeholders(projectIds.size()));
 
         final Map<Long, List<OpenRole>> roles = new HashMap<>();
 
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
-            for (int index = 0; index < projectIds.size(); index++) {
-                statement.setLong(index + 1, projectIds.get(index));
-            }
+            SqlUtil.bindLongs(statement, projectIds);
 
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
@@ -367,6 +381,16 @@ public class ProjectFeedRepository {
     private static Long nullableLong(final ResultSet resultSet, final String column) throws SQLException {
         final long value = resultSet.getLong(column);
         return resultSet.wasNull() ? null : value;
+    }
+
+    private static ProjectAssociations loadProjectAssociations(final DataSource dataSource, final long projectId) {
+        final List<Long> projectIds = List.of(projectId);
+        return new ProjectAssociations(
+            loadOpenRoles(dataSource, projectIds).getOrDefault(projectId, List.of()),
+            ProjectLinksRepository.loadProjectLinks(dataSource, projectIds).getOrDefault(projectId, List.of()),
+            ProjectImagesRepository.loadProjectImages(dataSource, projectIds).getOrDefault(projectId, List.of()),
+            ProjectDescriptionTranslationRepository.loadTranslations(dataSource, projectIds).getOrDefault(projectId, Map.of())
+        );
     }
 
     private static ProjectDescriptions descriptionsFrom(final ResultSet resultSet) throws SQLException {
@@ -408,5 +432,16 @@ public class ProjectFeedRepository {
             .replaceAll("[^a-z0-9]+", "-")
             .replaceAll("(^-|-$)", "");
         return slug.isBlank() ? "project" : slug;
+    }
+
+    public record CreatedProject(long id, String slug) {
+    }
+
+    private record ProjectAssociations(
+        List<OpenRole> openRoles,
+        List<ProjectLink> links,
+        List<ProjectImage> images,
+        Map<String, ProjectDescriptionTranslation> translations
+    ) {
     }
 }

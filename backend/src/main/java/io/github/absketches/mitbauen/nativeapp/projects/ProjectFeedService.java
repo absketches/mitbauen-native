@@ -4,7 +4,7 @@ import berlin.yuna.typemap.model.TypeMapI;
 import io.github.absketches.mitbauen.nativeapp.auth.SessionUser;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
 import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
-import io.github.absketches.mitbauen.nativeapp.projects.media.ProjectMediaService;
+import io.github.absketches.mitbauen.nativeapp.projects.media.ProjectMediaHandler;
 import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.HttpObject;
@@ -21,15 +21,18 @@ public class ProjectFeedService extends Service {
 
     private final DatabaseRuntime databaseRuntime;
     private final ProjectAccessGuard accessGuard;
-    private final ProjectMutationService mutationService;
-    private final ProjectMediaService mediaService;
+    private final ProjectMutationHandler mutationHandler;
+    private final ProjectMediaHandler mediaHandler;
     private String basePath;
 
     public ProjectFeedService(final DatabaseRuntime databaseRuntime) {
         this.databaseRuntime = databaseRuntime;
         this.accessGuard = new ProjectAccessGuard(databaseRuntime.dataSource());
-        this.mutationService = new ProjectMutationService(databaseRuntime.dataSource(), accessGuard);
-        this.mediaService = new ProjectMediaService(databaseRuntime.dataSource(), accessGuard);
+        this.mutationHandler = new ProjectMutationHandler(
+            databaseRuntime.dataSource(),
+            accessGuard
+        );
+        this.mediaHandler = new ProjectMediaHandler(databaseRuntime.dataSource(), accessGuard);
     }
 
     @Override
@@ -104,7 +107,7 @@ public class ProjectFeedService extends Service {
                         ),
                         () -> ResponseUtil.respondNotFound(event, ProjectFeedUtil.PROJECT_NOT_FOUND_CODE)
                     );
-            case ProjectFeedUtil.ProjectImageRoute imageRoute -> mediaService.handleGetProjectImage(event, imageRoute);
+            case ProjectFeedUtil.ProjectImageRoute imageRoute -> mediaHandler.handleGetProjectImage(event, imageRoute);
             case ProjectFeedUtil.ProjectImagesRoute __ -> ResponseUtil.respondMethodNotAllowed(event, ProjectFeedUtil.METHOD_NOT_ALLOWED_CODE);
             case ProjectFeedUtil.NoMatch __ -> {
             }
@@ -113,7 +116,7 @@ public class ProjectFeedService extends Service {
 
     protected void handlePost(final Event<HttpObject, HttpObject> event, final ProjectFeedUtil.RoutesMatch route) {
         if (route instanceof ProjectFeedUtil.ProjectImagesRoute imagesRoute) {
-            mediaService.handlePostProjectImage(event, imagesRoute);
+            mediaHandler.handlePostProjectImage(event, imagesRoute);
             return;
         }
         if (!(route instanceof ProjectFeedUtil.ProjectFeedRoute)) {
@@ -121,7 +124,7 @@ public class ProjectFeedService extends Service {
             return;
         }
 
-        mutationService.handleCreateProject(event);
+        mutationHandler.handleCreateProject(event);
     }
 
     protected void handlePut(final Event<HttpObject, HttpObject> event, final ProjectFeedUtil.RoutesMatch route) {
@@ -130,12 +133,12 @@ public class ProjectFeedService extends Service {
             return;
         }
 
-        mutationService.handleUpdateProject(event, slug);
+        mutationHandler.handleUpdateProject(event, slug);
     }
 
     protected void handleDelete(final Event<HttpObject, HttpObject> event, final ProjectFeedUtil.RoutesMatch route) {
         if (route instanceof ProjectFeedUtil.ProjectImageRoute imageRoute) {
-            mediaService.handleDeleteProjectImage(event, imageRoute);
+            mediaHandler.handleDeleteProjectImage(event, imageRoute);
             return;
         }
         if (!(route instanceof ProjectFeedUtil.ProjectDetailsRoute(String slug))) {
@@ -143,6 +146,6 @@ public class ProjectFeedService extends Service {
             return;
         }
 
-        mutationService.handleDeleteProject(event, slug);
+        mutationHandler.handleDeleteProject(event, slug);
     }
 }

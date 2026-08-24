@@ -1479,7 +1479,7 @@ function VerificationConfirmView({
   useEffect(() => {
     let cancelled = false
 
-    if (!token) {
+    if (!token || status !== 'loading') {
       return
     }
 
@@ -1504,7 +1504,7 @@ function VerificationConfirmView({
     return () => {
       cancelled = true
     }
-  }, [copy.invalid, onConfirm, onRefreshSession, token])
+  }, [copy.invalid, onConfirm, onRefreshSession, status, token])
 
   if (status === 'loading') {
     return (

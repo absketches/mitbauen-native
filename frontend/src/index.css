@@ -900,6 +900,17 @@ textarea {
   font-style: italic;
 }
 
+.project-card__translation-note,
+.project-detail__translation-note {
+  color: rgba(15, 15, 15, 0.48);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.project-card__translation-note {
+  margin: -0.55rem 0 1rem;
+}
+
 .project-card--without-image .project-card__summary {
   line-clamp: 7;
   -webkit-line-clamp: 7;
@@ -1417,6 +1428,10 @@ textarea {
   margin: 0.85rem 0 0;
   font-size: 1.02rem;
   line-height: 1.8;
+}
+
+.project-detail__translation-note {
+  margin: 0.7rem 0 0;
 }
 
 .project-detail__panel--dark {

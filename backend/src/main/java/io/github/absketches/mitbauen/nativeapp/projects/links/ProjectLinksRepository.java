@@ -1,5 +1,7 @@
 package io.github.absketches.mitbauen.nativeapp.projects.links;
 
+import io.github.absketches.mitbauen.nativeapp.db.SqlUtil;
+
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -9,7 +11,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.StringJoiner;
 
 public class ProjectLinksRepository {
 
@@ -21,23 +22,18 @@ public class ProjectLinksRepository {
             return Map.of();
         }
 
-        final StringJoiner placeholders = new StringJoiner(", ");
-        projectIds.forEach(projectId -> placeholders.add("?"));
-
         final String sql = """
             select project_id, label, url
             from project_links
             where project_id in (%s)
             order by project_id, sort_order asc, id asc
-            """.formatted(placeholders);
+            """.formatted(SqlUtil.placeholders(projectIds.size()));
 
         final Map<Long, List<ProjectLink>> links = new HashMap<>();
 
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
-            for (int index = 0; index < projectIds.size(); index++) {
-                statement.setLong(index + 1, projectIds.get(index));
-            }
+            SqlUtil.bindLongs(statement, projectIds);
 
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {

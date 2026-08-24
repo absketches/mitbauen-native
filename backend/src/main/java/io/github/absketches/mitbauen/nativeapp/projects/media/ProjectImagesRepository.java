@@ -1,6 +1,7 @@
 package io.github.absketches.mitbauen.nativeapp.projects.media;
 
 import io.github.absketches.mitbauen.nativeapp.db.SqlTransactions;
+import io.github.absketches.mitbauen.nativeapp.db.SqlUtil;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -14,7 +15,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.StringJoiner;
 
 public class ProjectImagesRepository {
 
@@ -26,23 +26,18 @@ public class ProjectImagesRepository {
             return Map.of();
         }
 
-        final StringJoiner placeholders = new StringJoiner(", ");
-        projectIds.forEach(projectId -> placeholders.add("?"));
-
         final String sql = """
             select id, project_id, content_type, size_bytes, alt_text, created_at
             from project_images
             where project_id in (%s)
             order by project_id, sort_order asc, id asc
-            """.formatted(placeholders);
+            """.formatted(SqlUtil.placeholders(projectIds.size()));
 
         final Map<Long, List<ProjectImage>> images = new HashMap<>();
 
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
-            for (int index = 0; index < projectIds.size(); index++) {
-                statement.setLong(index + 1, projectIds.get(index));
-            }
+            SqlUtil.bindLongs(statement, projectIds);
 
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {

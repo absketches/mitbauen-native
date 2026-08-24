@@ -3,6 +3,7 @@ package io.github.absketches.mitbauen.nativeapp.comments;
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeList;
 import io.github.absketches.mitbauen.nativeapp.auth.AuthService;
+import io.github.absketches.mitbauen.nativeapp.auth.AuthServiceTestFactory;
 import io.github.absketches.mitbauen.nativeapp.auth.AuthUtil;
 import io.github.absketches.mitbauen.nativeapp.auth.EmailVerificationSettings;
 import io.github.absketches.mitbauen.nativeapp.auth.TransactionalEmailSender;
@@ -176,11 +177,14 @@ class ProjectDiscussionApiTest {
         );
         return new Nano(
             Map.of(
-                HttpServer.CONFIG_SERVICE_HTTP_PORT, 0
+                HttpServer.CONFIG_SERVICE_HTTP_PORT, 0,
+                EmailVerificationSettings.CONFIG_APP_PUBLIC_BASE_URL, EMAIL_VERIFICATION_SETTINGS.publicBaseUrl(),
+                EmailVerificationSettings.CONFIG_APP_EMAIL_FROM, EMAIL_VERIFICATION_SETTINGS.emailFrom(),
+                EmailVerificationSettings.CONFIG_RESEND_API_KEY, EMAIL_VERIFICATION_SETTINGS.resendApiKey()
             ),
             new HttpServer(),
             new HttpClient(),
-            new AuthService(databaseRuntime, EMAIL_VERIFICATION_SETTINGS, NOOP_TRANSACTIONAL_EMAIL_SENDER),
+            AuthServiceTestFactory.authService(databaseRuntime, EMAIL_VERIFICATION_SETTINGS, NOOP_TRANSACTIONAL_EMAIL_SENDER),
             new ProjectFeedService(databaseRuntime),
             new ProjectCommentsService(databaseRuntime),
             new NotificationsService(databaseRuntime)

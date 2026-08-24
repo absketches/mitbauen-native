@@ -2,6 +2,8 @@ package io.github.absketches.mitbauen.nativeapp.jobs;
 
 import berlin.yuna.typemap.model.TypeMapI;
 import io.github.absketches.mitbauen.nativeapp.auth.AuthUtil;
+import io.github.absketches.mitbauen.nativeapp.auth.EmailVerificationSettings;
+import io.github.absketches.mitbauen.nativeapp.auth.ResendTransactionalEmailSender;
 import io.github.absketches.mitbauen.nativeapp.auth.SessionUser;
 import io.github.absketches.mitbauen.nativeapp.auth.TransactionalEmailSender;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
@@ -18,15 +20,26 @@ import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST;
 public class JobsService extends Service {
 
     private final DatabaseRuntime databaseRuntime;
-    private final TransactionalEmailSender emailSender;
+    private EmailVerificationSettings emailSettings;
+    private TransactionalEmailSender emailSender;
 
-    public JobsService(final DatabaseRuntime databaseRuntime, final TransactionalEmailSender emailSender) {
+    public JobsService(final DatabaseRuntime databaseRuntime) {
+        this(databaseRuntime, null);
+    }
+
+    JobsService(final DatabaseRuntime databaseRuntime, final TransactionalEmailSender emailSender) {
         this.databaseRuntime = databaseRuntime;
         this.emailSender = emailSender;
     }
 
     @Override
     public void start() {
+        if (emailSender == null) {
+            emailSender = new ResendTransactionalEmailSender(
+                requiredConfig(emailSettings.resendApiKey(), EmailVerificationSettings.CONFIG_RESEND_API_KEY),
+                requiredConfig(emailSettings.emailFrom(), EmailVerificationSettings.CONFIG_APP_EMAIL_FROM)
+            );
+        }
         context.info(() -> "[{}] started on path {}", name(), JobsUtil.JOBS_PATH);
     }
 
@@ -47,6 +60,11 @@ public class JobsService extends Service {
 
     @Override
     public void configure(final TypeMapI<?> changes, final TypeMapI<?> merged) {
+        emailSettings = new EmailVerificationSettings(
+            merged.asStringOpt(EmailVerificationSettings.CONFIG_APP_PUBLIC_BASE_URL).filter(value -> !value.isBlank()).orElse(null),
+            merged.asStringOpt(EmailVerificationSettings.CONFIG_APP_EMAIL_FROM).filter(value -> !value.isBlank()).orElse(null),
+            merged.asStringOpt(EmailVerificationSettings.CONFIG_RESEND_API_KEY).filter(value -> !value.isBlank()).orElse(null)
+        );
     }
 
     protected void handleHttpEvent(final Event<HttpObject, HttpObject> event) {
@@ -155,5 +173,12 @@ public class JobsService extends Service {
             context.error(() -> "Unable to send role application email", exception);
             ResponseUtil.respondServerError(event, JobsUtil.JOB_APPLICATION_SEND_FAILED_CODE);
         }
+    }
+
+    private static String requiredConfig(final String value, final String key) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException("Missing required config: " + key);
+        }
+        return value;
     }
 }

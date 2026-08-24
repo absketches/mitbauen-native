@@ -20,10 +20,14 @@ public class AuthService extends Service {
     private static final int MAX_VERIFICATION_EMAILS_PER_24_HOURS = 1;
 
     private final DatabaseRuntime databaseRuntime;
-    private final EmailVerificationSettings emailVerificationSettings;
-    private final TransactionalEmailSender transactionalEmailSender;
+    private EmailVerificationSettings emailVerificationSettings;
+    private TransactionalEmailSender transactionalEmailSender;
 
-    public AuthService(
+    public AuthService(final DatabaseRuntime databaseRuntime) {
+        this(databaseRuntime, null, null);
+    }
+
+    AuthService(
         final DatabaseRuntime databaseRuntime,
         final EmailVerificationSettings emailVerificationSettings,
         final TransactionalEmailSender transactionalEmailSender
@@ -35,6 +39,12 @@ public class AuthService extends Service {
 
     @Override
     public void start() {
+        if (transactionalEmailSender == null) {
+            transactionalEmailSender = new ResendTransactionalEmailSender(
+                requiredConfig(emailVerificationSettings.resendApiKey(), EmailVerificationSettings.CONFIG_RESEND_API_KEY),
+                requiredConfig(emailVerificationSettings.emailFrom(), EmailVerificationSettings.CONFIG_APP_EMAIL_FROM)
+            );
+        }
         context.info(() -> "[{}] started", name());
     }
 
@@ -55,6 +65,11 @@ public class AuthService extends Service {
 
     @Override
     public void configure(final TypeMapI<?> changes, final TypeMapI<?> merged) {
+        emailVerificationSettings = new EmailVerificationSettings(
+            merged.asStringOpt(EmailVerificationSettings.CONFIG_APP_PUBLIC_BASE_URL).filter(value -> !value.isBlank()).orElse(null),
+            merged.asStringOpt(EmailVerificationSettings.CONFIG_APP_EMAIL_FROM).filter(value -> !value.isBlank()).orElse(null),
+            merged.asStringOpt(EmailVerificationSettings.CONFIG_RESEND_API_KEY).filter(value -> !value.isBlank()).orElse(null)
+        );
     }
 
     protected void handleHttpEvent(final Event<HttpObject, HttpObject> event) {
@@ -409,7 +424,7 @@ public class AuthService extends Service {
         transactionalEmailSender.sendPasswordResetEmail(
             recipient.email(),
             recipient.displayName(),
-            AuthUtil.passwordResetUrl(emailVerificationSettings.publicBaseUrl(), token)
+            AuthUtil.passwordResetUrl(requiredConfig(emailVerificationSettings.publicBaseUrl(), EmailVerificationSettings.CONFIG_APP_PUBLIC_BASE_URL), token)
         );
     }
 
@@ -441,7 +456,7 @@ public class AuthService extends Service {
             transactionalEmailSender.sendVerificationEmail(
                 sessionUser.email(),
                 sessionUser.displayName(),
-                AuthUtil.emailVerificationUrl(emailVerificationSettings.publicBaseUrl(), token)
+                AuthUtil.emailVerificationUrl(requiredConfig(emailVerificationSettings.publicBaseUrl(), EmailVerificationSettings.CONFIG_APP_PUBLIC_BASE_URL), token)
             );
             AuthRepository.completeEmailVerificationSendAttempt(
                 databaseRuntime.dataSource(),
@@ -494,5 +509,12 @@ public class AuthService extends Service {
             return Boolean.parseBoolean(stringValue);
         }
         return false;
+    }
+
+    private static String requiredConfig(final String value, final String key) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException("Missing required config: " + key);
+        }
+        return value;
     }
 }

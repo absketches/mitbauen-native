@@ -12,12 +12,12 @@ import org.nanonative.nano.services.http.model.HttpObject;
 import javax.sql.DataSource;
 import java.util.Optional;
 
-public class ProjectMediaService {
+public class ProjectMediaHandler {
 
     private final DataSource dataSource;
     private final ProjectAccessGuard accessGuard;
 
-    public ProjectMediaService(final DataSource dataSource, final ProjectAccessGuard accessGuard) {
+    public ProjectMediaHandler(final DataSource dataSource, final ProjectAccessGuard accessGuard) {
         this.dataSource = dataSource;
         this.accessGuard = accessGuard;
     }

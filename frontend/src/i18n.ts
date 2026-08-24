@@ -209,6 +209,7 @@ export const COPY = {
       openRolesCount: (count: number) => `${count} open role${count === 1 ? '' : 's'}`,
       viewProject: 'View project',
       descriptionMissing: 'No English description available.',
+      translationDisclaimer: 'Translated by a tool. The creator has not provided this version.',
     },
     projectDetail: {
       status: {
@@ -235,6 +236,7 @@ export const COPY = {
       whatEyebrow: 'Overview',
       whatTitle: 'Description',
       descriptionMissing: 'No English description available.',
+      translationDisclaimer: 'Translated by a tool. The creator has not provided this version.',
       imageUnavailable: 'Image not available.',
       commitmentEyebrow: 'Founder commitment',
       openRolesEyebrow: 'Open roles',
@@ -546,6 +548,7 @@ export const COPY = {
       openRolesCount: (count: number) => `${count} offene Rolle${count === 1 ? '' : 'n'}`,
       viewProject: 'Projekt ansehen',
       descriptionMissing: 'Keine deutsche Beschreibung verfügbar.',
+      translationDisclaimer: 'Mit einem Tool übersetzt. Diese Version wurde nicht von der erstellenden Person bereitgestellt.',
     },
     projectDetail: {
       status: {
@@ -572,6 +575,7 @@ export const COPY = {
       whatEyebrow: 'Überblick',
       whatTitle: 'Beschreibung',
       descriptionMissing: 'Keine deutsche Beschreibung verfügbar.',
+      translationDisclaimer: 'Mit einem Tool übersetzt. Diese Version wurde nicht von der erstellenden Person bereitgestellt.',
       imageUnavailable: 'Bild nicht verfügbar.',
       commitmentEyebrow: 'Commitment der Gründerperson',
       openRolesEyebrow: 'Offene Rollen',

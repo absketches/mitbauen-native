@@ -11,3 +11,5 @@ V10__widen_project_field_limits.sql
 V11__add_project_media_and_links.sql
 V12__add_project_localized_descriptions.sql
 V13__add_job_applications.sql
+V14__add_project_description_translations.sql
+V15__add_project_role_lookup_indexes.sql

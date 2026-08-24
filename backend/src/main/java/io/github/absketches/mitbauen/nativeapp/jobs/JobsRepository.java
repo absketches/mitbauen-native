@@ -11,6 +11,8 @@ import java.util.Optional;
 
 public class JobsRepository {
 
+    private static final int JOBS_LIMIT = 200;
+
     private static final String JOBS_SQL = """
         select
             open_role.id as role_id,
@@ -26,6 +28,7 @@ public class JobsRepository {
             and p.status = 'active'
             and u.is_deleted = false
         order by p.created_at desc, p.id desc, open_role.sort_order asc, open_role.id asc
+        limit ?
         """;
 
     private JobsRepository() {
@@ -35,16 +38,18 @@ public class JobsRepository {
         final List<JobListing> jobs = new ArrayList<>();
 
         try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(JOBS_SQL);
-             ResultSet resultSet = statement.executeQuery()) {
-            while (resultSet.next()) {
-                jobs.add(new JobListing(
-                    resultSet.getLong("role_id"),
-                    resultSet.getString("project_slug"),
-                    resultSet.getString("project_title"),
-                    resultSet.getString("role_title"),
-                    resultSet.getString("role_commitment")
-                ));
+             PreparedStatement statement = connection.prepareStatement(JOBS_SQL)) {
+            statement.setInt(1, JOBS_LIMIT);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    jobs.add(new JobListing(
+                        resultSet.getLong("role_id"),
+                        resultSet.getString("project_slug"),
+                        resultSet.getString("project_title"),
+                        resultSet.getString("role_title"),
+                        resultSet.getString("role_commitment")
+                    ));
+                }
             }
         } catch (SQLException exception) {
             throw new IllegalStateException("Unable to load jobs", exception);

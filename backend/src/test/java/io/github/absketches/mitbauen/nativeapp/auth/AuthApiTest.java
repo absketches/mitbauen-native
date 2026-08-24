@@ -684,7 +684,10 @@ class AuthApiTest {
         );
         return new Nano(
             Map.of(
-                HttpServer.CONFIG_SERVICE_HTTP_PORT, 0
+                HttpServer.CONFIG_SERVICE_HTTP_PORT, 0,
+                EmailVerificationSettings.CONFIG_APP_PUBLIC_BASE_URL, emailVerificationSettings.publicBaseUrl(),
+                EmailVerificationSettings.CONFIG_APP_EMAIL_FROM, emailVerificationSettings.emailFrom(),
+                EmailVerificationSettings.CONFIG_RESEND_API_KEY, emailVerificationSettings.resendApiKey()
             ),
             new HttpServer(),
             new HttpClient(),

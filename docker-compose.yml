@@ -1,3 +1,5 @@
+name: mitbauen-native
+
 services:
   browser-tests:
     build:
@@ -12,15 +14,15 @@ services:
     image: postgres:16-alpine
     container_name: mitbauen-postgres
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${postgres_db}
+      POSTGRES_USER: ${postgres_user}
+      POSTGRES_PASSWORD: ${postgres_password}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${postgres_port:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${postgres_user} -d ${postgres_db}"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -32,19 +34,21 @@ services:
     container_name: mitbauen-backend
     environment:
       app_service_http_port: 8080
-      jdbc_database_url: ${JDBC_DATABASE_URL}
-      jdbc_database_user: ${JDBC_DATABASE_USER}
-      jdbc_database_password: ${JDBC_DATABASE_PASSWORD}
-      app_public_base_url: ${APP_PUBLIC_BASE_URL:-http://127.0.0.1:8080}
-      app_email_from: ${APP_EMAIL_FROM:-Mitbauen <no-reply@mail.mitbauen.space>}
-      resend_api_key: ${RESEND_API_KEY:-test-api-key}
+      jdbc_database_url: ${jdbc_database_url}
+      jdbc_database_user: ${jdbc_database_user}
+      jdbc_database_password: ${jdbc_database_password}
+      app_public_base_url: ${app_public_base_url:-http://127.0.0.1:8080}
+      app_email_from: ${app_email_from:-Mitbauen <no-reply@mail.mitbauen.space>}
+      resend_api_key: ${resend_api_key:-test-api-key}
+      app_translation_openai_api_key: ${app_translation_openai_api_key:-}
+      app_translation_openai_model: ${app_translation_openai_model:-gpt-5-mini}
     depends_on:
       browser-tests:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
     ports:
-      - "${BACKEND_PORT:-8080}:8080"
+      - "${backend_port:-8080}:8080"
 
 volumes:
   postgres_data:

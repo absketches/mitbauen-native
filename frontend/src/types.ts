@@ -30,11 +30,25 @@ export type ProjectDescriptions = {
   en: string | null
 }
 
+export type ProjectDescriptionView = {
+  text: string | null
+  language: 'de' | 'en'
+  originalLanguage: 'de' | 'en' | null
+  translated: boolean
+  source: 'original' | 'tool_translation' | 'missing'
+}
+
+export type ProjectDescriptionViews = {
+  de: ProjectDescriptionView
+  en: ProjectDescriptionView
+}
+
 export type Project = {
   id: number
   slug: string
   title: string
   descriptions: ProjectDescriptions
+  descriptionViews?: ProjectDescriptionViews
   status: 'active' | 'completed' | 'dormant'
   founder: FounderInfo
   openRoles: OpenRole[]

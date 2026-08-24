@@ -158,7 +158,10 @@ public class ProjectFeedUtil {
         return Map.of("projects", projects.stream().map(ProjectFeedUtil::projectToMap).toList());
     }
 
-    public static Map<String, Object> projectDetailsPayload(final ProjectDetails project, final boolean canManage) {
+    public static Map<String, Object> projectDetailsPayload(
+        final ProjectDetails project,
+        final boolean canManage
+    ) {
         return Map.of("project", projectDetailsToMap(project, canManage));
     }
 
@@ -176,6 +179,7 @@ public class ProjectFeedUtil {
         payload.put("slug", project.slug());
         payload.put("title", project.title());
         payload.put("descriptions", descriptionsToMap(project.descriptions()));
+        payload.put("descriptionViews", descriptionViewsToMap(ProjectDescriptionResolver.viewsFor(project.descriptions(), project.translations())));
         payload.put("status", project.status());
         payload.put("founder", founderToMap(project.founder()));
         payload.put("openRoles", project.openRoles().stream().map(ProjectFeedUtil::openRoleToMap).toList());
@@ -185,13 +189,17 @@ public class ProjectFeedUtil {
         return payload;
     }
 
-    private static Map<String, Object> projectDetailsToMap(final ProjectDetails project, final boolean canManage) {
+    private static Map<String, Object> projectDetailsToMap(
+        final ProjectDetails project,
+        final boolean canManage
+    ) {
         final Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("id", project.id());
         payload.put("canManage", canManage);
         payload.put("slug", project.slug());
         payload.put("title", project.title());
         payload.put("descriptions", descriptionsToMap(project.descriptions()));
+        payload.put("descriptionViews", descriptionViewsToMap(ProjectDescriptionResolver.viewsFor(project.descriptions(), project.translations())));
         payload.put("status", project.status());
         payload.put("founder", founderToMap(project.founder()));
         payload.put("openRoles", project.openRoles().stream().map(ProjectFeedUtil::openRoleToMap).toList());
@@ -255,6 +263,22 @@ public class ProjectFeedUtil {
         final Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("de", descriptions.de());
         payload.put("en", descriptions.en());
+        return payload;
+    }
+
+    private static Map<String, Object> descriptionViewsToMap(final Map<String, ProjectDescriptionView> descriptionViews) {
+        final Map<String, Object> payload = new LinkedHashMap<>();
+        descriptionViews.forEach((language, view) -> payload.put(language, descriptionViewToMap(view)));
+        return payload;
+    }
+
+    private static Map<String, Object> descriptionViewToMap(final ProjectDescriptionView view) {
+        final Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("text", view.text());
+        payload.put("language", view.language());
+        payload.put("originalLanguage", view.originalLanguage());
+        payload.put("translated", view.translated());
+        payload.put("source", view.source());
         return payload;
     }
 

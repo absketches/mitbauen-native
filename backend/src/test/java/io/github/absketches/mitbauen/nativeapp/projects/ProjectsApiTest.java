@@ -3,6 +3,7 @@ package io.github.absketches.mitbauen.nativeapp.projects;
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeList;
 import io.github.absketches.mitbauen.nativeapp.auth.AuthService;
+import io.github.absketches.mitbauen.nativeapp.auth.AuthServiceTestFactory;
 import io.github.absketches.mitbauen.nativeapp.auth.AuthUtil;
 import io.github.absketches.mitbauen.nativeapp.auth.EmailVerificationSettings;
 import io.github.absketches.mitbauen.nativeapp.auth.TransactionalEmailSender;
@@ -18,6 +19,7 @@ import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ProjectsApiTest {
@@ -137,6 +139,8 @@ class ProjectsApiTest {
         nano = newTestNano();
         final String sessionCookie = registerAndReturnSessionCookie("owner.localized@example.test", "Localized Owner");
         final String englishDescription = "An English-only project description with enough detail to prove the German field remains empty until the creator writes it.";
+        final String germanDescription = "Eine deutsche Projektbeschreibung mit genug Details, damit die erstellende Person die maschinelle Fallback-Version sauber ersetzt.";
+        final String fallbackGermanDescription = "[translated en->de] " + englishDescription;
 
         final String slug = sendJson("/api/projects", "POST", Map.of(
             "title", "Localized Description Project",
@@ -146,9 +150,68 @@ class ProjectsApiTest {
             "openRoles", List.of(Map.of("title", "Project Helper", "commitment", "Help keep the member workflow moving."))
         ), sessionCookie).bodyAsMap().asString("slug");
 
+        final long projectId = ProjectFeedRepository.findProjectBySlug(databaseRuntime.dataSource(), slug).orElseThrow().id();
+        ProjectDescriptionTranslationRepository.upsertTranslation(
+            databaseRuntime.dataSource(),
+            projectId,
+            new ProjectDescriptionTranslation(
+                "en",
+                "de",
+                ProjectDescriptionTranslation.sourceTextHash(englishDescription),
+                fallbackGermanDescription,
+                "test",
+                "test"
+            )
+        );
+
         final LinkedTypeMap project = sendGet("/api/projects/" + slug, sessionCookie).bodyAsMap().asMap("project");
         assertThat(project.asMap("descriptions").asString("en")).isEqualTo(englishDescription);
         assertThat(project.asMap("descriptions").asString("de")).isNull();
+        assertThat(project.asMap("descriptionViews").asMap("en").asBoolean("translated")).isFalse();
+        assertThat(project.asMap("descriptionViews").asMap("de").asString("text")).isEqualTo(fallbackGermanDescription);
+        assertThat(project.asMap("descriptionViews").asMap("de").asBoolean("translated")).isTrue();
+        assertThat(project.asMap("descriptionViews").asMap("de").asString("originalLanguage")).isEqualTo("en");
+
+        sendGet("/api/projects/" + slug, sessionCookie);
+
+        final HttpObject titleOnlyUpdateResponse = sendJson("/api/projects/" + slug, "PUT", Map.of(
+            "title", "Localized Description Project Updated",
+            "descriptions", Map.of("en", englishDescription),
+            "founderRole", "Founder + Translator",
+            "founderCommitment", "I am keeping the project description clear for contributors.",
+            "openRoles", List.of(Map.of("title", "Project Helper", "commitment", "Help keep the member workflow moving."))
+        ), sessionCookie);
+        assertThat(titleOnlyUpdateResponse.statusCode()).isEqualTo(200);
+        assertThat(sendGet("/api/projects/" + slug, sessionCookie)
+            .bodyAsMap()
+            .asMap("project")
+            .asMap("descriptionViews")
+            .asMap("de")
+            .asString("text"))
+            .isEqualTo(fallbackGermanDescription);
+
+        final HttpObject updateResponse = sendJson("/api/projects/" + slug, "PUT", Map.of(
+            "title", "Localized Description Project Updated",
+            "descriptions", Map.of("en", englishDescription, "de", germanDescription),
+            "founderRole", "Founder + Translator",
+            "founderCommitment", "I am keeping the project description clear for contributors.",
+            "openRoles", List.of(Map.of("title", "Project Helper", "commitment", "Help keep the member workflow moving."))
+        ), sessionCookie);
+        assertThat(updateResponse.statusCode()).isEqualTo(200);
+
+        waitFor(() -> sendGet("/api/projects/" + slug, sessionCookie)
+            .bodyAsMap()
+            .asMap("project")
+            .asMap("descriptionViews")
+            .asMap("de")
+            .asString("text")
+            .equals(germanDescription));
+
+        final LinkedTypeMap updatedProject = sendGet("/api/projects/" + slug, sessionCookie).bodyAsMap().asMap("project");
+        assertThat(updatedProject.asMap("descriptions").asString("de")).isEqualTo(germanDescription);
+        assertThat(updatedProject.asMap("descriptionViews").asMap("de").asString("text")).isEqualTo(germanDescription);
+        assertThat(updatedProject.asMap("descriptionViews").asMap("de").asBoolean("translated")).isFalse();
+        assertThat(updatedProject.asMap("descriptionViews").asMap("de").asString("originalLanguage")).isEqualTo("de");
     }
 
     @Test
@@ -482,13 +545,32 @@ class ProjectsApiTest {
         );
         return new Nano(
             Map.of(
-                HttpServer.CONFIG_SERVICE_HTTP_PORT, 0
+                HttpServer.CONFIG_SERVICE_HTTP_PORT, 0,
+                EmailVerificationSettings.CONFIG_APP_PUBLIC_BASE_URL, emailVerificationSettings.publicBaseUrl(),
+                EmailVerificationSettings.CONFIG_APP_EMAIL_FROM, emailVerificationSettings.emailFrom(),
+                EmailVerificationSettings.CONFIG_RESEND_API_KEY, emailVerificationSettings.resendApiKey()
             ),
             new HttpServer(),
             new HttpClient(),
-            new AuthService(databaseRuntime, emailVerificationSettings, transactionalEmailSender),
-            new ProjectFeedService(databaseRuntime)
+            AuthServiceTestFactory.authService(databaseRuntime, emailVerificationSettings, transactionalEmailSender),
+            new ProjectFeedService(databaseRuntime),
+            new ProjectDescriptionTranslationWarmService(databaseRuntime)
         );
+    }
+
+    private static void waitFor(final BooleanSupplier condition) {
+        final long deadline = System.nanoTime() + 2_000_000_000L;
+        while (!condition.getAsBoolean()) {
+            if (System.nanoTime() > deadline) {
+                assertThat(condition.getAsBoolean()).isTrue();
+            }
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("Interrupted while waiting for async test condition", exception);
+            }
+        }
     }
 
     private String registerAndReturnSessionCookie(final String email, final String displayName) {

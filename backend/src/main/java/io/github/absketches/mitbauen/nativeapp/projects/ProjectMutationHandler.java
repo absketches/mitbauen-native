@@ -1,6 +1,7 @@
 package io.github.absketches.mitbauen.nativeapp.projects;
 
 import berlin.yuna.typemap.model.LinkedTypeMap;
+import io.github.absketches.mitbauen.nativeapp.MitbauenEvents;
 import io.github.absketches.mitbauen.nativeapp.auth.SessionUser;
 import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
 import org.nanonative.nano.helper.event.model.Event;
@@ -9,12 +10,15 @@ import org.nanonative.nano.services.http.model.HttpObject;
 import javax.sql.DataSource;
 import java.util.Optional;
 
-public class ProjectMutationService {
+public class ProjectMutationHandler {
 
     private final DataSource dataSource;
     private final ProjectAccessGuard accessGuard;
 
-    public ProjectMutationService(final DataSource dataSource, final ProjectAccessGuard accessGuard) {
+    public ProjectMutationHandler(
+        final DataSource dataSource,
+        final ProjectAccessGuard accessGuard
+    ) {
         this.dataSource = dataSource;
         this.accessGuard = accessGuard;
     }
@@ -29,18 +33,14 @@ public class ProjectMutationService {
             return;
         }
 
-        final Optional<ProjectInput> input = projectInputOrRespondBadRequest(event);
+        final Optional<ProjectInput> input = validProjectInputOrRespondBadRequest(event);
         if (input.isEmpty()) {
             return;
         }
-        final Optional<String> validation = ProjectInputValidator.validate(input.get());
-        if (validation.isPresent()) {
-            ResponseUtil.respondBadRequest(event, validation.get());
-            return;
-        }
 
-        final String slug = ProjectFeedRepository.createProject(dataSource, sessionUser.get().id(), input.get());
-        ResponseUtil.respondJson(event, 201, ProjectFeedUtil.projectSavedPayload(slug));
+        final ProjectFeedRepository.CreatedProject project = ProjectFeedRepository.createProject(dataSource, sessionUser.get().id(), input.get());
+        requestTranslation(event, project.id(), input.get().descriptions());
+        ResponseUtil.respondJson(event, 201, ProjectFeedUtil.projectSavedPayload(project.slug()));
     }
 
     public void handleUpdateProject(final Event<HttpObject, HttpObject> event, final String slug) {
@@ -62,17 +62,16 @@ public class ProjectMutationService {
             return;
         }
 
-        final Optional<ProjectInput> input = projectInputOrRespondBadRequest(event);
+        final Optional<ProjectInput> input = validProjectInputOrRespondBadRequest(event);
         if (input.isEmpty()) {
             return;
         }
-        final Optional<String> validation = ProjectInputValidator.validate(input.get());
-        if (validation.isPresent()) {
-            ResponseUtil.respondBadRequest(event, validation.get());
-            return;
-        }
 
-        ProjectFeedRepository.updateProject(dataSource, existingProject.get().id(), input.get());
+        final boolean descriptionsChanged = !input.get().descriptions().equals(existingProject.get().descriptions());
+        ProjectFeedRepository.updateProject(dataSource, existingProject.get().id(), input.get(), descriptionsChanged);
+        if (descriptionsChanged) {
+            requestTranslation(event, existingProject.get().id(), input.get().descriptions());
+        }
         ResponseUtil.respondOk(event, ProjectFeedUtil.projectSavedPayload(existingProject.get().slug()));
     }
 
@@ -99,10 +98,28 @@ public class ProjectMutationService {
         ResponseUtil.respondEmpty(event, 204);
     }
 
-    private static Optional<ProjectInput> projectInputOrRespondBadRequest(final Event<HttpObject, HttpObject> event) {
+    private void requestTranslation(
+            final Event<HttpObject, HttpObject> event,
+            final long projectId,
+            final ProjectDescriptions descriptions
+    ) {
+        event.context()
+                .newEvent(MitbauenEvents.PROJECT_DESCRIPTION_TRANSLATION_REQUEST)
+                .payload(() -> new ProjectDescriptionTranslationRequest(projectId, descriptions))
+                .async(true)
+                .send();
+    }
+
+    private static Optional<ProjectInput> validProjectInputOrRespondBadRequest(final Event<HttpObject, HttpObject> event) {
         try {
             final LinkedTypeMap body = event.payload().bodyAsMap();
-            return Optional.of(ProjectFeedUtil.projectInputFrom(body));
+            final ProjectInput input = ProjectFeedUtil.projectInputFrom(body);
+            final Optional<String> validation = ProjectInputValidator.validate(input);
+            if (validation.isPresent()) {
+                ResponseUtil.respondBadRequest(event, validation.get());
+                return Optional.empty();
+            }
+            return Optional.of(input);
         } catch (RuntimeException exception) {
             ResponseUtil.respondBadRequest(event, ProjectFeedUtil.PROJECT_PAYLOAD_INVALID_CODE);
             return Optional.empty();

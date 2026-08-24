@@ -13,7 +13,7 @@ EXPOSE 5173
 
 CMD ["npm", "run", "dev"]
 
-FROM mcr.microsoft.com/playwright:v1.59.1-noble AS browser-test
+FROM mcr.microsoft.com/playwright:v1.62.1-noble AS browser-test
 
 WORKDIR /app
 

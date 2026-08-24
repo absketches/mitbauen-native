@@ -86,7 +86,12 @@ public class ProjectCommentsService extends Service {
     }
 
     private void handleCommentsLookup(final Event<HttpObject, HttpObject> event, final String slug) {
-        final Optional<SessionUser> sessionUser = verifiedSessionUser(event);
+        final Optional<SessionUser> sessionUser = AuthUtil.verifiedSessionUser(
+            event,
+            databaseRuntime.dataSource(),
+            ProjectCommentsUtil.AUTH_REQUIRED_CODE,
+            ProjectCommentsUtil.EMAIL_UNVERIFIED_CODE
+        );
         if (sessionUser.isEmpty()) {
             return;
         }
@@ -98,7 +103,12 @@ public class ProjectCommentsService extends Service {
     }
 
     private void handleCommentCreate(final Event<HttpObject, HttpObject> event, final String slug) {
-        final Optional<SessionUser> sessionUser = verifiedSessionUser(event);
+        final Optional<SessionUser> sessionUser = AuthUtil.verifiedSessionUser(
+            event,
+            databaseRuntime.dataSource(),
+            ProjectCommentsUtil.AUTH_REQUIRED_CODE,
+            ProjectCommentsUtil.EMAIL_UNVERIFIED_CODE
+        );
         if (sessionUser.isEmpty()) {
             return;
         }
@@ -108,9 +118,9 @@ public class ProjectCommentsService extends Service {
         }
         final LinkedTypeMap body = event.payload().bodyAsMap();
         final String commentBody = ProjectCommentsUtil.commentBodyFrom(body);
-        final Optional<String> validation = ProjectCommentsUtil.validateCommentBody(commentBody);
-        if (validation.isPresent()) {
-            ResponseUtil.respondBadRequest(event, validation.get());
+        final Optional<String> validationErrors = ProjectCommentsUtil.validateCommentBody(commentBody);
+        if (validationErrors.isPresent()) {
+            ResponseUtil.respondBadRequest(event, validationErrors.get());
             return;
         }
         final ProjectComment comment = ProjectCommentsRepository.createComment(
@@ -123,7 +133,12 @@ public class ProjectCommentsService extends Service {
     }
 
     private void handleCommentsRead(final Event<HttpObject, HttpObject> event, final String slug) {
-        final Optional<SessionUser> sessionUser = verifiedSessionUser(event);
+        final Optional<SessionUser> sessionUser = AuthUtil.verifiedSessionUser(
+            event,
+            databaseRuntime.dataSource(),
+            ProjectCommentsUtil.AUTH_REQUIRED_CODE,
+            ProjectCommentsUtil.EMAIL_UNVERIFIED_CODE
+        );
         if (sessionUser.isEmpty()) {
             return;
         }
@@ -143,12 +158,4 @@ public class ProjectCommentsService extends Service {
         return project;
     }
 
-    private Optional<SessionUser> verifiedSessionUser(final Event<HttpObject, HttpObject> event) {
-        return AuthUtil.verifiedSessionUser(
-            event,
-            databaseRuntime.dataSource(),
-            ProjectCommentsUtil.AUTH_REQUIRED_CODE,
-            ProjectCommentsUtil.EMAIL_UNVERIFIED_CODE
-        );
-    }
 }

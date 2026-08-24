@@ -14,11 +14,15 @@ import java.util.Optional;
 
 public class ProjectCommentsRepository {
 
+    private static final int PROJECT_COMMENTS_LIMIT = 200;
+
     private ProjectCommentsRepository() {
     }
 
     public static List<ProjectComment> listComments(final DataSource dataSource, final long projectId) {
         final String sql = """
+            select id, body, created_at, author_public_id, author_display_name
+            from (
             select
                 c.id,
                 c.body,
@@ -28,12 +32,16 @@ public class ProjectCommentsRepository {
             from project_comments c
             join users u on u.id = c.user_id
             where c.project_id = ?
-            order by c.created_at asc, c.id asc
+            order by c.created_at desc, c.id desc
+            limit ?
+            ) recent_comments
+            order by created_at asc, id asc
             """;
         final List<ProjectComment> comments = new ArrayList<>();
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setLong(1, projectId);
+            statement.setInt(2, PROJECT_COMMENTS_LIMIT);
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
                     comments.add(commentFrom(resultSet));
