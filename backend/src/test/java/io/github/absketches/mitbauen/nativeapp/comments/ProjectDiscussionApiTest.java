@@ -2,16 +2,16 @@ package io.github.absketches.mitbauen.nativeapp.comments;
 
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeList;
-import io.github.absketches.mitbauen.nativeapp.auth.AuthService;
+import io.github.absketches.mitbauen.nativeapp.auth.service.AuthService;
 import io.github.absketches.mitbauen.nativeapp.auth.AuthUtil;
-import io.github.absketches.mitbauen.nativeapp.auth.EmailVerificationSettings;
-import io.github.absketches.mitbauen.nativeapp.auth.TransactionalEmailSender;
-import io.github.absketches.mitbauen.nativeapp.comments.ProjectCommentsService;
+import io.github.absketches.mitbauen.nativeapp.email.TransactionalEmailService;
+import io.github.absketches.mitbauen.nativeapp.email.TransactionalEmailSender;
+import io.github.absketches.mitbauen.nativeapp.comments.service.ProjectCommentsService;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
 import io.github.absketches.mitbauen.nativeapp.db.PostgresTestDatabase;
 import io.github.absketches.mitbauen.nativeapp.db.TestDatabaseMigrations;
-import io.github.absketches.mitbauen.nativeapp.notifications.NotificationsService;
-import io.github.absketches.mitbauen.nativeapp.projects.ProjectFeedService;
+import io.github.absketches.mitbauen.nativeapp.notifications.service.NotificationsService;
+import io.github.absketches.mitbauen.nativeapp.projects.service.ProjectFeedService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.nanonative.nano.core.Nano;
@@ -28,8 +28,7 @@ class ProjectDiscussionApiTest {
 
     private static final String OPEN_INVITE = "test-open-invite";
     private static final String PRIMARY_PASSWORD = "SuperSafe1";
-    private static final EmailVerificationSettings EMAIL_VERIFICATION_SETTINGS =
-        new EmailVerificationSettings("https://www.mitbauen.space", "Mitbauen <no-reply@mail.mitbauen.space>", "");
+    private static final String PUBLIC_BASE_URL = "https://www.mitbauen.space";
     private static final TransactionalEmailSender NOOP_TRANSACTIONAL_EMAIL_SENDER =
         (recipientEmail, recipientName, verificationUrl) -> { };
 
@@ -176,11 +175,13 @@ class ProjectDiscussionApiTest {
         );
         return new Nano(
             Map.of(
-                HttpServer.CONFIG_SERVICE_HTTP_PORT, 0
+                HttpServer.CONFIG_SERVICE_HTTP_PORT, 0,
+                AuthService.CONFIG_APP_PUBLIC_BASE_URL, PUBLIC_BASE_URL
             ),
             new HttpServer(),
             new HttpClient(),
-            new AuthService(databaseRuntime, EMAIL_VERIFICATION_SETTINGS, NOOP_TRANSACTIONAL_EMAIL_SENDER),
+            new TransactionalEmailService(NOOP_TRANSACTIONAL_EMAIL_SENDER),
+            new AuthService(databaseRuntime),
             new ProjectFeedService(databaseRuntime),
             new ProjectCommentsService(databaseRuntime),
             new NotificationsService(databaseRuntime)

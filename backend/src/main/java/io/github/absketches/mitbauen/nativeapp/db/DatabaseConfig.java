@@ -1,6 +1,6 @@
 package io.github.absketches.mitbauen.nativeapp.db;
 
-import java.util.Locale;
+import io.github.absketches.mitbauen.nativeapp.util.EnvUtil;
 
 public record DatabaseConfig(String jdbcUrl, String jdbcUser, String jdbcPassword) {
 
@@ -10,23 +10,9 @@ public record DatabaseConfig(String jdbcUrl, String jdbcUser, String jdbcPasswor
 
     public static DatabaseConfig fromEnvironment() {
         return new DatabaseConfig(
-            requiredEnv(ENV_JDBC_DATABASE_URL),
-            requiredEnv(ENV_JDBC_DATABASE_USER),
-            requiredEnv(ENV_JDBC_DATABASE_PASSWORD)
+            EnvUtil.requiredEnv(ENV_JDBC_DATABASE_URL),
+            EnvUtil.requiredEnv(ENV_JDBC_DATABASE_USER),
+            EnvUtil.requiredEnv(ENV_JDBC_DATABASE_PASSWORD)
         );
-    }
-
-    private static String requiredEnv(final String key) {
-        final String directValue = System.getenv(key);
-        if (directValue != null && !directValue.isBlank()) {
-            return directValue;
-        }
-
-        final String upperCaseValue = System.getenv(key.toUpperCase(Locale.ROOT));
-        if (upperCaseValue != null && !upperCaseValue.isBlank()) {
-            return upperCaseValue;
-        }
-
-        throw new IllegalStateException("Missing required environment variable: " + key);
     }
 }

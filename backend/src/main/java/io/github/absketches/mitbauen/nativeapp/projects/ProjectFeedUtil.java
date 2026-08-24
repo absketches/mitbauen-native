@@ -1,12 +1,19 @@
 package io.github.absketches.mitbauen.nativeapp.projects;
 
+import io.github.absketches.mitbauen.nativeapp.projects.model.FounderInfo;
+import io.github.absketches.mitbauen.nativeapp.projects.model.OpenRole;
+import io.github.absketches.mitbauen.nativeapp.projects.model.ProjectCard;
+import io.github.absketches.mitbauen.nativeapp.projects.model.ProjectDescriptionView;
+import io.github.absketches.mitbauen.nativeapp.projects.model.ProjectDescriptions;
+import io.github.absketches.mitbauen.nativeapp.projects.model.ProjectDetails;
+import io.github.absketches.mitbauen.nativeapp.projects.model.ProjectInput;
+import io.github.absketches.mitbauen.nativeapp.projects.translation.ProjectDescriptionResolver;
+
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeList;
-import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
-import io.github.absketches.mitbauen.nativeapp.projects.links.ProjectLink;
-import io.github.absketches.mitbauen.nativeapp.projects.media.ProjectImage;
-import io.github.absketches.mitbauen.nativeapp.projects.media.ProjectImageContent;
-import org.nanonative.nano.helper.event.model.Event;
+import io.github.absketches.mitbauen.nativeapp.projects.links.model.ProjectLink;
+import io.github.absketches.mitbauen.nativeapp.projects.media.model.ProjectImage;
+import io.github.absketches.mitbauen.nativeapp.util.TextUtil;
 import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.util.LinkedHashMap;
@@ -15,27 +22,7 @@ import java.util.Map;
 
 public class ProjectFeedUtil {
 
-    public static final int TITLE_MIN_LENGTH = 5;
-    public static final int TITLE_MAX_LENGTH = 120;
-    public static final int DESCRIPTION_MIN_LENGTH = 40;
-    public static final int DESCRIPTION_MAX_LENGTH = 3000;
-    public static final int FOUNDER_ROLE_MIN_LENGTH = 3;
-    public static final int FOUNDER_ROLE_MAX_LENGTH = 120;
-    public static final int FOUNDER_COMMITMENT_MIN_LENGTH = 5;
-    public static final int FOUNDER_COMMITMENT_MAX_LENGTH = 500;
-    public static final int OPEN_ROLE_TITLE_MIN_LENGTH = 3;
-    public static final int OPEN_ROLE_TITLE_MAX_LENGTH = 120;
-    public static final int OPEN_ROLE_COMMITMENT_MIN_LENGTH = 3;
-    public static final int OPEN_ROLE_COMMITMENT_MAX_LENGTH = 500;
-    public static final int OPEN_ROLES_MIN_COUNT = 1;
-    public static final int OPEN_ROLES_MAX_COUNT = 6;
-    public static final int PROJECT_IMAGES_MAX_COUNT = 5;
-    public static final int PROJECT_IMAGE_MAX_BYTES = 2 * 1024 * 1024;
-    public static final int PROJECT_IMAGE_ALT_TEXT_MAX_LENGTH = 160;
-    public static final int PROJECT_LINKS_MAX_COUNT = 8;
-    public static final int PROJECT_LINK_LABEL_MIN_LENGTH = 2;
-    public static final int PROJECT_LINK_LABEL_MAX_LENGTH = 40;
-    public static final int PROJECT_LINK_URL_MAX_LENGTH = 2048;
+    public static final String PROJECTS_BASE_PATH = "/api/projects";
     public static final String PROJECT_NOT_FOUND_CODE = "PROJECT_NOT_FOUND";
     public static final String PROJECT_VIEW_AUTH_REQUIRED_CODE = "PROJECT_VIEW_AUTH_REQUIRED";
     public static final String PROJECT_VIEW_EMAIL_UNVERIFIED_CODE = "PROJECT_VIEW_EMAIL_UNVERIFIED";
@@ -47,27 +34,6 @@ public class ProjectFeedUtil {
     public static final String PROJECT_DELETE_AUTH_REQUIRED_CODE = "PROJECT_DELETE_AUTH_REQUIRED";
     public static final String PROJECT_DELETE_EMAIL_UNVERIFIED_CODE = "PROJECT_DELETE_EMAIL_UNVERIFIED";
     public static final String PROJECT_DELETE_OWNER_REQUIRED_CODE = "PROJECT_DELETE_OWNER_REQUIRED";
-    public static final String PROJECT_IMAGE_NOT_FOUND_CODE = "PROJECT_IMAGE_NOT_FOUND";
-    public static final String PROJECT_IMAGE_AUTH_REQUIRED_CODE = "PROJECT_IMAGE_AUTH_REQUIRED";
-    public static final String PROJECT_IMAGE_EMAIL_UNVERIFIED_CODE = "PROJECT_IMAGE_EMAIL_UNVERIFIED";
-    public static final String PROJECT_IMAGE_OWNER_REQUIRED_CODE = "PROJECT_IMAGE_OWNER_REQUIRED";
-    public static final String PROJECT_IMAGE_TYPE_INVALID_CODE = "PROJECT_IMAGE_TYPE_INVALID";
-    public static final String PROJECT_IMAGE_TOO_LARGE_CODE = "PROJECT_IMAGE_TOO_LARGE";
-    public static final String PROJECT_IMAGES_MAX_CODE = "PROJECT_IMAGES_MAX";
-    public static final String PROJECT_IMAGE_ALT_TEXT_INVALID_CODE = "PROJECT_IMAGE_ALT_TEXT_INVALID";
-    public static final String PROJECT_TITLE_INVALID_CODE = "PROJECT_TITLE_INVALID";
-    public static final String PROJECT_DESCRIPTION_INVALID_CODE = "PROJECT_DESCRIPTION_INVALID";
-    public static final String PROJECT_FOUNDER_ROLE_INVALID_CODE = "PROJECT_FOUNDER_ROLE_INVALID";
-    public static final String PROJECT_FOUNDER_COMMITMENT_INVALID_CODE = "PROJECT_FOUNDER_COMMITMENT_INVALID";
-    public static final String PROJECT_OPEN_ROLES_MIN_CODE = "PROJECT_OPEN_ROLES_MIN";
-    public static final String PROJECT_OPEN_ROLES_MAX_CODE = "PROJECT_OPEN_ROLES_MAX";
-    public static final String PROJECT_OPEN_ROLE_TITLE_INVALID_CODE = "PROJECT_OPEN_ROLE_TITLE_INVALID";
-    public static final String PROJECT_OPEN_ROLE_COMMITMENT_INVALID_CODE = "PROJECT_OPEN_ROLE_COMMITMENT_INVALID";
-    public static final String PROJECT_LINKS_MAX_CODE = "PROJECT_LINKS_MAX";
-    public static final String PROJECT_LINK_LABEL_INVALID_CODE = "PROJECT_LINK_LABEL_INVALID";
-    public static final String PROJECT_LINK_URL_INVALID_CODE = "PROJECT_LINK_URL_INVALID";
-    public static final String PROJECT_PAYLOAD_INVALID_CODE = "PROJECT_PAYLOAD_INVALID";
-    public static final String METHOD_NOT_ALLOWED_CODE = "METHOD_NOT_ALLOWED";
 
     public sealed interface RoutesMatch permits ProjectFeedRoute, ProjectDetailsRoute, ProjectImagesRoute, ProjectImageRoute, NoMatch {
     }
@@ -135,74 +101,45 @@ public class ProjectFeedUtil {
         final TypeList roles = body.asList("openRoles");
         final TypeList links = body.asList("links");
         return new ProjectInput(
-            safeTrim(body.asString("title")),
+            TextUtil.trimToEmpty(body.asString("title")),
             descriptionsFrom(body),
-            safeTrim(body.asString("founderRole")),
-            safeTrim(body.asString("founderCommitment")),
+            TextUtil.trimToEmpty(body.asString("founderRole")),
+            TextUtil.trimToEmpty(body.asString("founderCommitment")),
             roles == null ? List.of() : roles.stream()
                 .map(ProjectFeedUtil::linkedTypeMapFromListItem)
                 .map(role -> new OpenRole(
                     null,
-                    safeTrim(role.asString("title")),
-                    safeTrim(role.asString("commitment"))
+                    TextUtil.trimToEmpty(role.asString("title")),
+                    TextUtil.trimToEmpty(role.asString("commitment"))
                 ))
                 .toList(),
             links == null ? List.of() : links.stream()
                 .map(ProjectFeedUtil::linkedTypeMapFromListItem)
                 .map(link -> new ProjectLink(
-                    safeTrim(link.asString("label")),
-                    safeTrim(link.asString("url"))
+                    TextUtil.trimToEmpty(link.asString("label")),
+                    TextUtil.trimToEmpty(link.asString("url"))
                 ))
                 .toList()
         );
     }
 
-    public static void respondProjects(final Event<HttpObject, HttpObject> event, final List<ProjectCard> projects) {
-        ResponseUtil.respondOk(event, Map.of("projects", projects.stream().map(ProjectFeedUtil::projectToMap).toList()));
+    public static Map<String, Object> projectsPayload(final List<ProjectCard> projects) {
+        return Map.of("projects", projects.stream().map(ProjectFeedUtil::projectToMap).toList());
     }
 
-    public static void respondProjectDetails(final Event<HttpObject, HttpObject> event, final ProjectDetails project, final boolean canManage) {
-        ResponseUtil.respondOk(event, Map.of("project", projectDetailsToMap(project, canManage)));
+    public static Map<String, Object> projectDetailsPayload(
+        final ProjectDetails project,
+        final boolean canManage
+    ) {
+        return Map.of("project", projectDetailsToMap(project, canManage));
     }
 
-    public static void respondProjectSaved(final Event<HttpObject, HttpObject> event, final String slug, final int statusCode) {
-        ResponseUtil.respondJson(event, statusCode, Map.of("slug", slug));
+    public static Map<String, Object> projectSavedPayload(final String slug) {
+        return Map.of("slug", slug);
     }
 
-    public static void respondProjectImageSaved(final Event<HttpObject, HttpObject> event, final String slug, final ProjectImage image) {
-        ResponseUtil.respondCreated(event, Map.of("image", projectImageToMap(slug, image)));
-    }
-
-    public static void respondProjectImage(final Event<HttpObject, HttpObject> event, final ProjectImageContent image) {
-        ResponseUtil.respondBytes(event, 200, image.contentType(), image.data());
-    }
-
-    public static void respondDeleted(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondEmpty(event, 204);
-    }
-
-    public static void respondBadRequest(final Event<HttpObject, HttpObject> event, final String code) {
-        ResponseUtil.respondBadRequest(event, code);
-    }
-
-    public static void respondUnauthorized(final Event<HttpObject, HttpObject> event, final String code) {
-        ResponseUtil.respondUnauthorized(event, code);
-    }
-
-    public static void respondForbidden(final Event<HttpObject, HttpObject> event, final String code) {
-        ResponseUtil.respondForbidden(event, code);
-    }
-
-    public static void respondNotFound(final Event<HttpObject, HttpObject> event, final String code) {
-        ResponseUtil.respondNotFound(event, code);
-    }
-
-    public static void respondOptions(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondOptions(event);
-    }
-
-    public static void respondMethodNotAllowed(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondMethodNotAllowed(event, METHOD_NOT_ALLOWED_CODE);
+    public static Map<String, Object> projectImageSavedPayload(final String slug, final ProjectImage image) {
+        return Map.of("image", projectImageToMap(slug, image));
     }
 
     private static Map<String, Object> projectToMap(final ProjectCard project) {
@@ -211,6 +148,7 @@ public class ProjectFeedUtil {
         payload.put("slug", project.slug());
         payload.put("title", project.title());
         payload.put("descriptions", descriptionsToMap(project.descriptions()));
+        payload.put("descriptionViews", descriptionViewsToMap(ProjectDescriptionResolver.viewsFor(project.descriptions(), project.translations())));
         payload.put("status", project.status());
         payload.put("founder", founderToMap(project.founder()));
         payload.put("openRoles", project.openRoles().stream().map(ProjectFeedUtil::openRoleToMap).toList());
@@ -220,13 +158,17 @@ public class ProjectFeedUtil {
         return payload;
     }
 
-    private static Map<String, Object> projectDetailsToMap(final ProjectDetails project, final boolean canManage) {
+    private static Map<String, Object> projectDetailsToMap(
+        final ProjectDetails project,
+        final boolean canManage
+    ) {
         final Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("id", project.id());
         payload.put("canManage", canManage);
         payload.put("slug", project.slug());
         payload.put("title", project.title());
         payload.put("descriptions", descriptionsToMap(project.descriptions()));
+        payload.put("descriptionViews", descriptionViewsToMap(ProjectDescriptionResolver.viewsFor(project.descriptions(), project.translations())));
         payload.put("status", project.status());
         payload.put("founder", founderToMap(project.founder()));
         payload.put("openRoles", project.openRoles().stream().map(ProjectFeedUtil::openRoleToMap).toList());
@@ -278,8 +220,8 @@ public class ProjectFeedUtil {
         final LinkedTypeMap descriptions = body.asMap("descriptions");
         if (descriptions != null) {
             return new ProjectDescriptions(
-                nullableTrim(descriptions.asString("de")),
-                nullableTrim(descriptions.asString("en"))
+                TextUtil.trimToNull(descriptions.asString("de")),
+                TextUtil.trimToNull(descriptions.asString("en"))
             );
         }
 
@@ -293,16 +235,20 @@ public class ProjectFeedUtil {
         return payload;
     }
 
-    private static String safeTrim(final String value) {
-        return value == null ? "" : value.trim();
+    private static Map<String, Object> descriptionViewsToMap(final Map<String, ProjectDescriptionView> descriptionViews) {
+        final Map<String, Object> payload = new LinkedHashMap<>();
+        descriptionViews.forEach((language, view) -> payload.put(language, descriptionViewToMap(view)));
+        return payload;
     }
 
-    private static String nullableTrim(final String value) {
-        if (value == null) {
-            return null;
-        }
-        final String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
+    private static Map<String, Object> descriptionViewToMap(final ProjectDescriptionView view) {
+        final Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("text", view.text());
+        payload.put("language", view.language());
+        payload.put("originalLanguage", view.originalLanguage());
+        payload.put("translated", view.translated());
+        payload.put("source", view.source());
+        return payload;
     }
 
     private static LinkedTypeMap linkedTypeMapFromListItem(final Object item) {

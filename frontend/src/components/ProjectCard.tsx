@@ -1,6 +1,6 @@
 import type { Dictionary } from '../i18n'
 import type { Language } from '../i18n'
-import { descriptionForLanguage } from '../projectDescriptions'
+import { descriptionDisplayForLanguage } from '../projectDescriptions'
 import type { Project } from '../types'
 import { ProjectImageView } from './ProjectImageView'
 import { markdownPreview } from './SafeMarkdown'
@@ -15,8 +15,8 @@ type ProjectCardProps = {
 }
 
 export function ProjectCard({ copy, language, project, highlighted = false, onOpen, onOpenFounderProfile }: ProjectCardProps) {
-  const description = descriptionForLanguage(project, language)
-  const descriptionPreview = description ? markdownPreview(description) : copy.descriptionMissing
+  const description = descriptionDisplayForLanguage(project, language)
+  const descriptionPreview = description.text ? markdownPreview(description.text) : copy.descriptionMissing
   const thumbnail = project.images?.[0]
 
   const cardClassName = [
@@ -44,7 +44,8 @@ export function ProjectCard({ copy, language, project, highlighted = false, onOp
         </div>
       ) : null}
 
-      <p className={`project-card__summary${description ? '' : ' project-card__summary--empty'}`}>{descriptionPreview}</p>
+      <p className={`project-card__summary${description.text ? '' : ' project-card__summary--empty'}`}>{descriptionPreview}</p>
+      {description.translated ? <p className="project-card__translation-note">{copy.translationDisclaimer}</p> : null}
 
       <dl className="project-card__meta">
         <div>

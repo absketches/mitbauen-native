@@ -1,8 +1,10 @@
 package io.github.absketches.mitbauen.nativeapp.comments;
 
+import io.github.absketches.mitbauen.nativeapp.comments.model.ProjectComment;
+
 import berlin.yuna.typemap.model.LinkedTypeMap;
-import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
-import org.nanonative.nano.helper.event.model.Event;
+import io.github.absketches.mitbauen.nativeapp.projects.ProjectFeedUtil;
+import io.github.absketches.mitbauen.nativeapp.util.TextUtil;
 import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.util.LinkedHashMap;
@@ -12,14 +14,11 @@ import java.util.Optional;
 
 public class ProjectCommentsUtil {
 
-    public static final String PROJECTS_BASE_PATH = "/api/projects";
     public static final int COMMENT_BODY_MAX_LENGTH = 1000;
     public static final String AUTH_REQUIRED_CODE = "PROJECT_COMMENTS_AUTH_REQUIRED";
     public static final String EMAIL_UNVERIFIED_CODE = "PROJECT_COMMENTS_EMAIL_UNVERIFIED";
     public static final String COMMENT_EMPTY_CODE = "PROJECT_COMMENT_EMPTY";
     public static final String COMMENT_TOO_LONG_CODE = "PROJECT_COMMENT_TOO_LONG";
-    public static final String PROJECT_NOT_FOUND_CODE = "PROJECT_NOT_FOUND";
-    public static final String METHOD_NOT_ALLOWED_CODE = "METHOD_NOT_ALLOWED";
 
     public sealed interface RouteMatch permits ProjectCommentsRoute, ProjectCommentsReadRoute, NoMatch {
     }
@@ -41,7 +40,7 @@ public class ProjectCommentsUtil {
         if (path == null) {
             return new NoMatch();
         }
-        final String projectPrefix = PROJECTS_BASE_PATH + "/";
+        final String projectPrefix = ProjectFeedUtil.PROJECTS_BASE_PATH + "/";
         if (!path.startsWith(projectPrefix)) {
             return new NoMatch();
         }
@@ -64,8 +63,7 @@ public class ProjectCommentsUtil {
     }
 
     public static String commentBodyFrom(final LinkedTypeMap body) {
-        final String value = body.asString("body");
-        return value == null ? "" : value.trim();
+        return TextUtil.trimToEmpty(body.asString("body"));
     }
 
     public static Optional<String> validateCommentBody(final String body) {
@@ -78,32 +76,12 @@ public class ProjectCommentsUtil {
         return Optional.empty();
     }
 
-    public static void respondComments(final Event<HttpObject, HttpObject> event, final List<ProjectComment> comments) {
-        ResponseUtil.respondOk(event, Map.of("comments", comments.stream().map(ProjectCommentsUtil::commentToMap).toList()));
+    public static Map<String, Object> commentsPayload(final List<ProjectComment> comments) {
+        return Map.of("comments", comments.stream().map(ProjectCommentsUtil::commentToMap).toList());
     }
 
-    public static void respondCommentCreated(final Event<HttpObject, HttpObject> event, final ProjectComment comment) {
-        ResponseUtil.respondCreated(event, Map.of("comment", commentToMap(comment)));
-    }
-
-    public static void respondRead(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondOk(event, Map.of("read", true));
-    }
-
-    public static void respondBadRequest(final Event<HttpObject, HttpObject> event, final String code) {
-        ResponseUtil.respondBadRequest(event, code);
-    }
-
-    public static void respondNotFound(final Event<HttpObject, HttpObject> event, final String code) {
-        ResponseUtil.respondNotFound(event, code);
-    }
-
-    public static void respondOptions(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondOptions(event);
-    }
-
-    public static void respondMethodNotAllowed(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondMethodNotAllowed(event, METHOD_NOT_ALLOWED_CODE);
+    public static Map<String, Object> commentPayload(final ProjectComment comment) {
+        return Map.of("comment", commentToMap(comment));
     }
 
     private static Optional<String> validSlug(final String slug) {

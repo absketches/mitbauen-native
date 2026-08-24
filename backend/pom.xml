@@ -23,6 +23,7 @@
         <maven.surefire.plugin.version>3.5.6</maven.surefire.plugin.version>
         <maven.failsafe.plugin.version>3.5.6</maven.failsafe.plugin.version>
         <maven.shade.plugin.version>3.6.2</maven.shade.plugin.version>
+        <maven-editor-plugin-version>0.2.0</maven-editor-plugin-version>
         <jacoco.version>0.8.15</jacoco.version>
         <graalvm.native.maven.plugin.version>0.11.5</graalvm.native.maven.plugin.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -87,6 +88,19 @@
             </resource>
         </resources>
         <plugins>
+            <plugin>
+                <groupId>org.ec4j.maven</groupId>
+                <artifactId>editorconfig-maven-plugin</artifactId>
+                <version>${maven-editor-plugin-version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>

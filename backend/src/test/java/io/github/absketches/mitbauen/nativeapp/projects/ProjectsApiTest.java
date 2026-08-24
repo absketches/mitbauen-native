@@ -1,11 +1,18 @@
 package io.github.absketches.mitbauen.nativeapp.projects;
 
+import io.github.absketches.mitbauen.nativeapp.projects.repository.ProjectFeedRepository;
+import io.github.absketches.mitbauen.nativeapp.projects.service.ProjectFeedService;
+import io.github.absketches.mitbauen.nativeapp.projects.translation.ProjectDescriptionTranslation;
+import io.github.absketches.mitbauen.nativeapp.projects.translation.ProjectDescriptionTranslationRepository;
+import io.github.absketches.mitbauen.nativeapp.projects.translation.ProjectDescriptionTranslationWarmService;
+import io.github.absketches.mitbauen.nativeapp.projects.media.handler.ProjectImageValidator;
+
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeList;
-import io.github.absketches.mitbauen.nativeapp.auth.AuthService;
+import io.github.absketches.mitbauen.nativeapp.auth.service.AuthService;
 import io.github.absketches.mitbauen.nativeapp.auth.AuthUtil;
-import io.github.absketches.mitbauen.nativeapp.auth.EmailVerificationSettings;
-import io.github.absketches.mitbauen.nativeapp.auth.TransactionalEmailSender;
+import io.github.absketches.mitbauen.nativeapp.email.TransactionalEmailService;
+import io.github.absketches.mitbauen.nativeapp.email.TransactionalEmailSender;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
 import io.github.absketches.mitbauen.nativeapp.db.PostgresTestDatabase;
 import io.github.absketches.mitbauen.nativeapp.db.TestDatabaseMigrations;
@@ -18,14 +25,14 @@ import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ProjectsApiTest {
 
     private static final String OPEN_INVITE = "test-open-invite";
     private static final String PRIMARY_PASSWORD = "SuperSafe1";
-    private static final EmailVerificationSettings EMAIL_VERIFICATION_SETTINGS =
-        new EmailVerificationSettings("https://www.mitbauen.space", "Mitbauen <no-reply@mail.mitbauen.space>", "");
+    private static final String PUBLIC_BASE_URL = "https://www.mitbauen.space";
     private static final TransactionalEmailSender NOOP_TRANSACTIONAL_EMAIL_SENDER =
         (recipientEmail, recipientName, verificationUrl) -> { };
 
@@ -137,6 +144,8 @@ class ProjectsApiTest {
         nano = newTestNano();
         final String sessionCookie = registerAndReturnSessionCookie("owner.localized@example.test", "Localized Owner");
         final String englishDescription = "An English-only project description with enough detail to prove the German field remains empty until the creator writes it.";
+        final String germanDescription = "Eine deutsche Projektbeschreibung mit genug Details, damit die erstellende Person die maschinelle Fallback-Version sauber ersetzt.";
+        final String fallbackGermanDescription = "[translated en->de] " + englishDescription;
 
         final String slug = sendJson("/api/projects", "POST", Map.of(
             "title", "Localized Description Project",
@@ -146,9 +155,68 @@ class ProjectsApiTest {
             "openRoles", List.of(Map.of("title", "Project Helper", "commitment", "Help keep the member workflow moving."))
         ), sessionCookie).bodyAsMap().asString("slug");
 
+        final long projectId = ProjectFeedRepository.findProjectBySlug(databaseRuntime.dataSource(), slug).orElseThrow().id();
+        ProjectDescriptionTranslationRepository.upsertTranslation(
+            databaseRuntime.dataSource(),
+            projectId,
+            new ProjectDescriptionTranslation(
+                "en",
+                "de",
+                ProjectDescriptionTranslation.sourceTextHash(englishDescription),
+                fallbackGermanDescription,
+                "test",
+                "test"
+            )
+        );
+
         final LinkedTypeMap project = sendGet("/api/projects/" + slug, sessionCookie).bodyAsMap().asMap("project");
         assertThat(project.asMap("descriptions").asString("en")).isEqualTo(englishDescription);
         assertThat(project.asMap("descriptions").asString("de")).isNull();
+        assertThat(project.asMap("descriptionViews").asMap("en").asBoolean("translated")).isFalse();
+        assertThat(project.asMap("descriptionViews").asMap("de").asString("text")).isEqualTo(fallbackGermanDescription);
+        assertThat(project.asMap("descriptionViews").asMap("de").asBoolean("translated")).isTrue();
+        assertThat(project.asMap("descriptionViews").asMap("de").asString("originalLanguage")).isEqualTo("en");
+
+        sendGet("/api/projects/" + slug, sessionCookie);
+
+        final HttpObject titleOnlyUpdateResponse = sendJson("/api/projects/" + slug, "PUT", Map.of(
+            "title", "Localized Description Project Updated",
+            "descriptions", Map.of("en", englishDescription),
+            "founderRole", "Founder + Translator",
+            "founderCommitment", "I am keeping the project description clear for contributors.",
+            "openRoles", List.of(Map.of("title", "Project Helper", "commitment", "Help keep the member workflow moving."))
+        ), sessionCookie);
+        assertThat(titleOnlyUpdateResponse.statusCode()).isEqualTo(200);
+        assertThat(sendGet("/api/projects/" + slug, sessionCookie)
+            .bodyAsMap()
+            .asMap("project")
+            .asMap("descriptionViews")
+            .asMap("de")
+            .asString("text"))
+            .isEqualTo(fallbackGermanDescription);
+
+        final HttpObject updateResponse = sendJson("/api/projects/" + slug, "PUT", Map.of(
+            "title", "Localized Description Project Updated",
+            "descriptions", Map.of("en", englishDescription, "de", germanDescription),
+            "founderRole", "Founder + Translator",
+            "founderCommitment", "I am keeping the project description clear for contributors.",
+            "openRoles", List.of(Map.of("title", "Project Helper", "commitment", "Help keep the member workflow moving."))
+        ), sessionCookie);
+        assertThat(updateResponse.statusCode()).isEqualTo(200);
+
+        waitFor(() -> sendGet("/api/projects/" + slug, sessionCookie)
+            .bodyAsMap()
+            .asMap("project")
+            .asMap("descriptionViews")
+            .asMap("de")
+            .asString("text")
+            .equals(germanDescription));
+
+        final LinkedTypeMap updatedProject = sendGet("/api/projects/" + slug, sessionCookie).bodyAsMap().asMap("project");
+        assertThat(updatedProject.asMap("descriptions").asString("de")).isEqualTo(germanDescription);
+        assertThat(updatedProject.asMap("descriptionViews").asMap("de").asString("text")).isEqualTo(germanDescription);
+        assertThat(updatedProject.asMap("descriptionViews").asMap("de").asBoolean("translated")).isFalse();
+        assertThat(updatedProject.asMap("descriptionViews").asMap("de").asString("originalLanguage")).isEqualTo("de");
     }
 
     @Test
@@ -178,11 +246,11 @@ class ProjectsApiTest {
     void acceptsExpandedProjectFieldLimits() {
         nano = newTestNano();
         final String sessionCookie = registerAndReturnSessionCookie("owner.expanded@example.test", "Limit Builder");
-        final String description = "D".repeat(ProjectFeedUtil.DESCRIPTION_MAX_LENGTH);
-        final String founderRole = "F".repeat(ProjectFeedUtil.FOUNDER_ROLE_MAX_LENGTH);
-        final String founderCommitment = "C".repeat(ProjectFeedUtil.FOUNDER_COMMITMENT_MAX_LENGTH);
-        final String openRoleTitle = "R".repeat(ProjectFeedUtil.OPEN_ROLE_TITLE_MAX_LENGTH);
-        final String openRoleCommitment = "O".repeat(ProjectFeedUtil.OPEN_ROLE_COMMITMENT_MAX_LENGTH);
+        final String description = "D".repeat(ProjectInputValidator.DESCRIPTION_MAX_LENGTH);
+        final String founderRole = "F".repeat(ProjectInputValidator.FOUNDER_ROLE_MAX_LENGTH);
+        final String founderCommitment = "C".repeat(ProjectInputValidator.FOUNDER_COMMITMENT_MAX_LENGTH);
+        final String openRoleTitle = "R".repeat(ProjectInputValidator.OPEN_ROLE_TITLE_MAX_LENGTH);
+        final String openRoleCommitment = "O".repeat(ProjectInputValidator.OPEN_ROLE_COMMITMENT_MAX_LENGTH);
 
         final HttpObject createResponse = sendJson("/api/projects", "POST", Map.of(
             "title", "Expanded Field Limits",
@@ -197,13 +265,13 @@ class ProjectsApiTest {
             "/api/projects/" + createResponse.bodyAsMap().asString("slug"),
             sessionCookie
         ).bodyAsMap().asMap("project");
-        assertThat(project.asMap("descriptions").asString("en")).hasSize(ProjectFeedUtil.DESCRIPTION_MAX_LENGTH);
-        assertThat(project.asMap("founder").asString("role")).hasSize(ProjectFeedUtil.FOUNDER_ROLE_MAX_LENGTH);
-        assertThat(project.asMap("founder").asString("commitment")).hasSize(ProjectFeedUtil.FOUNDER_COMMITMENT_MAX_LENGTH);
+        assertThat(project.asMap("descriptions").asString("en")).hasSize(ProjectInputValidator.DESCRIPTION_MAX_LENGTH);
+        assertThat(project.asMap("founder").asString("role")).hasSize(ProjectInputValidator.FOUNDER_ROLE_MAX_LENGTH);
+        assertThat(project.asMap("founder").asString("commitment")).hasSize(ProjectInputValidator.FOUNDER_COMMITMENT_MAX_LENGTH);
 
         final LinkedTypeMap openRole = new LinkedTypeMap((Map<?, ?>) project.asList("openRoles").get(0));
-        assertThat(openRole.asString("title")).hasSize(ProjectFeedUtil.OPEN_ROLE_TITLE_MAX_LENGTH);
-        assertThat(openRole.asString("commitment")).hasSize(ProjectFeedUtil.OPEN_ROLE_COMMITMENT_MAX_LENGTH);
+        assertThat(openRole.asString("title")).hasSize(ProjectInputValidator.OPEN_ROLE_TITLE_MAX_LENGTH);
+        assertThat(openRole.asString("commitment")).hasSize(ProjectInputValidator.OPEN_ROLE_COMMITMENT_MAX_LENGTH);
     }
 
     @Test
@@ -253,7 +321,7 @@ class ProjectsApiTest {
         ), sessionCookie);
 
         assertThat(response.statusCode()).isEqualTo(400);
-        assertThat(response.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_OPEN_ROLES_MIN_CODE);
+        assertThat(response.bodyAsMap().asString("code")).isEqualTo(ProjectInputValidator.PROJECT_OPEN_ROLES_MIN_CODE);
     }
 
     @Test
@@ -271,7 +339,7 @@ class ProjectsApiTest {
         ), sessionCookie);
 
         assertThat(response.statusCode()).isEqualTo(400);
-        assertThat(response.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_LINK_URL_INVALID_CODE);
+        assertThat(response.bodyAsMap().asString("code")).isEqualTo(ProjectInputValidator.PROJECT_LINK_URL_INVALID_CODE);
 
         final String slug = sendJson("/api/projects", "POST", Map.of(
             "title", "Unsafe Project Image",
@@ -282,7 +350,7 @@ class ProjectsApiTest {
         ), sessionCookie).bodyAsMap().asString("slug");
         final HttpObject invalidImage = sendImage("/api/projects/" + slug + "/images", "image/svg+xml", new byte[] {1, 2}, sessionCookie);
         assertThat(invalidImage.statusCode()).isEqualTo(400);
-        assertThat(invalidImage.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_IMAGE_TYPE_INVALID_CODE);
+        assertThat(invalidImage.bodyAsMap().asString("code")).isEqualTo(ProjectImageValidator.PROJECT_IMAGE_TYPE_INVALID_CODE);
     }
 
     @Test
@@ -299,7 +367,7 @@ class ProjectsApiTest {
         ), sessionCookie);
 
         assertThat(response.statusCode()).isEqualTo(400);
-        assertThat(response.bodyAsMap().asString("code")).isEqualTo(ProjectFeedUtil.PROJECT_PAYLOAD_INVALID_CODE);
+        assertThat(response.bodyAsMap().asString("code")).isEqualTo(ProjectInputValidator.PROJECT_PAYLOAD_INVALID_CODE);
     }
 
     @Test
@@ -464,11 +532,11 @@ class ProjectsApiTest {
     }
 
     private Nano newTestNano() {
-        return newTestNano(EMAIL_VERIFICATION_SETTINGS, NOOP_TRANSACTIONAL_EMAIL_SENDER);
+        return newTestNano(PUBLIC_BASE_URL, NOOP_TRANSACTIONAL_EMAIL_SENDER);
     }
 
     private Nano newTestNano(
-        final EmailVerificationSettings emailVerificationSettings,
+        final String publicBaseUrl,
         final TransactionalEmailSender transactionalEmailSender
     ) {
         final PostgresTestDatabase.DatabaseConfig databaseConfig = PostgresTestDatabase.createDatabase("projects");
@@ -482,13 +550,31 @@ class ProjectsApiTest {
         );
         return new Nano(
             Map.of(
-                HttpServer.CONFIG_SERVICE_HTTP_PORT, 0
+                HttpServer.CONFIG_SERVICE_HTTP_PORT, 0,
+                AuthService.CONFIG_APP_PUBLIC_BASE_URL, publicBaseUrl
             ),
             new HttpServer(),
             new HttpClient(),
-            new AuthService(databaseRuntime, emailVerificationSettings, transactionalEmailSender),
-            new ProjectFeedService(databaseRuntime)
+            new TransactionalEmailService(transactionalEmailSender),
+            new AuthService(databaseRuntime),
+            new ProjectFeedService(databaseRuntime),
+            new ProjectDescriptionTranslationWarmService(databaseRuntime)
         );
+    }
+
+    private static void waitFor(final BooleanSupplier condition) {
+        final long deadline = System.nanoTime() + 2_000_000_000L;
+        while (!condition.getAsBoolean()) {
+            if (System.nanoTime() > deadline) {
+                assertThat(condition.getAsBoolean()).isTrue();
+            }
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("Interrupted while waiting for async test condition", exception);
+            }
+        }
     }
 
     private String registerAndReturnSessionCookie(final String email, final String displayName) {

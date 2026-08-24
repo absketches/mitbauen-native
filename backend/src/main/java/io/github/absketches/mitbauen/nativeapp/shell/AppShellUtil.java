@@ -14,7 +14,6 @@ public class AppShellUtil {
     private static final String FRONTEND_RESOURCE_ROOT = "frontend/";
     private static final String INDEX_RESOURCE = FRONTEND_RESOURCE_ROOT + "index.html";
     private static final String API_PREFIX = "/api";
-    private static final String METHOD_NOT_ALLOWED_CODE = "METHOD_NOT_ALLOWED";
     private static final String FRONTEND_BUNDLE_MISSING_CODE = "FRONTEND_BUNDLE_MISSING";
     private static final String STATIC_ASSET_NOT_FOUND_CODE = "STATIC_ASSET_NOT_FOUND";
 
@@ -64,17 +63,6 @@ public class AppShellUtil {
                     .respond(event),
                 () -> respondMissingFrontend(event, route)
             );
-    }
-
-    public static void respondOptions(final Event<HttpObject, HttpObject> event) {
-        event.payload().createResponse().respond(event);
-    }
-
-    public static void respondMethodNotAllowed(final Event<HttpObject, HttpObject> event) {
-        event.payload().createResponse()
-            .statusCode(405)
-            .body(Map.of("code", METHOD_NOT_ALLOWED_CODE, "path", event.payload().path()))
-            .respond(event);
     }
 
     private static void respondMissingFrontend(final Event<HttpObject, HttpObject> event, final AssetRoute route) {

@@ -36,8 +36,11 @@ npm install
 Run the frontend dev server:
 
 ```sh
+VITE_API_BASE_URL=http://127.0.0.1:8080/api
 npm run dev
 ```
+
+Use `VITE_API_BASE_URL` when Vite runs separately from the backend.
 
 Build the frontend:
 
@@ -66,7 +69,7 @@ BUILD_NATIVE=1 ./build.sh
 
 ## Local Runtime
 
-The backend is configured through environment variables. The most important ones are:
+The backend is configured through lowercase environment variables. The most important ones are:
 
 ```sh
 app_service_http_port=8080
@@ -76,7 +79,11 @@ jdbc_database_password=mitbauen_dev_password
 app_public_base_url=http://127.0.0.1:8080
 app_email_from='Mitbauen <no-reply@mail.mitbauen.space>'
 resend_api_key=test-api-key
+app_translation_openai_api_key=test-key
+app_translation_openai_model=gpt-5-mini
 ```
+
+Project description translation is optional. When `app_translation_openai_api_key` and `app_translation_openai_model` are set, the backend can generate display-only fallback descriptions for the missing language and marks them as tool translations in API responses.
 
 For a local database, use the `postgres` service in `docker-compose.yml` or your own PostgreSQL instance. The application applies SQL migrations from `backend/src/main/resources/db/migrations`.
 

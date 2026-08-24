@@ -1,5 +1,9 @@
 package io.github.absketches.mitbauen.nativeapp.auth;
 
+import io.github.absketches.mitbauen.nativeapp.auth.model.SessionUser;
+import io.github.absketches.mitbauen.nativeapp.auth.model.UserProfile;
+import io.github.absketches.mitbauen.nativeapp.auth.repository.AuthRepository;
+
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
 import org.mindrot.jbcrypt.BCrypt;
@@ -48,7 +52,6 @@ public class AuthUtil {
     public static final String EMAIL_INVALID_CODE = "AUTH_EMAIL_INVALID";
     public static final String DISPLAY_NAME_INVALID_CODE = "AUTH_DISPLAY_NAME_INVALID";
     public static final String BIO_TOO_LONG_CODE = "AUTH_BIO_TOO_LONG";
-    public static final String METHOD_NOT_ALLOWED_CODE = "METHOD_NOT_ALLOWED";
     public static final String INVITE_VALIDATE_PATH = "/api/invites/validate";
     public static final String AUTH_REGISTER_PATH = "/api/auth/register";
     public static final String AUTH_LOGIN_PATH = "/api/auth/login";
@@ -230,20 +233,6 @@ public class AuthUtil {
         return cookieValue(request, "", 0);
     }
 
-    public static LinkedTypeMap bodyAsMap(final HttpObject request) {
-        return request.bodyAsMap();
-    }
-
-    public static void respondInviteValidation(final Event<HttpObject, HttpObject> event) {
-        final Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("valid", true);
-        ResponseUtil.respondOk(event, payload);
-    }
-
-    public static void respondInvalidInvite(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondOk(event, Map.of("valid", false));
-    }
-
     public static void respondAuthSuccess(
         final Event<HttpObject, HttpObject> event,
         final SessionUser sessionUser,
@@ -257,22 +246,6 @@ public class AuthUtil {
         response.respond(event);
     }
 
-    public static void respondSession(final Event<HttpObject, HttpObject> event, final SessionUser sessionUser) {
-        ResponseUtil.respondOk(event, sessionPayload(true, sessionUser));
-    }
-
-    public static void respondAnonymousSession(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondOk(event, Map.of("authenticated", false));
-    }
-
-    public static void respondProfile(final Event<HttpObject, HttpObject> event, final UserProfile profile) {
-        ResponseUtil.respondOk(event, Map.of("profile", profilePayload(profile)));
-    }
-
-    public static void respondPublicProfile(final Event<HttpObject, HttpObject> event, final UserProfile profile) {
-        ResponseUtil.respondOk(event, Map.of("profile", publicProfilePayload(profile)));
-    }
-
     public static void respondLogout(final Event<HttpObject, HttpObject> event, final String clearedCookie) {
         ResponseUtil.create(event)
             .statusCode(200)
@@ -281,63 +254,7 @@ public class AuthUtil {
             .respond(event);
     }
 
-    public static void respondVerificationEmailRequest(
-        final Event<HttpObject, HttpObject> event,
-        final boolean sent,
-        final boolean alreadyVerified
-    ) {
-        ResponseUtil.respondOk(event, Map.of("sent", sent, "alreadyVerified", alreadyVerified));
-    }
-
-    public static void respondVerificationConfirmed(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondOk(event, Map.of("verified", true));
-    }
-
-    public static void respondPasswordResetRequest(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondOk(event, Map.of("requested", true));
-    }
-
-    public static void respondPasswordResetConfirmed(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondOk(event, Map.of("reset", true));
-    }
-
-    public static void respondBadRequest(final Event<HttpObject, HttpObject> event, final String code) {
-        ResponseUtil.respondBadRequest(event, code);
-    }
-
-    public static void respondUnauthorized(final Event<HttpObject, HttpObject> event, final String code) {
-        ResponseUtil.respondUnauthorized(event, code);
-    }
-
-    public static void respondConflict(final Event<HttpObject, HttpObject> event, final String code) {
-        ResponseUtil.respondConflict(event, code);
-    }
-
-    public static void respondTooManyRequests(final Event<HttpObject, HttpObject> event, final String code) {
-        ResponseUtil.respondTooManyRequests(event, code);
-    }
-
-    public static void respondNotFound(final Event<HttpObject, HttpObject> event, final String code) {
-        ResponseUtil.respondNotFound(event, code);
-    }
-
-    public static void respondDeletedUser(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondJson(event, 410, Map.of("code", "USER_DELETED"));
-    }
-
-    public static void respondServerError(final Event<HttpObject, HttpObject> event, final String code) {
-        ResponseUtil.respondServerError(event, code);
-    }
-
-    public static void respondOptions(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondOptions(event);
-    }
-
-    public static void respondMethodNotAllowed(final Event<HttpObject, HttpObject> event) {
-        ResponseUtil.respondMethodNotAllowed(event, METHOD_NOT_ALLOWED_CODE);
-    }
-
-    private static Map<String, Object> sessionPayload(final boolean authenticated, final SessionUser sessionUser) {
+    public static Map<String, Object> sessionPayload(final boolean authenticated, final SessionUser sessionUser) {
         final Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("authenticated", authenticated);
         if (sessionUser != null) {
@@ -350,7 +267,7 @@ public class AuthUtil {
         return payload;
     }
 
-    private static Map<String, Object> profilePayload(final UserProfile profile) {
+    public static Map<String, Object> profilePayload(final UserProfile profile) {
         final Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("displayName", profile.displayName());
         payload.put("bio", profile.bio());
@@ -360,7 +277,7 @@ public class AuthUtil {
         return payload;
     }
 
-    private static Map<String, Object> publicProfilePayload(final UserProfile profile) {
+    public static Map<String, Object> publicProfilePayload(final UserProfile profile) {
         final Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("displayName", profile.displayName());
         payload.put("bio", profile.bio());

@@ -1,5 +1,9 @@
 package io.github.absketches.mitbauen.nativeapp.auth;
 
+import io.github.absketches.mitbauen.nativeapp.auth.service.AuthService;
+import io.github.absketches.mitbauen.nativeapp.email.TransactionalEmailService;
+import io.github.absketches.mitbauen.nativeapp.email.TransactionalEmailSender;
+
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
 import io.github.absketches.mitbauen.nativeapp.db.PostgresTestDatabase;
@@ -29,8 +33,7 @@ class AuthApiTest {
     private static final String PRIMARY_EMAIL = "builder.one@example.test";
     private static final String PRIMARY_DISPLAY_NAME = "Alex Builder";
     private static final String PRIMARY_PASSWORD = "SuperSafe1";
-    private static final EmailVerificationSettings EMAIL_VERIFICATION_SETTINGS =
-        new EmailVerificationSettings("https://www.mitbauen.space", "Mitbauen <no-reply@mail.mitbauen.space>", "");
+    private static final String PUBLIC_BASE_URL = "https://www.mitbauen.space";
     private static final TransactionalEmailSender NOOP_TRANSACTIONAL_EMAIL_SENDER =
         (recipientEmail, recipientName, verificationUrl) -> { };
 
@@ -304,9 +307,7 @@ class AuthApiTest {
     @Test
     void verifiesEmailFromTheSentLinkWhenVerificationIsRequired() {
         final String[] sentVerificationUrl = new String[1];
-        nano = newTestNano(
-            EMAIL_VERIFICATION_SETTINGS,
-            (recipientEmail, recipientName, verificationUrl) -> sentVerificationUrl[0] = verificationUrl
+        nano = newTestNano(PUBLIC_BASE_URL, (recipientEmail, recipientName, verificationUrl) -> sentVerificationUrl[0] = verificationUrl
         );
 
         final HttpObject registerResponse = post("/api/auth/register", Map.of(
@@ -381,9 +382,7 @@ class AuthApiTest {
     @Test
     void resetsPasswordFromEmailLinkAndDeletesExistingSessions() {
         final String[] sentPasswordResetUrl = new String[1];
-        nano = newTestNano(
-            EMAIL_VERIFICATION_SETTINGS,
-            new TransactionalEmailSender() {
+        nano = newTestNano(PUBLIC_BASE_URL, new TransactionalEmailSender() {
                 @Override
                 public void sendVerificationEmail(
                     final String recipientEmail,
@@ -445,9 +444,7 @@ class AuthApiTest {
     @Test
     void passwordResetRequestDoesNotRevealUnknownEmails() {
         final int[] resetEmailsSent = {0};
-        nano = newTestNano(
-            EMAIL_VERIFICATION_SETTINGS,
-            new TransactionalEmailSender() {
+        nano = newTestNano(PUBLIC_BASE_URL, new TransactionalEmailSender() {
                 @Override
                 public void sendVerificationEmail(
                     final String recipientEmail,
@@ -532,9 +529,7 @@ class AuthApiTest {
     @Test
     void doesNotConsumeDailyQuotaWhenInitialVerificationDeliveryFails() {
         final int[] sendAttempts = {0};
-        nano = newTestNano(
-            EMAIL_VERIFICATION_SETTINGS,
-            (recipientEmail, recipientName, verificationUrl) -> {
+        nano = newTestNano(PUBLIC_BASE_URL, (recipientEmail, recipientName, verificationUrl) -> {
                 sendAttempts[0]++;
                 if (sendAttempts[0] == 1) {
                     throw new IllegalStateException("Unable to deliver initial verification email");
@@ -564,9 +559,7 @@ class AuthApiTest {
     void keepsThePreviousVerificationLinkValidWhenResendDeliveryFails() {
         final String[] sentVerificationUrl = new String[2];
         final int[] sendAttempts = {0};
-        nano = newTestNano(
-            EMAIL_VERIFICATION_SETTINGS,
-            (recipientEmail, recipientName, verificationUrl) -> {
+        nano = newTestNano(PUBLIC_BASE_URL, (recipientEmail, recipientName, verificationUrl) -> {
                 sentVerificationUrl[Math.min(sendAttempts[0], sentVerificationUrl.length - 1)] = verificationUrl;
                 sendAttempts[0]++;
                 if (sendAttempts[0] == 2) {
@@ -598,9 +591,7 @@ class AuthApiTest {
     @Test
     void doesNotConsumeDailyQuotaWhenResendDeliveryFails() {
         final int[] sendAttempts = {0};
-        nano = newTestNano(
-            EMAIL_VERIFICATION_SETTINGS,
-            (recipientEmail, recipientName, verificationUrl) -> {
+        nano = newTestNano(PUBLIC_BASE_URL, (recipientEmail, recipientName, verificationUrl) -> {
                 sendAttempts[0]++;
                 if (sendAttempts[0] == 2) {
                     throw new IllegalStateException("Unable to deliver resend verification email");
@@ -666,11 +657,11 @@ class AuthApiTest {
     }
 
     private Nano newTestNano() {
-        return newTestNano(EMAIL_VERIFICATION_SETTINGS, NOOP_TRANSACTIONAL_EMAIL_SENDER);
+        return newTestNano(PUBLIC_BASE_URL, NOOP_TRANSACTIONAL_EMAIL_SENDER);
     }
 
     private Nano newTestNano(
-        final EmailVerificationSettings emailVerificationSettings,
+        final String publicBaseUrl,
         final TransactionalEmailSender transactionalEmailSender
     ) {
         final PostgresTestDatabase.DatabaseConfig databaseConfig = PostgresTestDatabase.createDatabase("auth");
@@ -684,11 +675,13 @@ class AuthApiTest {
         );
         return new Nano(
             Map.of(
-                HttpServer.CONFIG_SERVICE_HTTP_PORT, 0
+                HttpServer.CONFIG_SERVICE_HTTP_PORT, 0,
+                AuthService.CONFIG_APP_PUBLIC_BASE_URL, publicBaseUrl
             ),
             new HttpServer(),
             new HttpClient(),
-            new AuthService(databaseRuntime, emailVerificationSettings, transactionalEmailSender)
+            new TransactionalEmailService(transactionalEmailSender),
+            new AuthService(databaseRuntime)
         );
     }
 

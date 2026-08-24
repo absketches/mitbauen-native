@@ -7,6 +7,8 @@ import java.util.Map;
 
 public class ResponseUtil {
 
+    public static final String METHOD_NOT_ALLOWED_CODE = "METHOD_NOT_ALLOWED";
+
     private ResponseUtil() {
     }
 

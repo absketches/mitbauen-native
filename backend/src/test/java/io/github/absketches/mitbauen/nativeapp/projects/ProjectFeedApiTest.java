@@ -1,5 +1,7 @@
 package io.github.absketches.mitbauen.nativeapp.projects;
 
+import io.github.absketches.mitbauen.nativeapp.projects.service.ProjectFeedService;
+
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
 import io.github.absketches.mitbauen.nativeapp.db.PostgresTestDatabase;
 import io.github.absketches.mitbauen.nativeapp.db.TestDatabaseMigrations;

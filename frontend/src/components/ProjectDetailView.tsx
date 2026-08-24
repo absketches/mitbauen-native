@@ -2,7 +2,7 @@ import type { Dictionary, Language } from '../i18n'
 import type { FormEvent } from 'react'
 import { useEffect, useState } from 'react'
 import { ApiError } from '../api'
-import { descriptionForLanguage } from '../projectDescriptions'
+import { descriptionDisplayForLanguage } from '../projectDescriptions'
 import type { JobApplicationPayload, JobApplicationResponse, ProjectComment, ProjectCommentPayload, ProjectDetails, ProjectImage } from '../types'
 import { ProjectImageView } from './ProjectImageView'
 import { RoleApplicationForm } from './RoleApplicationForm'
@@ -153,7 +153,7 @@ export function ProjectDetailView({
   }
 
   const currentProject = project
-  const description = descriptionForLanguage(currentProject, language)
+  const description = descriptionDisplayForLanguage(currentProject, language)
 
   async function handleDelete() {
     if (!window.confirm(copy.deleteConfirm)) {
@@ -236,8 +236,11 @@ export function ProjectDetailView({
         <article className="project-detail__panel project-detail__panel--primary">
           <p className="hero__eyebrow">{copy.whatEyebrow}</p>
           <h2>{copy.whatTitle}</h2>
-          {description ? (
-            <SafeMarkdown className="project-detail__body" text={description} />
+          {description.text ? (
+            <>
+              <SafeMarkdown className="project-detail__body" text={description.text} />
+              {description.translated ? <p className="project-detail__translation-note">{copy.translationDisclaimer}</p> : null}
+            </>
           ) : (
             <p className="project-detail__empty">{copy.descriptionMissing}</p>
           )}
