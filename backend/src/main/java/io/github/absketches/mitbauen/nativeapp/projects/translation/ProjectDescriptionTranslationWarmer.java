@@ -30,15 +30,6 @@ public class ProjectDescriptionTranslationWarmer {
         return 0;
     }
 
-    public int backfillMissingTranslations(final ProjectDescriptionTranslator translator) {
-        int savedTranslations = 0;
-        for (ProjectDescriptionTranslationRepository.ProjectDescriptionTranslationCandidate candidate
-            : ProjectDescriptionTranslationRepository.listTranslationCandidates(dataSource)) {
-            savedTranslations += warmProjectTranslations(candidate.projectId(), candidate.descriptions(), translator);
-        }
-        return savedTranslations;
-    }
-
     private int warmTranslation(
         final long projectId,
         final String sourceText,

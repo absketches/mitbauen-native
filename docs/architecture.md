@@ -1,5 +1,9 @@
 # Architecture Notes
 
+Architecture Decision Records live in [docs/adr](adr/README.md). These notes
+summarize the current shape of the system; ADRs capture dated decisions and
+their consequences.
+
 ## Intent
 
 - one repo

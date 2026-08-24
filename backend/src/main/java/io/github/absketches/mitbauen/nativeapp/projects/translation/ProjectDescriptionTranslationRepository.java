@@ -1,7 +1,5 @@
 package io.github.absketches.mitbauen.nativeapp.projects.translation;
 
-import io.github.absketches.mitbauen.nativeapp.projects.model.ProjectDescriptions;
-
 import io.github.absketches.mitbauen.nativeapp.db.SqlUtil;
 
 import javax.sql.DataSource;
@@ -9,7 +7,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -114,33 +111,6 @@ public class ProjectDescriptionTranslationRepository {
         }
     }
 
-    public static List<ProjectDescriptionTranslationCandidate> listTranslationCandidates(final DataSource dataSource) {
-        final String sql = """
-            select id, description_de, description_en
-            from projects
-            where (description_de is null and description_en is not null)
-                or (description_en is null and description_de is not null)
-            order by id asc
-            """;
-        final List<ProjectDescriptionTranslationCandidate> candidates = new ArrayList<>();
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql);
-             ResultSet resultSet = statement.executeQuery()) {
-            while (resultSet.next()) {
-                candidates.add(new ProjectDescriptionTranslationCandidate(
-                    resultSet.getLong("id"),
-                    new ProjectDescriptions(
-                        resultSet.getString("description_de"),
-                        resultSet.getString("description_en")
-                    )
-                ));
-            }
-        } catch (SQLException exception) {
-            throw new IllegalStateException("Unable to load project description translation candidates", exception);
-        }
-        return candidates;
-    }
-
     private static ProjectDescriptionTranslation translationFrom(final ResultSet resultSet) throws SQLException {
         return new ProjectDescriptionTranslation(
             resultSet.getString("source_language"),
@@ -150,8 +120,5 @@ public class ProjectDescriptionTranslationRepository {
             resultSet.getString("provider"),
             resultSet.getString("model")
         );
-    }
-
-    public record ProjectDescriptionTranslationCandidate(long projectId, ProjectDescriptions descriptions) {
     }
 }
