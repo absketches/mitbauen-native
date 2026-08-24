@@ -12,7 +12,6 @@ import io.github.absketches.mitbauen.nativeapp.email.TransactionalEmailService;
 import io.github.absketches.mitbauen.nativeapp.email.TransactionalEmailSender;
 import io.github.absketches.mitbauen.nativeapp.jobs.service.JobsService;
 import io.github.absketches.mitbauen.nativeapp.notifications.service.NotificationsService;
-import io.github.absketches.mitbauen.nativeapp.projects.translation.ProjectDescriptionTranslationBackfill;
 import io.github.absketches.mitbauen.nativeapp.projects.translation.ProjectDescriptionTranslationWarmService;
 import io.github.absketches.mitbauen.nativeapp.projects.service.ProjectFeedService;
 import io.github.absketches.mitbauen.nativeapp.shell.AppShellService;
@@ -27,11 +26,6 @@ import java.util.List;
 public class MitbauenApplication {
 
     public static void main(final String[] args) {
-        if (args.length == 1 && "backfill-project-description-translations".equals(args[0])) {
-            ProjectDescriptionTranslationBackfill.run();
-            return;
-        }
-
         final DatabaseRuntime databaseRuntime = dbStartup();
         final TransactionalEmailSender emailSender = resendEmailProvider();
         final FunctionOrNull<Context, List<Service>> startupServices = context -> services(context, databaseRuntime, emailSender);
