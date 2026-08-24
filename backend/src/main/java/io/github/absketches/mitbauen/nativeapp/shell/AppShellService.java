@@ -49,7 +49,7 @@ public class AppShellService extends Service {
     protected void handleHttpRequest(final Event<HttpObject, HttpObject> event, final AppShellUtil.RoutesMatch route) {
         switch (event.payload().methodType()) {
             case GET, HEAD -> handleGet(event, route);
-            default -> ResponseUtil.respondMethodNotAllowed(event, AppShellUtil.METHOD_NOT_ALLOWED_CODE);
+            default -> ResponseUtil.respondMethodNotAllowed(event, ResponseUtil.METHOD_NOT_ALLOWED_CODE);
         }
     }
 

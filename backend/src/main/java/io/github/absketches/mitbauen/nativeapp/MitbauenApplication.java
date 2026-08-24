@@ -1,16 +1,20 @@
 package io.github.absketches.mitbauen.nativeapp;
 
 import berlin.yuna.typemap.model.FunctionOrNull;
-import io.github.absketches.mitbauen.nativeapp.auth.AuthService;
-import io.github.absketches.mitbauen.nativeapp.comments.ProjectCommentsService;
+import io.github.absketches.mitbauen.nativeapp.auth.service.AuthService;
+import io.github.absketches.mitbauen.nativeapp.comments.service.ProjectCommentsService;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseConfig;
 import io.github.absketches.mitbauen.nativeapp.db.DatabaseRuntime;
 import io.github.absketches.mitbauen.nativeapp.db.MigrationRunner;
-import io.github.absketches.mitbauen.nativeapp.jobs.JobsService;
-import io.github.absketches.mitbauen.nativeapp.notifications.NotificationsService;
-import io.github.absketches.mitbauen.nativeapp.projects.ProjectDescriptionTranslationBackfill;
-import io.github.absketches.mitbauen.nativeapp.projects.ProjectDescriptionTranslationWarmService;
-import io.github.absketches.mitbauen.nativeapp.projects.ProjectFeedService;
+import io.github.absketches.mitbauen.nativeapp.email.ResendConfig;
+import io.github.absketches.mitbauen.nativeapp.email.ResendTransactionalEmailSender;
+import io.github.absketches.mitbauen.nativeapp.email.TransactionalEmailService;
+import io.github.absketches.mitbauen.nativeapp.email.TransactionalEmailSender;
+import io.github.absketches.mitbauen.nativeapp.jobs.service.JobsService;
+import io.github.absketches.mitbauen.nativeapp.notifications.service.NotificationsService;
+import io.github.absketches.mitbauen.nativeapp.projects.translation.ProjectDescriptionTranslationBackfill;
+import io.github.absketches.mitbauen.nativeapp.projects.translation.ProjectDescriptionTranslationWarmService;
+import io.github.absketches.mitbauen.nativeapp.projects.service.ProjectFeedService;
 import io.github.absketches.mitbauen.nativeapp.shell.AppShellService;
 import org.nanonative.nano.core.Nano;
 import org.nanonative.nano.core.model.Context;
@@ -29,16 +33,22 @@ public class MitbauenApplication {
         }
 
         final DatabaseRuntime databaseRuntime = dbStartup();
-        final FunctionOrNull<Context, List<Service>> startupServices = context -> services(context, databaseRuntime);
+        final TransactionalEmailSender emailSender = resendEmailProvider();
+        final FunctionOrNull<Context, List<Service>> startupServices = context -> services(context, databaseRuntime, emailSender);
         final Nano nano = new Nano(startupServices, null);
     }
 
-    private static List<Service> services(final Context context, final DatabaseRuntime databaseRuntime) {
+    private static List<Service> services(
+        final Context context,
+        final DatabaseRuntime databaseRuntime,
+        final TransactionalEmailSender emailSender
+    ) {
         context.subscribeEvent(Context.EVENT_APP_SHUTDOWN, event -> databaseRuntime.stop());
 
         return List.of(
             new HttpServer(),
             new HttpClient(),
+            new TransactionalEmailService(emailSender),
             new AppShellService(),
             new ProjectFeedService(databaseRuntime),
             new ProjectDescriptionTranslationWarmService(databaseRuntime),
@@ -66,5 +76,10 @@ public class MitbauenApplication {
             throw throwable;
         }
         return databaseRuntime;
+    }
+
+    public static TransactionalEmailSender resendEmailProvider() {
+        final ResendConfig resendConfig = ResendConfig.fromEnvironment();
+        return new ResendTransactionalEmailSender(resendConfig.apiKey(), resendConfig.emailFrom());
     }
 }

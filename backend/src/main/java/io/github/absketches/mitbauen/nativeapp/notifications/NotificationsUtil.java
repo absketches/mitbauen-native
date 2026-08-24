@@ -1,5 +1,7 @@
 package io.github.absketches.mitbauen.nativeapp.notifications;
 
+import io.github.absketches.mitbauen.nativeapp.notifications.model.NotificationItem;
+
 import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.util.LinkedHashMap;
@@ -11,7 +13,6 @@ public class NotificationsUtil {
     public static final String NOTIFICATIONS_PATH = "/api/notifications";
     public static final String AUTH_REQUIRED_CODE = "NOTIFICATIONS_AUTH_REQUIRED";
     public static final String EMAIL_UNVERIFIED_CODE = "NOTIFICATIONS_EMAIL_UNVERIFIED";
-    public static final String METHOD_NOT_ALLOWED_CODE = "METHOD_NOT_ALLOWED";
 
     private NotificationsUtil() {
     }

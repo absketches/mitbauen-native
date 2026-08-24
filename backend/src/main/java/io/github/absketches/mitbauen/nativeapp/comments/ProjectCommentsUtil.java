@@ -1,6 +1,10 @@
 package io.github.absketches.mitbauen.nativeapp.comments;
 
+import io.github.absketches.mitbauen.nativeapp.comments.model.ProjectComment;
+
 import berlin.yuna.typemap.model.LinkedTypeMap;
+import io.github.absketches.mitbauen.nativeapp.projects.ProjectFeedUtil;
+import io.github.absketches.mitbauen.nativeapp.util.TextUtil;
 import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.util.LinkedHashMap;
@@ -10,14 +14,11 @@ import java.util.Optional;
 
 public class ProjectCommentsUtil {
 
-    public static final String PROJECTS_BASE_PATH = "/api/projects";
     public static final int COMMENT_BODY_MAX_LENGTH = 1000;
     public static final String AUTH_REQUIRED_CODE = "PROJECT_COMMENTS_AUTH_REQUIRED";
     public static final String EMAIL_UNVERIFIED_CODE = "PROJECT_COMMENTS_EMAIL_UNVERIFIED";
     public static final String COMMENT_EMPTY_CODE = "PROJECT_COMMENT_EMPTY";
     public static final String COMMENT_TOO_LONG_CODE = "PROJECT_COMMENT_TOO_LONG";
-    public static final String PROJECT_NOT_FOUND_CODE = "PROJECT_NOT_FOUND";
-    public static final String METHOD_NOT_ALLOWED_CODE = "METHOD_NOT_ALLOWED";
 
     public sealed interface RouteMatch permits ProjectCommentsRoute, ProjectCommentsReadRoute, NoMatch {
     }
@@ -39,7 +40,7 @@ public class ProjectCommentsUtil {
         if (path == null) {
             return new NoMatch();
         }
-        final String projectPrefix = PROJECTS_BASE_PATH + "/";
+        final String projectPrefix = ProjectFeedUtil.PROJECTS_BASE_PATH + "/";
         if (!path.startsWith(projectPrefix)) {
             return new NoMatch();
         }
@@ -62,8 +63,7 @@ public class ProjectCommentsUtil {
     }
 
     public static String commentBodyFrom(final LinkedTypeMap body) {
-        final String value = body.asString("body");
-        return value == null ? "" : value.trim();
+        return TextUtil.trimToEmpty(body.asString("body"));
     }
 
     public static Optional<String> validateCommentBody(final String body) {

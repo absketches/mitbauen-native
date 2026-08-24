@@ -1,6 +1,9 @@
 package io.github.absketches.mitbauen.nativeapp.jobs;
 
+import io.github.absketches.mitbauen.nativeapp.jobs.model.JobListing;
+
 import berlin.yuna.typemap.model.LinkedTypeMap;
+import io.github.absketches.mitbauen.nativeapp.util.TextUtil;
 import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.util.LinkedHashMap;
@@ -19,7 +22,6 @@ public class JobsUtil {
     public static final String JOB_APPLICATION_NOT_FOUND_CODE = "JOB_APPLICATION_NOT_FOUND";
     public static final String JOB_APPLICATION_DUPLICATE_CODE = "JOB_APPLICATION_DUPLICATE";
     public static final String JOB_APPLICATION_SEND_FAILED_CODE = "JOB_APPLICATION_SEND_FAILED";
-    public static final String METHOD_NOT_ALLOWED_CODE = "METHOD_NOT_ALLOWED";
     public static final int APPLICATION_FIT_MIN_LENGTH = 20;
     public static final int APPLICATION_FIT_MAX_LENGTH = 2000;
     public static final int APPLICATION_AVAILABILITY_MAX_LENGTH = 500;
@@ -43,8 +45,8 @@ public class JobsUtil {
     public static JobApplicationInput applicationInputFrom(final LinkedTypeMap body) {
         return new JobApplicationInput(
             body.asLong("roleId"),
-            safeTrim(body.asString("fit")),
-            safeTrim(body.asString("availability"))
+            TextUtil.trimToEmpty(body.asString("fit")),
+            TextUtil.trimToEmpty(body.asString("availability"))
         );
     }
 
@@ -61,10 +63,6 @@ public class JobsUtil {
         payload.put("roleTitle", job.roleTitle());
         payload.put("roleCommitment", job.roleCommitment());
         return payload;
-    }
-
-    private static String safeTrim(final String value) {
-        return value == null ? "" : value.trim();
     }
 
     public record JobApplicationInput(Long roleId, String fit, String availability) {

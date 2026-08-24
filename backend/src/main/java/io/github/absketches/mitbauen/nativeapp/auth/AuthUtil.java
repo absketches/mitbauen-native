@@ -1,5 +1,9 @@
 package io.github.absketches.mitbauen.nativeapp.auth;
 
+import io.github.absketches.mitbauen.nativeapp.auth.model.SessionUser;
+import io.github.absketches.mitbauen.nativeapp.auth.model.UserProfile;
+import io.github.absketches.mitbauen.nativeapp.auth.repository.AuthRepository;
+
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import io.github.absketches.mitbauen.nativeapp.http.ResponseUtil;
 import org.mindrot.jbcrypt.BCrypt;
@@ -48,7 +52,6 @@ public class AuthUtil {
     public static final String EMAIL_INVALID_CODE = "AUTH_EMAIL_INVALID";
     public static final String DISPLAY_NAME_INVALID_CODE = "AUTH_DISPLAY_NAME_INVALID";
     public static final String BIO_TOO_LONG_CODE = "AUTH_BIO_TOO_LONG";
-    public static final String METHOD_NOT_ALLOWED_CODE = "METHOD_NOT_ALLOWED";
     public static final String INVITE_VALIDATE_PATH = "/api/invites/validate";
     public static final String AUTH_REGISTER_PATH = "/api/auth/register";
     public static final String AUTH_LOGIN_PATH = "/api/auth/login";
@@ -228,10 +231,6 @@ public class AuthUtil {
 
     public static String clearedSessionCookie(final HttpObject request) {
         return cookieValue(request, "", 0);
-    }
-
-    public static LinkedTypeMap bodyAsMap(final HttpObject request) {
-        return request.bodyAsMap();
     }
 
     public static void respondAuthSuccess(
