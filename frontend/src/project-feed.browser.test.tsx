@@ -558,7 +558,7 @@ test('validates the create project form for authenticated users', async () => {
   await screen.getByRole('button', { name: 'Projekt erstellen' }).nth(1).click()
 
   await expect.element(screen.getByText('Gib einen Projekttitel zwischen 5 und 120 Zeichen ein.')).toBeVisible()
-  await expect.element(screen.getByText('Gib eine Projektbeschreibung zwischen 40 und 3000 Zeichen ein.')).toBeVisible()
+  await expect.element(screen.getByText('DE: Gib eine Projektbeschreibung zwischen 40 und 3000 Zeichen ein.', { exact: true })).toBeVisible()
   await expect.element(screen.getByText('Gib eine Gründerrolle zwischen 3 und 120 Zeichen ein.')).toBeVisible()
   await expect.element(screen.getByText('Gib ein Gründer-Commitment zwischen 5 und 500 Zeichen ein.')).toBeVisible()
   await expect.element(screen.getByText('Gib einen Rollentitel zwischen 3 und 120 Zeichen ein.')).toBeVisible()

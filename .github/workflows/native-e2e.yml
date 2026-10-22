@@ -93,6 +93,10 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
+      - name: Run frontend browser tests
+        working-directory: frontend
+        run: npm run test:browser
+
       - name: Run native full-stack E2E
         timeout-minutes: 10
         env:
