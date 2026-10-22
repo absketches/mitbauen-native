@@ -7,6 +7,29 @@ import static org.assertj.core.api.Assertions.assertThat;
 class OpenAiProjectDescriptionTranslatorTest {
 
     @Test
+    void readsTranslatedTextFromNestedResponseOutput() {
+        final String responseBody = """
+            {
+              "output": [
+                {"type": "reasoning"},
+                {"content": [{"type": "output_text", "text": "  Gemeinsam bauen.  "}]}
+              ]
+            }
+            """;
+
+        assertThat(OpenAiProjectDescriptionTranslator.translatedTextFrom(responseBody))
+            .contains("Gemeinsam bauen.");
+    }
+
+    @Test
+    void returnsEmptyWhenResponseHasNoTranslatedText() {
+        assertThat(OpenAiProjectDescriptionTranslator.translatedTextFrom("{}"))
+            .isEmpty();
+        assertThat(OpenAiProjectDescriptionTranslator.translatedTextFrom("{\"output_text\": \"  \"}"))
+            .isEmpty();
+    }
+
+    @Test
     void decodesUnicodeEscapesFromTranslatedText() {
         final String responseBody = """
             {
