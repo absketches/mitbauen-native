@@ -118,7 +118,7 @@ public class OpenAiProjectDescriptionTranslator implements ProjectDescriptionTra
     }
 
     static Optional<String> translatedTextFrom(final String responseBody) {
-        final LinkedTypeMap response = JsonDecoder.jsonMapOf(responseBody);
+        final LinkedTypeMap response = JsonDecoder.mapOf(responseBody);
         final String outputText = clean(response.asString("output_text"));
         if (outputText != null) {
             return Optional.of(outputText);
